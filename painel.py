@@ -2,18 +2,134 @@ import requests
 from datetime import datetime, timedelta
 
 # --- SUAS CHAVES JÁ CONFIGURADAS ---
+API_KEY = "E89cc081eimport streamlit as st
+import requests
+from datetime import datetime, timedelta
+import pandas as pd
+
+# Configuração da página do Streamlit
+st.set_page_config(page_title="Painel Pro - Scout & Insights", layout="wide", initial_sidebar_state="expanded")
+
+# --- ESTILIZAÇÃO PREMIUM (CSS) ---
+st.markdown("""
+<style>
+    .reportview-container { background: #0e1117; }
+    .stMetric { background-color: #1f2937; padding: 15px; border-radius: 10px; border: 1px solid #374151; }
+    div.stButton > button:first-child { background-color: #ef4444; color: white; border-radius: 8px; width: 100%; height: 45px; font-weight: bold; }
+    div.stButton > button:first-child:hover { background-color: #dc2626; border-color: #dc2626; }
+    .stDataFrame { border: 1px solid #374151; border-radius: 8px; }
+</style>
+""", unsafe_select=True)
+
+# Chave fixa da API
 API_KEY = "E89cc081ecbaaf1a7074e878c1cae0ff"
-TELEGRAM_TOKEN = "8281259090:AAEggXJKpCMxRbhhrcCZymcmNUKWNoOPFfY"
-TELEGRAM_CHAT_ID = "-1004464226419"  # 👈 APAGUE ESSE TEXTO E COLOQUE SEU NÚMERO AQUI (EX: 123456789)
 
-# --- CONFIGURAÇÕES DO TIME ---
-TEAM_ID = 127  # ID Oficial do Flamengo na API-Football
-LEAGUE_ID = 71  # Brasileirão Série A
+# --- BLOQUEIO INTELIGENTE DE HORÁRIO ---
+def verificar_bloqueio_horario():
+    agora_br = datetime.utcnow() - timedelta(hours=3)
+    limite_hoje = agora_br.replace(hour=8, minute=0, second=0, microsecond=0)
+    
+    if agora_br >= limite_hoje:
+        st.error("⚠️ O limite de requisições automáticas diárias expirou (Bloqueio pós 08:00h da manhã ativo). As consultas estão suspensas para preservar seus créditos da API.")
+        st.stop()
 
-def enviar_mensagem_telegram(texto):
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": TELEGRAM_CHAT_ID,
+# --- FUNÇÕES DE BUSCA DA API ---
+def buscar_dados_api(endpoint, params={}):
+    headers = {
+        'x-rapidapi-host': 'v3.football.api-sports.io',
+        'x-rapidapi-key': API_KEY
+    }
+    url = f"https://v3.football.api-sports.io/{endpoint}"
+    try:
+        response = requests.get(url, headers=headers, params=params)
+        return response.json()
+    except Exception as e:
+        st.error(f"Erro na conexão com a API: {e}")
+        return None
+
+# --- ESTRUTURA DO PAINEL ---
+st.title("📊 Painel de Análise Esportiva Pro")
+st.markdown("Selecione os parâmetros na barra lateral para analisar scouts e projetar mercados.")
+
+# Barra lateral para entrada de dados
+st.sidebar.header("🔍 Filtros de Análise")
+time_id = st.sidebar.text_input("ID do Time (Ex: 127 para Flamengo)", value="127")
+campeonato_id = st.sidebar.text_input("ID do Campeonato (Ex: 71 para Brasileirão)", value="71")
+buscar = st.sidebar.button("📊 Analisar Últimas 5 Partidas")
+
+if buscar:
+    # Ativa a verificação de horário assim que o botão é clicado
+    verificar_bloqueio_horario()
+    
+    with st.spinner("Buscando dados das últimas partidas e gerando scouts..."):
+        ano_atual = (datetime.utcnow() - timedelta(hours=3)).year
+        
+        # 1. Busca os últimos jogos do time
+        dados_jogos = buscar_dados_api("fixtures", {"team": time_id, "league": campeonato_id, "last": "5"})
+        
+        if not dados_jogos or dados_jogos.get('results', 0) == 0:
+            st.warning("Nenhum dado encontrado para os IDs informados. Verifique se os IDs estão corretos.")
+        else:
+            lista_jogos = dados_jogos['response']
+            
+            # Métricas Gerais das últimas 5 partidas
+            gols_marcados = 0
+            gols_sofridos = 0
+            total_chutes = 0
+            total_desarmes = 0
+            
+            dados_tabela_jogos = []
+            
+            # Loop para somar estatísticas das últimas partidas
+            for partida in lista_jogos:
+                f_id = partida['fixture']['id']
+                casa = partida['teams']['home']['name']
+                fora = partida['teams']['away']['name']
+                placar_casa = partida['goals']['home']
+                placar_fora = partida['goals']['away']
+                
+                dados_tabela_jogos.append({
+                    "Partida": f"{casa} {placar_casa} x {placar_fora} {fora}",
+                    "Status": partida['fixture']['status']['short']
+                })
+                
+                # Contagem de gols baseada na posição do time analisado
+                if str(partida['teams']['home']['id']) == str(time_id):
+                    gols_marcados += placar_casa if placar_casa else 0
+                    gols_sofridos += placar_fora if placar_fora else 0
+                else:
+                    gols_marcados += placar_fora if placar_fora else 0
+                    gols_sofridos += placar_casa if placar_casa else 0
+                    
+                # Busca estatísticas detalhadas do scout do jogo
+                dados_detalhes = buscar_dados_api("fixtures/statistics", {"fixture": f_id, "team": time_id})
+                if dados_detalhes and dados_detalhes.get('response'):
+                    stats = dados_detalhes['response'][0]['statistics']
+                    for s in stats:
+                        if s['type'] == 'Total Shots' and s['value']:
+                            total_chutes += int(s['value'])
+                        if s['type'] == 'Tackles' and s['value']:
+                            total_desarmes += int(s['value'])
+
+            # --- EXIBIÇÃO NO PAINEL ---
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("Gols Feitos (Últimos 5 j)", gols_marcados)
+            col2.metric("Gols Sofridos (Últimos 5 j)", gols_sofridos)
+            col3.metric("Média de Chutes", f"{total_chutes/5:.1f}")
+            col4.metric("Média de Desarmes", f"{total_desarmes/5:.1f}")
+            
+            st.subheader("📋 Últimos 5 Confrontos Analisados")
+            st.table(pd.DataFrame(dados_tabela_jogos))
+            
+            # Projeções para o mercado baseadas nas médias
+            st.subheader("🤖 Projeções e Tendências Pro")
+            if (gols_marcados + gols_sofridos) / 5 >= 2.5:
+                st.info("🔥 **Tendência de Gols:** Este time costuma se envolver em jogos movimentados. Boa tendência para o mercado de **Over 2.5 Gols**.")
+            else:
+                st.info("🛡️ **Tendência de Gols:** Jogos recentes com poucos gols. Boa tendência para o mercado de **Under 2.5 Gols**.")
+                
+            if total_chutes / 5 >= 12:
+                st.success("🎯 **Scout de Chutes:** O time mantém uma linha ofensiva alta com grande volume de finalizações. Fique atento a linhas de chutes ao gol de jogadores.")
         "text": texto,
         "parse_mode": "HTML"
     }
