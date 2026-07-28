@@ -18,10 +18,8 @@ def obter_chave_atualizacao():
     """Gera uma string que só muda às 8:00 da manhã de cada dia."""
     agora = datetime.now()
     if agora.hour < 8:
-        # Se for antes das 8h, a referência ainda é o dia anterior
         return (agora - timedelta(days=1)).strftime("%Y-%m-%d")
     else:
-        # Se já passou das 8h, a referência é o dia de hoje
         return agora.strftime("%Y-%m-%d")
 
 CHAVE_ATUALIZACAO = obter_chave_atualizacao()
@@ -36,9 +34,8 @@ st.sidebar.markdown("📞 `(21) 96485-9482`")
 st.sidebar.markdown("---")
 
 
-# --- FUNÇÕES DE BUSCA NA API (COM CACHE VINCULADO À CHAVE DAS 8H) ---
+# --- FUNÇÕES DE BUSCA NA API (COM CACHE DIÁRIO) ---
 
-# O cache_data agora não precisa de TTL(tempo), ele se baseia na mudança da variável 'data_cache'
 @st.cache_data
 def buscar_times_serie_a(season, key, data_cache):
     url = f"https://v3.football.api-sports.io/teams?league={LEAGUE_ID}&season={season}"
@@ -87,44 +84,95 @@ def buscar_estatisticas_time(team_id, season, key, data_cache):
     return {'jogos': 0, 'gols_feitos_media': 0.0, 'gols_sofridos_media': 0.0, 'clean_sheets': 0}
 
 @st.cache_data
-def buscar_elenco_api(team_id, season, key, data_cache):
+def buscar_scout_elenco_u5(team_id, season, key, data_cache):
+    """Busca as estatísticas individuais dos jogadores baseadas estritamente nas últimas 5 partidas."""
+    url_fixtures = f"https://v3.football.api-sports.io/fixtures?league={LEAGUE_ID}&season={season}&team={team_id}&last=5"
     headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
-    jogadores = []
     
-    for page in [1, 2]:
-        url = f"https://v3.football.api-sports.io/players?league={LEAGUE_ID}&season={season}&team={team_id}&page={page}"
-        try:
-            res = requests.get(url, headers=headers)
-            data = res.json()
-            if data.get('results', 0) > 0:
-                for item in data['response']:
-                    p = item['player']
-                    s = item['statistics'][0] if len(item['statistics']) > 0 else {}
-                    
-                    jogadores.append({
-                        'Jogador': p.get('name', 'N/A'),
-                        'Idade': p.get('age', '-'),
-                        'Posição': s.get('games', {}).get('position', '-'),
-                        'Jogos': s.get('games', {}).get('appearences', 0) or 0,
-                        'Minutos': s.get('games', {}).get('minutes', 0) or 0,
-                        'Gols': s.get('goals', {}).get('total', 0) or 0,
-                        'Assist': s.get('goals', {}).get('assists', 0) or 0,
-                        'Finalizações': s.get('shots', {}).get('total', 0) or 0,
-                        'Desarmes': s.get('tackles', {}).get('total', 0) or 0,
-                        'Amarelos': s.get('cards', {}).get('yellow', 0) or 0,
-                        'Vermelhos': s.get('cards', {}).get('red', 0) or 0
-                    })
-            else:
-                break
-        except Exception as e:
-            st.error(f"Erro API (Jogadores): {e}")
-            break
+    try:
+        res_fix = requests.get(url_fixtures, headers=headers)
+        data_fix = res_fix.json()
+        if data_fix.get('results', 0) == 0:
+            return pd.DataFrame()
+        
+        fixtures = data_fix['response']
+        player_data = {}
+        
+        # Varre cada uma das últimas 5 partidas coletando o scout minucioso
+        for f_item in fixtures:
+            f_id = f_item['fixture']['id']
+            url_players = f"https://v3.football.api-sports.io/fixtures/players?fixture={f_id}"
+            res_play = requests.get(url_players, headers=headers)
+            data_play = res_play.json()
             
-    df = pd.DataFrame(jogadores)
-    if not df.empty:
-        df = df.drop_duplicates(subset=['Jogador'])
-        df = df[df['Jogos'] > 0].sort_values(by='Minutos', ascending=False)
-    return df
+            if data_play.get('results', 0) > 0:
+                for t_item in data_play['response']:
+                    if t_item['team']['id'] == team_id:
+                        for p_item in t_item['players']:
+                            p_name = p_item['player']['name']
+                            stats = p_item['statistics'][0] if p_item['statistics'] else {}
+                            
+                            # Verifica se o jogador realmente entrou em campo nessa partida
+                            minutes = stats.get('games', {}).get('minutes')
+                            try:
+                                mins = int(minutes) if minutes else 0
+                            except:
+                                mins = 0
+                            
+                            if mins > 0:
+                                shots_total = stats.get('shots', {}).get('total') or 0
+                                shots_on = stats.get('shots', {}).get('on') or 0
+                                fouls_committed = stats.get('fouls', {}).get('committed') or 0
+                                fouls_drawn = stats.get('fouls', {}).get('drawn') or 0
+                                tackles = stats.get('tackles', {}).get('total') or 0
+                                yellow = stats.get('cards', {}).get('yellow') or 0
+                                
+                                if p_name not in player_data:
+                                    player_data[p_name] = {
+                                        'Posição': stats.get('games', {}).get('position', '-'),
+                                        'Jogos (U5)': 0,
+                                        'Finalizações': 0,
+                                        'Chutes no Alvo': 0,
+                                        'Faltas Cometidas': 0,
+                                        'Faltas Sofridas': 0,
+                                        'Desarmes': 0,
+                                        'Amarelos': 0
+                                    }
+                                
+                                player_data[p_name]['Jogos (U5)'] += 1
+                                player_data[p_name]['Finalizações'] += shots_total
+                                player_data[p_name]['Chutes no Alvo'] += shots_on
+                                player_data[p_name]['Faltas Cometidas'] += fouls_committed
+                                player_data[p_name]['Faltas Sofridas'] += fouls_drawn
+                                player_data[p_name]['Desarmes'] += tackles
+                                player_data[p_name]['Amarelos'] += yellow
+        
+        # Consolida as médias por partida jogada
+        rows = []
+        for name, data in player_data.items():
+            j = data['Jogos (U5)']
+            if j > 0:
+                rows.append({
+                    'Jogador': name,
+                    'Posição': data['Posição'],
+                    'Jogos (U5)': f"{j}/5",
+                    'Finalizações Média': round(data['Finalizações'] / j, 2),
+                    'Chutes no Alvo Média': round(data['Chutes no Alvo'] / j, 2),
+                    'Faltas Cometidas Média': round(data['Faltas Cometidas'] / j, 2),
+                    'Faltas Sofridas Média': round(data['Faltas Sofridas'] / j, 2),
+                    'Desarmes Média': round(data['Desarmes'] / j, 2),
+                    'Cartões Amarelos (Total U5)': data['Amarelos']
+                })
+        
+        df = pd.DataFrame(rows)
+        if not df.empty:
+            # Ordena por quem participou de mais partidas nesse intervalo de 5 jogos
+            df = df.sort_values(by='Finalizações Média', ascending=False)
+        return df
+        
+    except Exception as e:
+        st.error(f"Erro API (Scout U5): {e}")
+        return pd.DataFrame()
 
 @st.cache_data
 def buscar_h2h_api(id1, id2, key, data_cache):
@@ -155,7 +203,6 @@ def buscar_h2h_api(id1, id2, key, data_cache):
 
 
 # --- CARREGAMENTO INICIAL DOS TIMES ---
-# Note que passamos a CHAVE_ATUALIZACAO. A API só é chamada se essa chave mudar (todo dia às 8h)
 TEAM_IDS = buscar_times_serie_a(SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
 if not TEAM_IDS:
@@ -171,13 +218,13 @@ times_disponiveis.sort()
 time_principal = st.sidebar.selectbox("Escolha o Time Principal", times_disponiveis)
 adversario = st.sidebar.selectbox("Escolha o Time Adversário", [t for t in times_disponiveis if t != time_principal])
 
-with st.spinner("Extraindo dados da API-Football..."):
+with st.spinner("Extraindo e calculando dados reais da API..."):
     id_time1 = TEAM_IDS[time_principal]
     id_time2 = TEAM_IDS[adversario]
     
     stats_t1 = buscar_estatisticas_time(id_time1, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     stats_t2 = buscar_estatisticas_time(id_time2, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-    df_elenco = buscar_elenco_api(id_time1, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    df_elenco_u5 = buscar_scout_elenco_u5(id_time1, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
 
 # --- SEÇÃO 1: DESEMPENHO COLETIVO ---
@@ -195,13 +242,13 @@ with c4:
 st.markdown("---")
 
 
-# --- SEÇÃO 2: SCOUT DO PLANTEL (API REAL) ---
-st.subheader(f"👤 Plantel Atualizado via API: {time_principal}")
-st.caption("A tabela exibe apenas jogadores que entraram em campo nesta temporada, ordenados pelos minutos jogados.")
-if not df_elenco.empty:
-    st.dataframe(df_elenco, use_container_width=True, hide_index=True)
+# --- SEÇÃO 2: SCOUT DO PLANTEL (MÉDIA ÚLTIMOS 5 JOGOS REAL) ---
+st.subheader(f"👤 Scout do Plantel (Média das Últimas 5 Partidas): {time_principal}")
+st.caption("Estatísticas individuais calculadas com base nas últimas 5 partidas oficiais do clube. A coluna 'Jogos (U5)' indica em quantas dessas 5 partidas o jogador de fato entrou em campo.")
+if df_elenco_u5 is not None and not df_elenco_u5.empty:
+    st.dataframe(df_elenco_u5, use_container_width=True, hide_index=True)
 else:
-    st.warning("Não foi possível carregar os jogadores no momento.")
+    st.warning("Não há dados de scout disponíveis para as últimas 5 partidas deste clube no momento.")
 
 st.markdown("---")
 
