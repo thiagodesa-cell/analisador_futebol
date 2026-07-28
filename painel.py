@@ -125,29 +125,35 @@ def buscar_scout_elenco_u5(team_id, season, key, data_cache):
                                 fouls_committed = stats.get('fouls', {}).get('committed') or 0
                                 fouls_drawn = stats.get('fouls', {}).get('drawn') or 0
                                 tackles = stats.get('tackles', {}).get('total') or 0
+                                goals = stats.get('goals', {}).get('total') or 0
                                 yellow = stats.get('cards', {}).get('yellow') or 0
+                                red = stats.get('cards', {}).get('red') or 0
                                 
                                 if p_name not in player_data:
                                     player_data[p_name] = {
                                         'Posição': stats.get('games', {}).get('position', '-'),
                                         'Jogos (U5)': 0,
+                                        'Gols': 0,
                                         'Finalizações': 0,
                                         'Chutes no Alvo': 0,
                                         'Faltas Cometidas': 0,
                                         'Faltas Sofridas': 0,
                                         'Desarmes': 0,
-                                        'Amarelos': 0
+                                        'Amarelos': 0,
+                                        'Vermelhos': 0
                                     }
                                 
                                 player_data[p_name]['Jogos (U5)'] += 1
+                                player_data[p_name]['Gols'] += goals
                                 player_data[p_name]['Finalizações'] += shots_total
                                 player_data[p_name]['Chutes no Alvo'] += shots_on
                                 player_data[p_name]['Faltas Cometidas'] += fouls_committed
                                 player_data[p_name]['Faltas Sofridas'] += fouls_drawn
                                 player_data[p_name]['Desarmes'] += tackles
                                 player_data[p_name]['Amarelos'] += yellow
+                                player_data[p_name]['Vermelhos'] += red
         
-        # Consolida as médias por partida jogada
+        # Consolida os dados e calcula as médias por partida jogada
         rows = []
         for name, data in player_data.items():
             j = data['Jogos (U5)']
@@ -156,18 +162,20 @@ def buscar_scout_elenco_u5(team_id, season, key, data_cache):
                     'Jogador': name,
                     'Posição': data['Posição'],
                     'Jogos (U5)': f"{j}/5",
+                    'Gols (Total U5)': data['Gols'],
                     'Finalizações Média': round(data['Finalizações'] / j, 2),
                     'Chutes no Alvo Média': round(data['Chutes no Alvo'] / j, 2),
                     'Faltas Cometidas Média': round(data['Faltas Cometidas'] / j, 2),
                     'Faltas Sofridas Média': round(data['Faltas Sofridas'] / j, 2),
                     'Desarmes Média': round(data['Desarmes'] / j, 2),
-                    'Cartões Amarelos (Total U5)': data['Amarelos']
+                    'Amarelos (Total U5)': data['Amarelos'],
+                    'Vermelhos (Total U5)': data['Vermelhos']
                 })
         
         df = pd.DataFrame(rows)
         if not df.empty:
-            # Ordena por quem participou de mais partidas nesse intervalo de 5 jogos
-            df = df.sort_values(by='Finalizações Média', ascending=False)
+            # Ordena por quem fez mais gols e depois por quem finalizou mais
+            df = df.sort_values(by=['Gols (Total U5)', 'Finalizações Média'], ascending=[False, False])
         return df
         
     except Exception as e:
@@ -244,7 +252,7 @@ st.markdown("---")
 
 # --- SEÇÃO 2: SCOUT DO PLANTEL (MÉDIA ÚLTIMOS 5 JOGOS REAL) ---
 st.subheader(f"👤 Scout do Plantel (Média das Últimas 5 Partidas): {time_principal}")
-st.caption("Estatísticas individuais calculadas com base nas últimas 5 partidas oficiais do clube. A coluna 'Jogos (U5)' indica em quantas dessas 5 partidas o jogador de fato entrou em campo.")
+st.caption("Estatísticas individuais calculadas com base nas últimas 5 partidas oficiais do clube. Colunas de Gols e Cartões refletem a soma total acumulada nessas 5 partidas.")
 if df_elenco_u5 is not None and not df_elenco_u5.empty:
     st.dataframe(df_elenco_u5, use_container_width=True, hide_index=True)
 else:
