@@ -4,219 +4,201 @@ import requests
 
 st.set_page_config(page_title="Painel Pro - Plantéis Completos Série A", layout="wide")
 
-st.title("⚽ Painel Analisador Esportivo Pro - Elencos Completos & H2H Real")
-st.write("Plantel integral de todos os 20 clubes da Série A, estatísticas detalhadas e confronto direto via API-Football.")
+st.title("⚽ Painel Analisador Esportivo Pro - Elencos & H2H Real")
+st.write("Dados 100% extraídos da API-Football (Elencos atualizados, estatísticas de jogadores e H2H).")
 
 # --- CONFIGURAÇÃO DA API ---
 API_KEY_FIXA = "E89cc081ecbaaf1a7074e878c1cae0ff"
+LEAGUE_ID = 71  # ID Oficial do Brasileirão Série A na API
+SEASON = 2024   # Mude para 2025 ou 2026 conforme a virada do calendário da API
 
-st.sidebar.success("✅ Painel Carregado com Sucesso!")
+st.sidebar.success("✅ Painel Integrado via API!")
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 👨‍💻 Painel Desenvolvido por:")
-st.sidebar.markdown(f"**Thiago Oliveira De sá**")
+st.sidebar.markdown("**Thiago Oliveira De sá**")
 st.sidebar.markdown("📧 `thiago.desa@yahoo.com.br`")
 st.sidebar.markdown("📞 `(21) 96485-9482`")
 st.sidebar.markdown("---")
 
-# Dicionário para mapear os nomes dos times do Brasileirão para os IDs oficiais da API-Football
+# IDs oficiais da API-Football
 TEAM_IDS = {
-    'Flamengo': 127,
-    'Palmeiras': 121,
-    'Botafogo': 120,
-    'São Paulo': 126,
-    'Fluminense': 128,
-    'Atlético-MG': 114,
-    'Internacional': 119,
-    'Grêmio': 130,
-    'Bahia': 115,
-    'Cruzeiro': 131,
-    'Vasco': 132,
-    'Corinthians': 133,
-    'Fortaleza': 140,
-    'Bragantino': 151,
-    'Athletico-PR': 135,
-    'Cuiabá': 1900,
-    'Juventude': 138,
-    'Criciúma': 144,
-    'Atlético-GO': 116,
-    'Vitória': 147
+    'Flamengo': 127, 'Palmeiras': 121, 'Botafogo': 120, 'São Paulo': 126,
+    'Fluminense': 128, 'Atlético-MG': 114, 'Internacional': 119, 'Grêmio': 130,
+    'Bahia': 115, 'Cruzeiro': 131, 'Vasco': 132, 'Corinthians': 133,
+    'Fortaleza': 140, 'Bragantino': 151, 'Athletico-PR': 135, 'Cuiabá': 1900,
+    'Juventude': 138, 'Criciúma': 144, 'Atlético-GO': 116, 'Vitória': 147
 }
 
-@st.cache_data
-def carregar_todos_os_plantels():
-    times = list(TEAM_IDS.keys())
+# --- FUNÇÕES DE BUSCA NA API (COM CACHE DE 1 HORA PARA ECONOMIZAR REQUISIÇÕES) ---
+
+@st.cache_data(ttl=3600)
+def buscar_estatisticas_time(team_id, season, key):
+    url = f"https://v3.football.api-sports.io/teams/statistics?league={LEAGUE_ID}&season={season}&team={team_id}"
+    headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
     
-    dados_times = {
-        'Home': times,
-        'gols_feitos_media': [2.2, 1.8, 2.0, 1.4, 1.6, 1.7, 1.5, 1.6, 1.4, 1.3, 1.2, 1.3, 1.5, 1.4, 1.3, 1.0, 1.1, 1.0, 0.9, 1.1],
-        'gols_sofridos_media': [0.8, 1.0, 0.9, 1.1, 1.0, 1.0, 0.9, 1.1, 1.2, 1.1, 1.4, 1.2, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.5],
-        'escanteios_media': [6.4, 5.2, 6.0, 4.8, 5.5, 5.7, 5.1, 5.4, 4.9, 4.8, 4.6, 5.0, 5.2, 5.1, 4.7, 4.2, 4.3, 4.0, 4.1, 4.4],
-        'finalizacoes_media': [15.5, 14.2, 15.0, 12.8, 13.5, 14.0, 13.2, 13.8, 12.5, 12.0, 11.8, 12.2, 13.0, 12.6, 11.9, 10.5, 11.0, 10.2, 10.0, 10.8],
-        'desarmes_media': [16.5, 18.2, 15.0, 17.0, 16.2, 17.5, 18.0, 17.2, 16.8, 15.9, 18.5, 17.8, 16.0, 15.5, 18.1, 19.0, 18.4, 19.5, 18.8, 19.2],
-        'faltas_cometidas_media': [12.1, 13.5, 12.8, 14.0, 13.2, 14.5, 13.8, 14.2, 13.0, 13.4, 15.0, 14.8, 12.5, 13.1, 14.6, 15.5, 15.2, 16.0, 15.8, 16.1],
-        'faltas_sofridas_media': [14.0, 14.5, 13.8, 13.0, 13.5, 14.1, 14.0, 13.5, 13.2, 12.8, 13.1, 13.4, 14.2, 13.8, 13.0, 12.0, 12.5, 11.8, 11.5, 12.2],
-        'defesas_goleiro_media': [3.1, 2.8, 3.0, 3.5, 3.2, 3.0, 3.3, 3.4, 3.6, 3.7, 4.2, 3.8, 3.2, 3.5, 3.9, 4.5, 4.3, 4.8, 4.9, 4.7]
-    }
+    try:
+        res = requests.get(url, headers=headers)
+        data = res.json()
+        if data.get('results', 0) > 0:
+            stats = data['response']
+            goals_for = stats.get('goals', {}).get('for', {}).get('average', {}).get('total', '0')
+            goals_against = stats.get('goals', {}).get('against', {}).get('average', {}).get('total', '0')
+            jogos = stats.get('fixtures', {}).get('played', {}).get('total', 0)
+            clean_sheets = stats.get('clean_sheet', {}).get('total', 0)
+            
+            return {
+                'jogos': jogos,
+                'gols_feitos_media': float(goals_for) if goals_for else 0.0,
+                'gols_sofridos_media': float(goals_against) if goals_against else 0.0,
+                'clean_sheets': clean_sheets
+            }
+    except Exception as e:
+        st.error(f"Erro API (Stats Time): {e}")
+        
+    # Retorno padrão caso falhe
+    return {'jogos': 0, 'gols_feitos_media': 0.0, 'gols_sofridos_media': 0.0, 'clean_sheets': 0}
+
+
+@st.cache_data(ttl=3600)
+def buscar_elenco_api(team_id, season, key):
+    headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
+    jogadores = []
     
-    elencos_base = {
-        'Flamengo': [
-            {'Jogador': 'Pedro', 'Finalizacoes_L5': 3.2, 'Faltas_Sofridas_L5': 1.8, 'Faltas_Cometidas_L5': 0.8, 'Desarmes_L5': 0.4, 'Cartoes_Amarelos_L5': 0.2},
-            {'Jogador': 'Gabigol', 'Finalizacoes_L5': 2.8, 'Faltas_Sofridas_L5': 1.6, 'Faltas_Cometidas_L5': 1.2, 'Desarmes_L5': 0.5, 'Cartoes_Amarelos_L5': 0.4},
-            {'Jogador': 'Bruno Henrique', 'Finalizacoes_L5': 2.3, 'Faltas_Sofridas_L5': 1.9, 'Faltas_Cometidas_L5': 1.0, 'Desarmes_L5': 0.8, 'Cartoes_Amarelos_L5': 0.3},
-            {'Jogador': 'Giorgian de Arrascaeta', 'Finalizacoes_L5': 2.1, 'Faltas_Sofridas_L5': 2.9, 'Faltas_Cometidas_L5': 1.1, 'Desarmes_L5': 1.3, 'Cartoes_Amarelos_L5': 0.4},
-            {'Jogador': 'Nicolas De La Cruz', 'Finalizacoes_L5': 1.7, 'Faltas_Sofridas_L5': 2.5, 'Faltas_Cometidas_L5': 2.2, 'Desarmes_L5': 2.8, 'Cartoes_Amarelos_L5': 0.6},
-            {'Jogador': 'Gerson', 'Finalizacoes_L5': 1.0, 'Faltas_Sofridas_L5': 2.2, 'Faltas_Cometidas_L5': 2.0, 'Desarmes_L5': 2.6, 'Cartoes_Amarelos_L5': 0.5},
-            {'Jogador': 'Erick Pulgar', 'Finalizacoes_L5': 0.6, 'Faltas_Sofridas_L5': 1.0, 'Faltas_Cometidas_L5': 2.4, 'Desarmes_L5': 3.1, 'Cartoes_Amarelos_L5': 0.7},
-            {'Jogador': 'Ayrton Lucas', 'Finalizacoes_L5': 0.9, 'Faltas_Sofridas_L5': 1.2, 'Faltas_Cometidas_L5': 1.5, 'Desarmes_L5': 2.4, 'Cartoes_Amarelos_L5': 0.5},
-            {'Jogador': 'Léo Pereira', 'Finalizacoes_L5': 0.8, 'Faltas_Sofridas_L5': 0.6, 'Faltas_Cometidas_L5': 1.8, 'Desarmes_L5': 2.5, 'Cartoes_Amarelos_L5': 0.6},
-            {'Jogador': 'Agustín Rossi', 'Finalizacoes_L5': 0.0, 'Faltas_Sofridas_L5': 0.2, 'Faltas_Cometidas_L5': 0.0, 'Desarmes_L5': 0.2, 'Cartoes_Amarelos_L5': 0.1}
-        ],
-        'São Paulo': [
-            {'Jogador': 'Jonathan Calleri', 'Finalizacoes_L5': 3.0, 'Faltas_Sofridas_L5': 3.2, 'Faltas_Cometidas_L5': 1.8, 'Desarmes_L5': 0.7, 'Cartoes_Amarelos_L5': 0.5},
-            {'Jogador': 'Luciano', 'Finalizacoes_L5': 2.6, 'Faltas_Sofridas_L5': 2.4, 'Faltas_Cometidas_L5': 1.5, 'Desarmes_L5': 0.9, 'Cartoes_Amarelos_L5': 0.6},
-            {'Jogador': 'Lucas Moura', 'Finalizacoes_L5': 2.5, 'Faltas_Sofridas_L5': 2.9, 'Faltas_Cometidas_L5': 1.1, 'Desarmes_L5': 1.2, 'Cartoes_Amarelos_L5': 0.3},
-            {'Jogador': 'Pablo Maia', 'Finalizacoes_L5': 0.6, 'Faltas_Sofridas_L5': 1.1, 'Faltas_Cometidas_L5': 2.4, 'Desarmes_L5': 3.5, 'Cartoes_Amarelos_L5': 0.7},
-            {'Jogador': 'Robert Arboleda', 'Finalizacoes_L5': 0.8, 'Faltas_Sofridas_L5': 0.4, 'Faltas_Cometidas_L5': 2.0, 'Desarmes_L5': 2.9, 'Cartoes_Amarelos_L5': 0.6},
-            {'Jogador': 'Rafael', 'Finalizacoes_L5': 0.0, 'Faltas_Sofridas_L5': 0.2, 'Faltas_Cometidas_L5': 0.0, 'Desarmes_L5': 0.1, 'Cartoes_Amarelos_L5': 0.1}
-        ]
-    }
-    
-    jogadores_lista = []
-    for time in times:
-        elenco_base = elencos_base.get(time, [{'Jogador': f'Craque {time}', 'Finalizacoes_L5': 2.0, 'Faltas_Sofridas_L5': 1.5, 'Faltas_Cometidas_L5': 1.0, 'Desarmes_L5': 1.0, 'Cartoes_Amarelos_L5': 0.3}])
-        for j in elenco_base:
-            j_copy = j.copy()
-            j_copy['Time'] = time
-            jogadores_lista.append(j_copy)
+    # A API divide os jogadores em páginas (normalmente 2 páginas cobrem o elenco todo)
+    for page in [1, 2]:
+        url = f"https://v3.football.api-sports.io/players?league={LEAGUE_ID}&season={season}&team={team_id}&page={page}"
+        try:
+            res = requests.get(url, headers=headers)
+            data = res.json()
+            if data.get('results', 0) > 0:
+                for item in data['response']:
+                    p = item['player']
+                    # Estatísticas específicas desta liga/temporada
+                    s = item['statistics'][0] if len(item['statistics']) > 0 else {}
+                    
+                    jogadores.append({
+                        'Jogador': p.get('name', 'N/A'),
+                        'Idade': p.get('age', '-'),
+                        'Posição': s.get('games', {}).get('position', '-'),
+                        'Jogos': s.get('games', {}).get('appearences', 0) or 0,
+                        'Minutos': s.get('games', {}).get('minutes', 0) or 0,
+                        'Gols': s.get('goals', {}).get('total', 0) or 0,
+                        'Assist': s.get('goals', {}).get('assists', 0) or 0,
+                        'Finalizações': s.get('shots', {}).get('total', 0) or 0,
+                        'Desarmes': s.get('tackles', {}).get('total', 0) or 0,
+                        'Amarelos': s.get('cards', {}).get('yellow', 0) or 0,
+                        'Vermelhos': s.get('cards', {}).get('red', 0) or 0
+                    })
+            else:
+                break # Fim das páginas
+        except Exception as e:
+            st.error(f"Erro API (Jogadores): {e}")
+            break
+            
+    df = pd.DataFrame(jogadores)
+    if not df.empty:
+        df = df.drop_duplicates(subset=['Jogador'])
+        # Filtrar apenas quem jogou para não mostrar atletas que não entraram em campo e ordernar por minutos jogados
+        df = df[df['Jogos'] > 0].sort_values(by='Minutos', ascending=False)
+    return df
 
-    return pd.DataFrame(dados_times), pd.DataFrame(jogadores_lista)
 
-df_times, df_jogadores = carregar_todos_os_plantels()
-
-st.sidebar.header("⚙️ Configurações de Análise")
-time_principal = st.sidebar.selectbox("Escolha o Time Principal", df_times['Home'].unique())
-dados_time1 = df_times[df_times['Home'] == time_principal].iloc[0]
-
-mercado_visivel = st.sidebar.selectbox(
-    "Métrica Coletiva em Destaque", 
-    ["Gols", "Finalizações", "Desarmes", "Faltas Cometidas", "Faltas Sofridas", "Defesas de Goleiro", "Escanteios"]
-)
-
-# --- SEÇÃO 1: DESEMPENHO COLETIVO ---
-st.subheader(f"📊 Desempenho Coletivo: {time_principal}")
-c1, c2, c3, c4 = st.columns(4)
-with c1:
-    if mercado_visivel == "Gols":
-        st.metric("Média Gols Feitos", dados_time1['gols_feitos_media'])
-    elif mercado_visivel == "Finalizações":
-        st.metric("Média Finalizações", dados_time1['finalizacoes_media'])
-    elif mercado_visivel == "Desarmes":
-        st.metric("Média Desarmes", dados_time1['desarmes_media'])
-    elif mercado_visivel == "Faltas Cometidas":
-        st.metric("Média Faltas Cometidas", dados_time1['faltas_cometidas_media'])
-    elif mercado_visivel == "Faltas Sofridas":
-        st.metric("Média Faltas Sofridas", dados_time1['faltas_sofridas_media'])
-    elif mercado_visivel == "Defesas de Goleiro":
-        st.metric("Média Defesas do Goleiro", dados_time1['defesas_goleiro_media'])
-    else:
-        st.metric("Média Escanteios", dados_time1['escanteios_media'])
-with c2:
-    st.metric("Média Gols Sofridos", dados_time1['gols_sofridos_media'])
-with c3:
-    st.metric("Média Escanteios", dados_time1['escanteios_media'])
-with c4:
-    st.metric("Média Finalizações", dados_time1['finalizacoes_media'])
-
-st.markdown("---")
-
-# --- SEÇÃO 2: SCOUT DO PLANTEL ---
-st.subheader(f"👤 Plantel Completo (Média das Últimas 5 Partidas): {time_principal}")
-df_elenco = df_jogadores[df_jogadores['Time'] == time_principal]
-st.dataframe(
-    df_elenco[['Jogador', 'Finalizacoes_L5', 'Faltas_Sofridas_L5', 'Faltas_Cometidas_L5', 'Desarmes_L5', 'Cartoes_Amarelos_L5']],
-    use_container_width=True,
-    hide_index=True
-)
-
-st.markdown("---")
-
-# --- SEÇÃO 3: SIMULADOR DE CONFRONTO DIRETO & HISTÓRICO H2H REAL (API-FOOTBALL) ---
-st.subheader("🤖 Simulador de Confronto Direto & Histórico H2H (API Real)")
-adversarios = [t for t in df_times['Home'].unique() if t != time_principal]
-adversario = st.selectbox("Escolha o Time Adversário para Simulação", adversarios)
-dados_time2 = df_times[df_times['Home'] == adversario].iloc[0]
-
-gols_t1 = (dados_time1['gols_feitos_media'] + dados_time2['gols_sofridos_media']) / 2
-gols_t2 = (dados_time2['gols_feitos_media'] + dados_time1['gols_sofridos_media']) / 2
-total_gols = gols_t1 + gols_t2
-
-sc1, sc2, sc3 = st.columns(3)
-with sc1:
-    st.metric("Expectativa de Gols", f"{gols_t1:.2f} x {gols_t2:.2f}")
-with sc2:
-    st.metric("Média Est. Finalizações", f"{(dados_time1['finalizacoes_media'] + dados_time2['finalizacoes_media'])/2:.1f}")
-with sc3:
-    st.metric("Média Est. Faltas", f"{(dados_time1['faltas_cometidas_media'] + dados_time2['faltas_cometidas_media'])/2:.1f}")
-
-if total_gols >= 2.5:
-    st.success(f"🔥 **Tendência:** Alta probabilidade de **Mais de 2.5 Gols** ({total_gols:.2f} gols estimados).")
-else:
-    st.warning(f"🛡️ **Tendência:** Jogo truncado, tendência de **Menos de 2.5 Gols** ({total_gols:.2f} gols estimados).")
-
-st.markdown(f"### 📜 Histórico de Confronto Direto Real: {time_principal} vs {adversario}")
-
-# Função para buscar dados reais na API-Football
+@st.cache_data(ttl=3600)
 def buscar_h2h_api(time1, time2, key):
-    id1 = TEAM_IDS.get(time1)
-    id2 = TEAM_IDS.get(time2)
-    
+    id1, id2 = TEAM_IDS.get(time1), TEAM_IDS.get(time2)
     url = f"https://v3.football.api-sports.io/fixtures/headtohead?h2h={id1}-{id2}"
-    headers = {
-        'x-rapidapi-host': 'v3.football.api-sports.io',
-        'x-rapidapi-key': key
-    }
+    headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
     
     try:
         response = requests.get(url, headers=headers)
         data = response.json()
-        
         if response.status_code == 200 and data.get('results', 0) > 0:
             fixtures = data['response']
-            # Ordena por data decrescente (mais recentes primeiro) e pega as últimas 6
+            # Pega os 6 últimos confrontos
             fixtures = sorted(fixtures, key=lambda x: x['fixture']['date'], reverse=True)[:6]
             
             h2h_lista = []
             for match in fixtures:
-                data_jogo = match['fixture']['date'][:10] # Formato AAAA-MM-DD
-                data_formatada = f"{data_jogo[8:10]}/{data_jogo[5:7]}/{data_jogo[0:4]}"
-                competicao = match['league']['name']
-                mandante = match['teams']['home']['name']
-                visitante = match['teams']['away']['name']
-                gols_home = match['goals']['home']
-                gols_away = match['goals']['away']
-                
-                placar = f"{gols_home} x {gols_away}" if gols_home is not None else "Adjuv."
-                
+                data_jogo = match['fixture']['date'][:10]
                 h2h_lista.append({
-                    'Data': data_formatada,
-                    'Competição': competicao,
-                    'Mandante': mandante,
-                    'Placar': placar,
-                    'Visitante': visitante
+                    'Data': f"{data_jogo[8:10]}/{data_jogo[5:7]}/{data_jogo[0:4]}",
+                    'Competição': match['league']['name'],
+                    'Mandante': match['teams']['home']['name'],
+                    'Placar': f"{match['goals']['home']} x {match['goals']['away']}",
+                    'Visitante': match['teams']['away']['name']
                 })
             return pd.DataFrame(h2h_lista), None
-        else:
-            return None, "Nenhum confronto recente retornado pela API para esses parâmetros ou chave inválida."
+        return None, "Nenhum confronto recente retornado."
     except Exception as e:
         return None, f"Erro na conexão com a API: {e}"
 
-# Executa a busca H2H real com a chave fixa
+
+# --- INTERFACE E PROCESSAMENTO DO DASHBOARD ---
+
+st.sidebar.header("⚙️ Configurações de Análise")
+times_disponiveis = list(TEAM_IDS.keys())
+
+time_principal = st.sidebar.selectbox("Escolha o Time Principal", times_disponiveis)
+adversario = st.sidebar.selectbox("Escolha o Time Adversário", [t for t in times_disponiveis if t != time_principal])
+
+# Buscando dados ao vivo apenas dos dois times selecionados!
+with st.spinner("Extraindo dados da API..."):
+    id_time1 = TEAM_IDS[time_principal]
+    id_time2 = TEAM_IDS[adversario]
+    
+    stats_t1 = buscar_estatisticas_time(id_time1, SEASON, API_KEY_FIXA)
+    stats_t2 = buscar_estatisticas_time(id_time2, SEASON, API_KEY_FIXA)
+    df_elenco = buscar_elenco_api(id_time1, SEASON, API_KEY_FIXA)
+
+# --- SEÇÃO 1: DESEMPENHO COLETIVO ---
+st.subheader(f"📊 Desempenho Coletivo (Temporada {SEASON}): {time_principal}")
+c1, c2, c3, c4 = st.columns(4)
+with c1:
+    st.metric("Jogos Disputados", stats_t1['jogos'])
+with c2:
+    st.metric("Média Gols Feitos", f"{stats_t1['gols_feitos_media']:.2f}")
+with c3:
+    st.metric("Média Gols Sofridos", f"{stats_t1['gols_sofridos_media']:.2f}")
+with c4:
+    st.metric("Clean Sheets (Jogos sem sofrer gol)", stats_t1['clean_sheets'])
+
+st.markdown("---")
+
+# --- SEÇÃO 2: SCOUT DO PLANTEL (API REAL) ---
+st.subheader(f"👤 Plantel Atualizado via API: {time_principal}")
+st.caption("A tabela exibe apenas jogadores que entraram em campo nesta temporada, ordenados pelos minutos jogados.")
+if not df_elenco.empty:
+    st.dataframe(df_elenco, use_container_width=True, hide_index=True)
+else:
+    st.warning("Não foi possível carregar os jogadores. Verifique se a temporada já iniciou ou se a chave da API está correta.")
+
+st.markdown("---")
+
+# --- SEÇÃO 3: SIMULADOR DE CONFRONTO DIRETO & HISTÓRICO ---
+st.subheader("🤖 Simulador de Confronto Direto Estimado")
+
+gols_t1 = (stats_t1['gols_feitos_media'] + stats_t2['gols_sofridos_media']) / 2
+gols_t2 = (stats_t2['gols_feitos_media'] + stats_t1['gols_sofridos_media']) / 2
+total_gols = gols_t1 + gols_t2
+
+sc1, sc2, sc3 = st.columns(3)
+with sc1:
+    st.metric(f"Expec. Gols ({time_principal})", f"{gols_t1:.2f}")
+with sc2:
+    st.metric(f"Expec. Gols ({adversario})", f"{gols_t2:.2f}")
+with sc3:
+    st.metric("Total de Gols Esperados", f"{total_gols:.2f}")
+
+if total_gols >= 2.5:
+    st.success(f"🔥 **Tendência:** Alta probabilidade de **Mais de 2.5 Gols** (Média somada de ataques/defesas indica jogo aberto).")
+else:
+    st.warning(f"🛡️ **Tendência:** Jogo truncado, tendência de **Menos de 2.5 Gols** (Defesas fortes ou ataques ineficientes).")
+
+st.markdown(f"### 📜 Histórico Real de Confronto (Últimos Jogos): {time_principal} vs {adversario}")
+
 df_h2h_real, erro_api = buscar_h2h_api(time_principal, adversario, API_KEY_FIXA)
 
 if df_h2h_real is not None and not df_h2h_real.empty:
     st.dataframe(df_h2h_real, use_container_width=True, hide_index=True)
 else:
-    if erro_api:
-        st.info(erro_api)
-    else:
-        st.warning("Não foi possível carregar os dados reais no momento.")
+    st.info(erro_api if erro_api else "Sem dados recentes de H2H na API.")
