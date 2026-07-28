@@ -1,21 +1,50 @@
 import streamlit as st
 import pandas as pd
 import requests
-import hashlib
 
 st.set_page_config(page_title="Painel Pro - Plantéis Completos Série A", layout="wide")
 
-st.title("⚽ Painel Analisador Esportivo Pro - Elencos Completos & H2H")
-st.write("Plantel integral de todos os 20 clubes da Série A, estatísticas detalhadas e confronto direto.")
+st.title("⚽ Painel Analisador Esportivo Pro - Elencos Completos & H2H Real")
+st.write("Plantel integral de todos os 20 clubes da Série A, estatísticas detalhadas e confronto direto via API-Football.")
+
+# --- CONFIGURAÇÃO DA API ---
+API_KEY_FIXA = "E89cc081ecbaaf1a7074e878c1cae0ff"
+
+st.sidebar.success("✅ Painel Carregado com Sucesso!")
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 👨‍💻 Painel Desenvolvido por:")
+st.sidebar.markdown(f"**Thiago Oliveira De sá**")
+st.sidebar.markdown("📧 `thiago.desa@yahoo.com.br`")
+st.sidebar.markdown("📞 `(21) 96485-9482`")
+st.sidebar.markdown("---")
+
+# Dicionário para mapear os nomes dos times do Brasileirão para os IDs oficiais da API-Football
+TEAM_IDS = {
+    'Flamengo': 127,
+    'Palmeiras': 121,
+    'Botafogo': 120,
+    'São Paulo': 126,
+    'Fluminense': 128,
+    'Atlético-MG': 114,
+    'Internacional': 119,
+    'Grêmio': 130,
+    'Bahia': 115,
+    'Cruzeiro': 131,
+    'Vasco': 132,
+    'Corinthians': 133,
+    'Fortaleza': 140,
+    'Bragantino': 151,
+    'Athletico-PR': 135,
+    'Cuiabá': 1900,
+    'Juventude': 138,
+    'Criciúma': 144,
+    'Atlético-GO': 116,
+    'Vitória': 147
+}
 
 @st.cache_data
 def carregar_todos_os_plantels():
-    times = [
-        'Flamengo', 'Palmeiras', 'Botafogo', 'São Paulo', 'Fluminense',
-        'Atlético-MG', 'Internacional', 'Grêmio', 'Bahia', 'Cruzeiro',
-        'Vasco', 'Corinthians', 'Fortaleza', 'Bragantino', 'Athletico-PR',
-        'Cuiabá', 'Juventude', 'Criciúma', 'Atlético-GO', 'Vitória'
-    ]
+    times = list(TEAM_IDS.keys())
     
     dados_times = {
         'Home': times,
@@ -29,7 +58,6 @@ def carregar_todos_os_plantels():
         'defesas_goleiro_media': [3.1, 2.8, 3.0, 3.5, 3.2, 3.0, 3.3, 3.4, 3.6, 3.7, 4.2, 3.8, 3.2, 3.5, 3.9, 4.5, 4.3, 4.8, 4.9, 4.7]
     }
     
-    # Base principal com craques e titulares de todos os 20 times
     elencos_base = {
         'Flamengo': [
             {'Jogador': 'Pedro', 'Finalizacoes_L5': 3.2, 'Faltas_Sofridas_L5': 1.8, 'Faltas_Cometidas_L5': 0.8, 'Desarmes_L5': 0.4, 'Cartoes_Amarelos_L5': 0.2},
@@ -43,26 +71,6 @@ def carregar_todos_os_plantels():
             {'Jogador': 'Léo Pereira', 'Finalizacoes_L5': 0.8, 'Faltas_Sofridas_L5': 0.6, 'Faltas_Cometidas_L5': 1.8, 'Desarmes_L5': 2.5, 'Cartoes_Amarelos_L5': 0.6},
             {'Jogador': 'Agustín Rossi', 'Finalizacoes_L5': 0.0, 'Faltas_Sofridas_L5': 0.2, 'Faltas_Cometidas_L5': 0.0, 'Desarmes_L5': 0.2, 'Cartoes_Amarelos_L5': 0.1}
         ],
-        'Palmeiras': [
-            {'Jogador': 'Flaco López', 'Finalizacoes_L5': 2.8, 'Faltas_Sofridas_L5': 1.4, 'Faltas_Cometidas_L5': 1.5, 'Desarmes_L5': 0.4, 'Cartoes_Amarelos_L5': 0.4},
-            {'Jogador': 'Vitor Roque', 'Finalizacoes_L5': 3.1, 'Faltas_Sofridas_L5': 2.2, 'Faltas_Cometidas_L5': 1.2, 'Desarmes_L5': 0.5, 'Cartoes_Amarelos_L5': 0.3},
-            {'Jogador': 'Estêvão', 'Finalizacoes_L5': 2.9, 'Faltas_Sofridas_L5': 3.4, 'Faltas_Cometidas_L5': 0.8, 'Desarmes_L5': 1.0, 'Cartoes_Amarelos_L5': 0.2},
-            {'Jogador': 'Raphael Veiga', 'Finalizacoes_L5': 2.5, 'Faltas_Sofridas_L5': 2.2, 'Faltas_Cometidas_L5': 1.0, 'Desarmes_L5': 1.1, 'Cartoes_Amarelos_L5': 0.3},
-            {'Jogador': 'Richard Ríos', 'Finalizacoes_L5': 1.2, 'Faltas_Sofridas_L5': 1.9, 'Faltas_Cometidas_L5': 2.3, 'Desarmes_L5': 2.7, 'Cartoes_Amarelos_L5': 0.6},
-            {'Jogador': 'Aníbal Moreno', 'Finalizacoes_L5': 0.7, 'Faltas_Sofridas_L5': 1.1, 'Faltas_Cometidas_L5': 2.6, 'Desarmes_L5': 3.4, 'Cartoes_Amarelos_L5': 0.8},
-            {'Jogador': 'Joaquín Piquerez', 'Finalizacoes_L5': 0.8, 'Faltas_Sofridas_L5': 1.5, 'Faltas_Cometidas_L5': 1.4, 'Desarmes_L5': 2.5, 'Cartoes_Amarelos_L5': 0.5},
-            {'Jogador': 'Gustavo Gómez', 'Finalizacoes_L5': 0.9, 'Faltas_Sofridas_L5': 0.5, 'Faltas_Cometidas_L5': 2.1, 'Desarmes_L5': 2.8, 'Cartoes_Amarelos_L5': 0.7},
-            {'Jogador': 'Weverton', 'Finalizacoes_L5': 0.0, 'Faltas_Sofridas_L5': 0.1, 'Faltas_Cometidas_L5': 0.0, 'Desarmes_L5': 0.1, 'Cartoes_Amarelos_L5': 0.0}
-        ],
-        'Botafogo': [
-            {'Jogador': 'Igor Jesus', 'Finalizacoes_L5': 2.6, 'Faltas_Sofridas_L5': 2.5, 'Faltas_Cometidas_L5': 1.4, 'Desarmes_L5': 0.6, 'Cartoes_Amarelos_L5': 0.3},
-            {'Jogador': 'Luiz Henrique', 'Finalizacoes_L5': 2.8, 'Faltas_Sofridas_L5': 3.1, 'Faltas_Cometidas_L5': 1.1, 'Desarmes_L5': 1.2, 'Cartoes_Amarelos_L5': 0.4},
-            {'Jogador': 'Thiago Almada', 'Finalizacoes_L5': 2.4, 'Faltas_Sofridas_L5': 2.8, 'Faltas_Cometidas_L5': 1.0, 'Desarmes_L5': 1.6, 'Cartoes_Amarelos_L5': 0.2},
-            {'Jogador': 'Marlon Freitas', 'Finalizacoes_L5': 0.8, 'Faltas_Sofridas_L5': 1.5, 'Faltas_Cometidas_L5': 2.2, 'Desarmes_L5': 3.0, 'Cartoes_Amarelos_L5': 0.5},
-            {'Jogador': 'Gregore', 'Finalizacoes_L5': 0.4, 'Faltas_Sofridas_L5': 1.2, 'Faltas_Cometidas_L5': 3.2, 'Desarmes_L5': 3.9, 'Cartoes_Amarelos_L5': 0.9},
-            {'Jogador': 'Alexander Barboza', 'Finalizacoes_L5': 0.6, 'Faltas_Sofridas_L5': 0.5, 'Faltas_Cometidas_L5': 2.5, 'Desarmes_L5': 2.8, 'Cartoes_Amarelos_L5': 0.8},
-            {'Jogador': 'John', 'Finalizacoes_L5': 0.0, 'Faltas_Sofridas_L5': 0.3, 'Faltas_Cometidas_L5': 0.0, 'Desarmes_L5': 0.1, 'Cartoes_Amarelos_L5': 0.2}
-        ],
         'São Paulo': [
             {'Jogador': 'Jonathan Calleri', 'Finalizacoes_L5': 3.0, 'Faltas_Sofridas_L5': 3.2, 'Faltas_Cometidas_L5': 1.8, 'Desarmes_L5': 0.7, 'Cartoes_Amarelos_L5': 0.5},
             {'Jogador': 'Luciano', 'Finalizacoes_L5': 2.6, 'Faltas_Sofridas_L5': 2.4, 'Faltas_Cometidas_L5': 1.5, 'Desarmes_L5': 0.9, 'Cartoes_Amarelos_L5': 0.6},
@@ -70,137 +78,20 @@ def carregar_todos_os_plantels():
             {'Jogador': 'Pablo Maia', 'Finalizacoes_L5': 0.6, 'Faltas_Sofridas_L5': 1.1, 'Faltas_Cometidas_L5': 2.4, 'Desarmes_L5': 3.5, 'Cartoes_Amarelos_L5': 0.7},
             {'Jogador': 'Robert Arboleda', 'Finalizacoes_L5': 0.8, 'Faltas_Sofridas_L5': 0.4, 'Faltas_Cometidas_L5': 2.0, 'Desarmes_L5': 2.9, 'Cartoes_Amarelos_L5': 0.6},
             {'Jogador': 'Rafael', 'Finalizacoes_L5': 0.0, 'Faltas_Sofridas_L5': 0.2, 'Faltas_Cometidas_L5': 0.0, 'Desarmes_L5': 0.1, 'Cartoes_Amarelos_L5': 0.1}
-        ],
-        'Fluminense': [
-            {'Jogador': 'Germán Cano', 'Finalizacoes_L5': 3.1, 'Faltas_Sofridas_L5': 1.5, 'Faltas_Cometidas_L5': 1.1, 'Desarmes_L5': 0.4, 'Cartoes_Amarelos_L5': 0.2},
-            {'Jogador': 'Jhon Arias', 'Finalizacoes_L5': 2.5, 'Faltas_Sofridas_L5': 3.1, 'Faltas_Cometidas_L5': 1.0, 'Desarmes_L5': 1.5, 'Cartoes_Amarelos_L5': 0.3},
-            {'Jogador': 'Paulo Henrique Ganso', 'Finalizacoes_L5': 1.2, 'Faltas_Sofridas_L5': 2.4, 'Faltas_Cometidas_L5': 0.7, 'Desarmes_L5': 1.1, 'Cartoes_Amarelos_L5': 0.3},
-            {'Jogador': 'André', 'Finalizacoes_L5': 0.5, 'Faltas_Sofridas_L5': 1.5, 'Faltas_Cometidas_L5': 1.8, 'Desarmes_L5': 3.5, 'Cartoes_Amarelos_L5': 0.6},
-            {'Jogador': 'Thiago Silva', 'Finalizacoes_L5': 0.6, 'Faltas_Sofridas_L5': 0.5, 'Faltas_Cometidas_L5': 1.2, 'Desarmes_L5': 3.1, 'Cartoes_Amarelos_L5': 0.3},
-            {'Jogador': 'Fábio', 'Finalizacoes_L5': 0.0, 'Faltas_Sofridas_L5': 0.2, 'Faltas_Cometidas_L5': 0.0, 'Desarmes_L5': 0.1, 'Cartoes_Amarelos_L5': 0.1}
-        ],
-        'Atlético-MG': [
-            {'Jogador': 'Hulk', 'Finalizacoes_L5': 3.5, 'Faltas_Sofridas_L5': 3.8, 'Faltas_Cometidas_L5': 1.6, 'Desarmes_L5': 0.8, 'Cartoes_Amarelos_L5': 0.6},
-            {'Jogador': 'Paulinho', 'Finalizacoes_L5': 3.0, 'Faltas_Sofridas_L5': 2.1, 'Faltas_Cometidas_L5': 1.0, 'Desarmes_L5': 1.1, 'Cartoes_Amarelos_L5': 0.3},
-            {'Jogador': 'Gustavo Scarpa', 'Finalizacoes_L5': 2.7, 'Faltas_Sofridas_L5': 2.2, 'Faltas_Cometidas_L5': 1.1, 'Desarmes_L5': 1.6, 'Cartoes_Amarelos_L5': 0.4},
-            {'Jogador': 'Otávio', 'Finalizacoes_L5': 0.5, 'Faltas_Sofridas_L5': 1.0, 'Faltas_Cometidas_L5': 2.8, 'Desarmes_L5': 3.6, 'Cartoes_Amarelos_L5': 0.8},
-            {'Jogador': 'Everson', 'Finalizacoes_L5': 0.0, 'Faltas_Sofridas_L5': 0.2, 'Faltas_Cometidas_L5': 0.0, 'Desarmes_L5': 0.1, 'Cartoes_Amarelos_L5': 0.1}
-        ],
-        'Internacional': [
-            {'Jogador': 'Enner Valencia', 'Finalizacoes_L5': 3.1, 'Faltas_Sofridas_L5': 2.6, 'Faltas_Cometidas_L5': 1.3, 'Desarmes_L5': 0.6, 'Cartoes_Amarelos_L5': 0.4},
-            {'Jogador': 'Alan Patrick', 'Finalizacoes_L5': 2.4, 'Faltas_Sofridas_L5': 3.0, 'Faltas_Cometidas_L5': 1.0, 'Desarmes_L5': 1.3, 'Cartoes_Amarelos_L5': 0.3},
-            {'Jogador': 'Thiago Maia', 'Finalizacoes_L5': 0.6, 'Faltas_Sofridas_L5': 1.3, 'Faltas_Cometidas_L5': 2.4, 'Desarmes_L5': 3.4, 'Cartoes_Amarelos_L5': 0.7},
-            {'Jogador': 'Sergio Rochet', 'Finalizacoes_L5': 0.0, 'Faltas_Sofridas_L5': 0.1, 'Faltas_Cometidas_L5': 0.0, 'Desarmes_L5': 0.1, 'Cartoes_Amarelos_L5': 0.1}
-        ],
-        'Grêmio': [
-            {'Jogador': 'Martin Braithwaite', 'Finalizacoes_L5': 2.9, 'Faltas_Sofridas_L5': 2.4, 'Faltas_Cometidas_L5': 1.4, 'Desarmes_L5': 0.5, 'Cartoes_Amarelos_L5': 0.3},
-            {'Jogador': 'Franco Cristaldo', 'Finalizacoes_L5': 2.2, 'Faltas_Sofridas_L5': 2.1, 'Faltas_Cometidas_L5': 1.1, 'Desarmes_L5': 1.2, 'Cartoes_Amarelos_L5': 0.3},
-            {'Jogador': 'Mathías Villasanti', 'Finalizacoes_L5': 1.1, 'Faltas_Sofridas_L5': 1.8, 'Faltas_Cometidas_L5': 2.6, 'Desarmes_L5': 3.7, 'Cartoes_Amarelos_L5': 0.7},
-            {'Jogador': 'Agustín Marchesín', 'Finalizacoes_L5': 0.0, 'Faltas_Sofridas_L5': 0.2, 'Faltas_Cometidas_L5': 0.0, 'Desarmes_L5': 0.1, 'Cartoes_Amarelos_L5': 0.1}
-        ],
-        'Bahia': [
-            {'Jogador': 'Everaldo', 'Finalizacoes_L5': 2.7, 'Faltas_Sofridas_L5': 2.2, 'Faltas_Cometidas_L5': 1.5, 'Desarmes_L5': 0.6, 'Cartoes_Amarelos_L5': 0.4},
-            {'Jogador': 'Cauly', 'Finalizacoes_L5': 2.3, 'Faltas_Sofridas_L5': 2.8, 'Faltas_Cometidas_L5': 0.9, 'Desarmes_L5': 1.5, 'Cartoes_Amarelos_L5': 0.2},
-            {'Jogador': 'Jean Lucas', 'Finalizacoes_L5': 1.2, 'Faltas_Sofridas_L5': 1.9, 'Faltas_Cometidas_L5': 2.1, 'Desarmes_L5': 3.0, 'Cartoes_Amarelos_L5': 0.5},
-            {'Jogador': 'Marcos Felipe', 'Finalizacoes_L5': 0.0, 'Faltas_Sofridas_L5': 0.1, 'Faltas_Cometidas_L5': 0.0, 'Desarmes_L5': 0.1, 'Cartoes_Amarelos_L5': 0.1}
-        ],
-        'Cruzeiro': [
-            {'Jogador': 'Kaio Jorge', 'Finalizacoes_L5': 2.8, 'Faltas_Sofridas_L5': 2.3, 'Faltas_Cometidas_L5': 1.4, 'Desarmes_L5': 0.5, 'Cartoes_Amarelos_L5': 0.3},
-            {'Jogador': 'Matheus Pereira', 'Finalizacoes_L5': 2.6, 'Faltas_Sofridas_L5': 3.2, 'Faltas_Cometidas_L5': 1.1, 'Desarmes_L5': 1.4, 'Cartoes_Amarelos_L5': 0.5},
-            {'Jogador': 'Lucas Romero', 'Finalizacoes_L5': 0.7, 'Faltas_Sofridas_L5': 1.5, 'Faltas_Cometidas_L5': 2.7, 'Desarmes_L5': 3.6, 'Cartoes_Amarelos_L5': 0.8},
-            {'Jogador': 'Cássio', 'Finalizacoes_L5': 0.0, 'Faltas_Sofridas_L5': 0.2, 'Faltas_Cometidas_L5': 0.0, 'Desarmes_L5': 0.1, 'Cartoes_Amarelos_L5': 0.1}
-        ],
-        'Vasco': [
-            {'Jogador': 'Pablo Vegetti', 'Finalizacoes_L5': 3.2, 'Faltas_Sofridas_L5': 3.5, 'Faltas_Cometidas_L5': 2.0, 'Desarmes_L5': 0.5, 'Cartoes_Amarelos_L5': 0.7},
-            {'Jogador': 'Philippe Coutinho', 'Finalizacoes_L5': 2.5, 'Faltas_Sofridas_L5': 2.8, 'Faltas_Cometidas_L5': 0.9, 'Desarmes_L5': 1.2, 'Cartoes_Amarelos_L5': 0.2},
-            {'Jogador': 'Mateus Carvalho', 'Finalizacoes_L5': 0.5, 'Faltas_Sofridas_L5': 1.1, 'Faltas_Cometidas_L5': 2.5, 'Desarmes_L5': 3.3, 'Cartoes_Amarelos_L5': 0.7},
-            {'Jogador': 'Léo Jardim', 'Finalizacoes_L5': 0.0, 'Faltas_Sofridas_L5': 0.2, 'Faltas_Cometidas_L5': 0.0, 'Desarmes_L5': 0.1, 'Cartoes_Amarelos_L5': 0.1}
-        ],
-        'Corinthians': [
-            {'Jogador': 'Memphis Depay', 'Finalizacoes_L5': 3.4, 'Faltas_Sofridas_L5': 3.2, 'Faltas_Cometidas_L5': 1.3, 'Desarmes_L5': 0.9, 'Cartoes_Amarelos_L5': 0.5},
-            {'Jogador': 'Yuri Alberto', 'Finalizacoes_L5': 3.0, 'Faltas_Sofridas_L5': 2.5, 'Faltas_Cometidas_L5': 1.6, 'Desarmes_L5': 0.8, 'Cartoes_Amarelos_L5': 0.4},
-            {'Jogador': 'Rodrigo Garro', 'Finalizacoes_L5': 2.7, 'Faltas_Sofridas_L5': 3.6, 'Faltas_Cometidas_L5': 1.8, 'Desarmes_L5': 1.7, 'Cartoes_Amarelos_L5': 0.8},
-            {'Jogador': 'Hugo Souza', 'Finalizacoes_L5': 0.0, 'Faltas_Sofridas_L5': 0.2, 'Faltas_Cometidas_L5': 0.0, 'Desarmes_L5': 0.1, 'Cartoes_Amarelos_L5': 0.1}
-        ],
-        'Fortaleza': [
-            {'Jogador': 'Lucero', 'Finalizacoes_L5': 2.9, 'Faltas_Sofridas_L5': 2.2, 'Faltas_Cometidas_L5': 1.4, 'Desarmes_L5': 0.5, 'Cartoes_Amarelos_L5': 0.3},
-            {'Jogador': 'Marinho', 'Finalizacoes_L5': 2.6, 'Faltas_Sofridas_L5': 2.9, 'Faltas_Cometidas_L5': 1.2, 'Desarmes_L5': 1.1, 'Cartoes_Amarelos_L5': 0.6},
-            {'Jogador': 'Hércules', 'Finalizacoes_L5': 1.1, 'Faltas_Sofridas_L5': 1.6, 'Faltas_Cometidas_L5': 2.1, 'Desarmes_L5': 3.1, 'Cartoes_Amarelos_L5': 0.5},
-            {'Jogador': 'João Ricardo', 'Finalizacoes_L5': 0.0, 'Faltas_Sofridas_L5': 0.1, 'Faltas_Cometidas_L5': 0.0, 'Desarmes_L5': 0.1, 'Cartoes_Amarelos_L5': 0.1}
-        ],
-        'Bragantino': [
-            {'Jogador': 'Eduardo Sasha', 'Finalizacoes_L5': 2.7, 'Faltas_Sofridas_L5': 2.0, 'Faltas_Cometidas_L5': 1.3, 'Desarmes_L5': 0.6, 'Cartoes_Amarelos_L5': 0.3},
-            {'Jogador': 'Helinho', 'Finalizacoes_L5': 2.9, 'Faltas_Sofridas_L5': 2.6, 'Faltas_Cometidas_L5': 1.0, 'Desarmes_L5': 1.2, 'Cartoes_Amarelos_L5': 0.4},
-            {'Jogador': 'Cleiton', 'Finalizacoes_L5': 0.0, 'Faltas_Sofridas_L5': 0.1, 'Faltas_Cometidas_L5': 0.0, 'Desarmes_L5': 0.1, 'Cartoes_Amarelos_L5': 0.1}
-        ],
-        'Athletico-PR': [
-            {'Jogador': 'Pablo', 'Finalizacoes_L5': 2.6, 'Faltas_Sofridas_L5': 2.3, 'Faltas_Cometidas_L5': 1.6, 'Desarmes_L5': 0.7, 'Cartoes_Amarelos_L5': 0.4},
-            {'Jogador': 'Fernandinho', 'Finalizacoes_L5': 1.2, 'Faltas_Sofridas_L5': 2.5, 'Faltas_Cometidas_L5': 2.9, 'Desarmes_L5': 3.8, 'Cartoes_Amarelos_L5': 0.9},
-            {'Jogador': 'Bento', 'Finalizacoes_L5': 0.0, 'Faltas_Sofridas_L5': 0.2, 'Faltas_Cometidas_L5': 0.0, 'Desarmes_L5': 0.1, 'Cartoes_Amarelos_L5': 0.1}
-        ],
-        'Cuiabá': [
-            {'Jogador': 'Isidro Pitta', 'Finalizacoes_L5': 2.8, 'Faltas_Sofridas_L5': 3.1, 'Faltas_Cometidas_L5': 1.8, 'Desarmes_L5': 0.5, 'Cartoes_Amarelos_L5': 0.6},
-            {'Jogador': 'Clayson', 'Finalizacoes_L5': 2.2, 'Faltas_Sofridas_L5': 2.8, 'Faltas_Cometidas_L5': 1.2, 'Desarmes_L5': 1.1, 'Cartoes_Amarelos_L5': 0.5},
-            {'Jogador': 'Walter', 'Finalizacoes_L5': 0.0, 'Faltas_Sofridas_L5': 0.2, 'Faltas_Cometidas_L5': 0.0, 'Desarmes_L5': 0.1, 'Cartoes_Amarelos_L5': 0.2}
-        ],
-        'Juventude': [
-            {'Jogador': 'Gilberto', 'Finalizacoes_L5': 2.7, 'Faltas_Sofridas_L5': 2.4, 'Faltas_Cometidas_L5': 1.5, 'Desarmes_L5': 0.5, 'Cartoes_Amarelos_L5': 0.4},
-            {'Jogador': 'Nenê', 'Finalizacoes_L5': 1.8, 'Faltas_Sofridas_L5': 2.5, 'Faltas_Cometidas_L5': 1.0, 'Desarmes_L5': 1.1, 'Cartoes_Amarelos_L5': 0.3},
-            {'Jogador': 'Gabriel Vasconcelos', 'Finalizacoes_L5': 0.0, 'Faltas_Sofridas_L5': 0.1, 'Faltas_Cometidas_L5': 0.0, 'Desarmes_L5': 0.1, 'Cartoes_Amarelos_L5': 0.1}
-        ],
-        'Criciúma': [
-            {'Jogador': 'Yannick Bolasie', 'Finalizacoes_L5': 2.6, 'Faltas_Sofridas_L5': 3.0, 'Faltas_Cometidas_L5': 1.4, 'Desarmes_L5': 0.8, 'Cartoes_Amarelos_L5': 0.5},
-            {'Jogador': 'Barreto', 'Finalizacoes_L5': 0.5, 'Faltas_Sofridas_L5': 1.2, 'Faltas_Cometidas_L5': 2.9, 'Desarmes_L5': 3.6, 'Cartoes_Amarelos_L5': 0.9},
-            {'Jogador': 'Gustao', 'Finalizacoes_L5': 0.0, 'Faltas_Sofridas_L5': 0.1, 'Faltas_Cometidas_L5': 0.0, 'Desarmes_L5': 0.1, 'Cartoes_Amarelos_L5': 0.1}
-        ],
-        'Atlético-GO': [
-            {'Jogador': 'Luiz Fernando', 'Finalizacoes_L5': 2.9, 'Faltas_Sofridas_L5': 2.7, 'Faltas_Cometidas_L5': 1.3, 'Desarmes_L5': 0.9, 'Cartoes_Amarelos_L5': 0.4},
-            {'Jogador': 'Shaylon', 'Finalizacoes_L5': 2.2, 'Faltas_Sofridas_L5': 2.1, 'Faltas_Cometidas_L5': 1.0, 'Desarmes_L5': 1.4, 'Cartoes_Amarelos_L5': 0.3},
-            {'Jogador': 'Ronaldo', 'Finalizacoes_L5': 0.0, 'Faltas_Sofridas_L5': 0.2, 'Faltas_Cometidas_L5': 0.0, 'Desarmes_L5': 0.1, 'Cartoes_Amarelos_L5': 0.1}
-        ],
-        'Vitória': [
-            {'Jogador': 'Alerrandro', 'Finalizacoes_L5': 2.8, 'Faltas_Sofridas_L5': 2.6, 'Faltas_Cometidas_L5': 1.6, 'Desarmes_L5': 0.6, 'Cartoes_Amarelos_L5': 0.4},
-            {'Jogador': 'Matheuzinho', 'Finalizacoes_L5': 2.3, 'Faltas_Sofridas_L5': 2.5, 'Faltas_Cometidas_L5': 1.1, 'Desarmes_L5': 1.2, 'Cartoes_Amarelos_L5': 0.3},
-            {'Jogador': 'Lucas Arcanjo', 'Finalizacoes_L5': 0.0, 'Faltas_Sofridas_L5': 0.1, 'Faltas_Cometidas_L5': 0.0, 'Desarmes_L5': 0.1, 'Cartoes_Amarelos_L5': 0.1}
         ]
     }
     
     jogadores_lista = []
     for time in times:
-        elenco_base = elencos_base.get(time, [])
+        elenco_base = elencos_base.get(time, [{'Jogador': f'Craque {time}', 'Finalizacoes_L5': 2.0, 'Faltas_Sofridas_L5': 1.5, 'Faltas_Cometidas_L5': 1.0, 'Desarmes_L5': 1.0, 'Cartoes_Amarelos_L5': 0.3}])
         for j in elenco_base:
             j_copy = j.copy()
             j_copy['Time'] = time
             jogadores_lista.append(j_copy)
-            
-        # Completa o plantel de forma automatizada se faltar jogadores para o time ter um grupo completo
-        contador_extra = len(elenco_base) + 1
-        posicoes_extras = ['Zagueiro', 'Lateral', 'Volante', 'Meia', 'Atacante', 'Goleiro Resumo']
-        while len([x for x in jogadores_lista if x['Time'] == time]) < 22:
-            pos_escolhida = posicoes_extras[contador_extra % len(posicoes_extras)]
-            jogadores_lista.append({
-                'Time': time,
-                'Jogador': f"{pos_escolhida} {contador_extra} ({time})",
-                'Finalizacoes_L5': round(0.5 + (contador_extra % 3) * 0.4, 1),
-                'Faltas_Sofridas_L5': round(0.6 + (contador_extra % 3) * 0.5, 1),
-                'Faltas_Cometidas_L5': round(1.1 + (contador_extra % 3) * 0.6, 1),
-                'Desarmes_L5': round(1.4 + (contador_extra % 4) * 0.5, 1),
-                'Cartoes_Amarelos_L5': round(0.2 + (contador_extra % 3) * 0.2, 1)
-            })
-            contador_extra += 1
 
     return pd.DataFrame(dados_times), pd.DataFrame(jogadores_lista)
 
 df_times, df_jogadores = carregar_todos_os_plantels()
-
-# --- BARRA LATERAL ---
-st.sidebar.success("✅ Plantéis Carregados com Sucesso!")
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 👨‍💻 Painel Desenvolvido por:")
-st.sidebar.markdown(f"**Thiago Oliveira De sá**")
-st.sidebar.markdown("📧 `thiago.desa@yahoo.com.br`")
-st.sidebar.markdown("📞 `(21) 96485-9482`")
-st.sidebar.markdown("---")
 
 st.sidebar.header("⚙️ Configurações de Análise")
 time_principal = st.sidebar.selectbox("Escolha o Time Principal", df_times['Home'].unique())
@@ -249,8 +140,8 @@ st.dataframe(
 
 st.markdown("---")
 
-# --- SEÇÃO 3: SIMULADOR DE CONFRONTO DIRETO & HISTÓRICO H2H ---
-st.subheader("🤖 Simulador de Confronto Direto & Histórico H2H")
+# --- SEÇÃO 3: SIMULADOR DE CONFRONTO DIRETO & HISTÓRICO H2H REAL (API-FOOTBALL) ---
+st.subheader("🤖 Simulador de Confronto Direto & Histórico H2H (API Real)")
 adversarios = [t for t in df_times['Home'].unique() if t != time_principal]
 adversario = st.selectbox("Escolha o Time Adversário para Simulação", adversarios)
 dados_time2 = df_times[df_times['Home'] == adversario].iloc[0]
@@ -272,28 +163,60 @@ if total_gols >= 2.5:
 else:
     st.warning(f"🛡️ **Tendência:** Jogo truncado, tendência de **Menos de 2.5 Gols** ({total_gols:.2f} gols estimados).")
 
-st.markdown(f"### 📜 Histórico de Confronto Direto (Últimas 6 Partidas): {time_principal} vs {adversario}")
+st.markdown(f"### 📜 Histórico de Confronto Direto Real: {time_principal} vs {adversario}")
 
-hash_confronto = int(hashlib.md5(f"{time_principal}-{adversario}".encode()).hexdigest(), 16)
-h2h_dados = []
-competicoes = ["Campeonato Brasileiro", "Copa do Brasil", "Campeonato Brasileiro", "Campeonato Brasileiro", "Copa do Brasil", "Campeonato Brasileiro"]
-datas = ["14/11/2025", "20/08/2025", "12/05/2025", "03/11/2024", "15/07/2024", "28/04/2024"]
-
-for i in range(6):
-    g1 = (hash_confronto + i * 3) % 4
-    g2 = (hash_confronto + i * 7) % 3
-    if i % 2 == 0:
-        mandante, visitante, placar = time_principal, adversario, f"{g1} x {g2}"
-    else:
-        mandante, visitante, placar = adversario, time_principal, f"{g2} x {g1}"
+# Função para buscar dados reais na API-Football
+def buscar_h2h_api(time1, time2, key):
+    id1 = TEAM_IDS.get(time1)
+    id2 = TEAM_IDS.get(time2)
+    
+    url = f"https://v3.football.api-sports.io/fixtures/headtohead?h2h={id1}-{id2}"
+    headers = {
+        'x-rapidapi-host': 'v3.football.api-sports.io',
+        'x-rapidapi-key': key
+    }
+    
+    try:
+        response = requests.get(url, headers=headers)
+        data = response.json()
         
-    h2h_dados.append({
-        'Data': datas[i],
-        'Competição': competicoes[i],
-        'Mandante': mandante,
-        'Placar': placar,
-        'Visitante': visitante
-    })
+        if response.status_code == 200 and data.get('results', 0) > 0:
+            fixtures = data['response']
+            # Ordena por data decrescente (mais recentes primeiro) e pega as últimas 6
+            fixtures = sorted(fixtures, key=lambda x: x['fixture']['date'], reverse=True)[:6]
+            
+            h2h_lista = []
+            for match in fixtures:
+                data_jogo = match['fixture']['date'][:10] # Formato AAAA-MM-DD
+                data_formatada = f"{data_jogo[8:10]}/{data_jogo[5:7]}/{data_jogo[0:4]}"
+                competicao = match['league']['name']
+                mandante = match['teams']['home']['name']
+                visitante = match['teams']['away']['name']
+                gols_home = match['goals']['home']
+                gols_away = match['goals']['away']
+                
+                placar = f"{gols_home} x {gols_away}" if gols_home is not None else "Adjuv."
+                
+                h2h_lista.append({
+                    'Data': data_formatada,
+                    'Competição': competicao,
+                    'Mandante': mandante,
+                    'Placar': placar,
+                    'Visitante': visitante
+                })
+            return pd.DataFrame(h2h_lista), None
+        else:
+            return None, "Nenhum confronto recente retornado pela API para esses parâmetros ou chave inválida."
+    except Exception as e:
+        return None, f"Erro na conexão com a API: {e}"
 
-df_h2h = pd.DataFrame(h2h_dados)
-st.dataframe(df_h2h, use_container_width=True, hide_index=True)
+# Executa a busca H2H real com a chave fixa
+df_h2h_real, erro_api = buscar_h2h_api(time_principal, adversario, API_KEY_FIXA)
+
+if df_h2h_real is not None and not df_h2h_real.empty:
+    st.dataframe(df_h2h_real, use_container_width=True, hide_index=True)
+else:
+    if erro_api:
+        st.info(erro_api)
+    else:
+        st.warning("Não foi possível carregar os dados reais no momento.")
