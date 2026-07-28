@@ -49,10 +49,8 @@ st.sidebar.markdown("📞 `(21) 96485-9482`")
 st.sidebar.markdown("---")
 
 # --- CONFIGURAÇÕES DO TELEGRAM ---
-TELEGRAM_BOT_TOKEN = st.sidebar.text_input("Here is the token for bot Alertas de gols HT @Alertas_gols_HT_bot:
-
-8281259090:AAEggXJKpCMxRbhhrcCZymcmNUKWNoOPFfY", value="", type="password")
-TELEGRAM_CHAT_ID = st.sidebar.text_input("-1004464226419", value="")
+TELEGRAM_BOT_TOKEN = st.sidebar.text_input("Token do Bot Telegram", value="", type="password")
+TELEGRAM_CHAT_ID = st.sidebar.text_input("Chat ID do Telegram", value="")
 
 def enviar_mensagem_telegram(mensagem):
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
