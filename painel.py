@@ -7,7 +7,6 @@ st.set_page_config(page_title="Painel Pro - Plantéis Completos Série A", layou
 # --- AJUSTES CSS PARA VERSÃO DESKTOP E MOBILE ---
 st.markdown("""
     <style>
-    /* Estilização geral para visual moderno */
     .stApp {
         background-color: #121212;
         color: #E0E0E0;
@@ -16,25 +15,15 @@ st.markdown("""
         color: #FFFFFF !important;
     }
     
-    /* Responsividade dedicada para Celulares / Smartphones */
     @media only screen and (max-width: 768px) {
-        /* Reduz tamanho dos títulos principais em telas menores */
-        h1 {
-            font-size: 22px !important;
-        }
-        h2 {
-            font-size: 18px !important;
-        }
-        h3 {
-            font-size: 16px !important;
-        }
-        /* Ajuste de espaçamentos para evitar overflow no mobile */
+        h1 { font-size: 22px !important; }
+        h2 { font-size: 18px !important; }
+        h3 { font-size: 16px !important; }
         .block-container {
             padding-left: 10px !important;
             padding-right: 10px !important;
             padding-top: 20px !important;
         }
-        /* Faz as métricas empilharem perfeitamente no celular */
         div[data-testid="stMetric"] {
             background-color: #1E1E1E;
             padding: 10px;
@@ -46,10 +35,9 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("⚽ Painel Analisador Esportivo Pro - Elencos Completos & H2H Real")
-st.write("Plantel integral de todos os 20 clubes da Série A, estatísticas detalhadas e confronto direto via API-Football.")
+st.title("⚽ Painel Analisador Esportivo Pro - Elencos Completos via API")
+st.write("Plantel integral extraído diretamente da API-Football, estatísticas detalhadas e confronto direto.")
 
-# --- CONFIGURAÇÃO DA API ---
 API_KEY_FIXA = "E89cc081ecbaaf1a7074e878c1cae0ff"
 
 st.sidebar.success("✅ Painel Carregado com Sucesso!")
@@ -60,7 +48,6 @@ st.sidebar.markdown("📧 `thiago.desa@yahoo.com.br`")
 st.sidebar.markdown("📞 `(21) 96485-9482`")
 st.sidebar.markdown("---")
 
-# Dicionário para mapear os nomes dos times do Brasileirão para os IDs oficiais da API-Football
 TEAM_IDS = {
     'Flamengo': 127,
     'Palmeiras': 121,
@@ -85,9 +72,8 @@ TEAM_IDS = {
 }
 
 @st.cache_data
-def carregar_todos_os_plantels():
+def carregar_dados_gerais_times():
     times = list(TEAM_IDS.keys())
-    
     dados_times = {
         'Home': times,
         'gols_feitos_media': [2.2, 1.8, 2.0, 1.4, 1.6, 1.7, 1.5, 1.6, 1.4, 1.3, 1.2, 1.3, 1.5, 1.4, 1.3, 1.0, 1.1, 1.0, 0.9, 1.1],
@@ -99,41 +85,9 @@ def carregar_todos_os_plantels():
         'faltas_sofridas_media': [14.0, 14.5, 13.8, 13.0, 13.5, 14.1, 14.0, 13.5, 13.2, 12.8, 13.1, 13.4, 14.2, 13.8, 13.0, 12.0, 12.5, 11.8, 11.5, 12.2],
         'defesas_goleiro_media': [3.1, 2.8, 3.0, 3.5, 3.2, 3.0, 3.3, 3.4, 3.6, 3.7, 4.2, 3.8, 3.2, 3.5, 3.9, 4.5, 4.3, 4.8, 4.9, 4.7]
     }
-    
-    elencos_base = {
-        'Flamengo': [
-            {'Jogador': 'Pedro', 'Gols_L5': 0.8, 'Finalizacoes_L5': 3.2, 'Faltas_Sofridas_L5': 1.8, 'Faltas_Cometidas_L5': 0.8, 'Desarmes_L5': 0.4, 'Cartoes_Amarelos_L5': 0.2},
-            {'Jogador': 'Gabigol', 'Gols_L5': 0.5, 'Finalizacoes_L5': 2.8, 'Faltas_Sofridas_L5': 1.6, 'Faltas_Cometidas_L5': 1.2, 'Desarmes_L5': 0.5, 'Cartoes_Amarelos_L5': 0.4},
-            {'Jogador': 'Bruno Henrique', 'Gols_L5': 0.4, 'Finalizacoes_L5': 2.3, 'Faltas_Sofridas_L5': 1.9, 'Faltas_Cometidas_L5': 1.0, 'Desarmes_L5': 0.8, 'Cartoes_Amarelos_L5': 0.3},
-            {'Jogador': 'Giorgian de Arrascaeta', 'Gols_L5': 0.3, 'Finalizacoes_L5': 2.1, 'Faltas_Sofridas_L5': 2.9, 'Faltas_Cometidas_L5': 1.1, 'Desarmes_L5': 1.3, 'Cartoes_Amarelos_L5': 0.4},
-            {'Jogador': 'Nicolas De La Cruz', 'Gols_L5': 0.2, 'Finalizacoes_L5': 1.7, 'Faltas_Sofridas_L5': 2.5, 'Faltas_Cometidas_L5': 2.2, 'Desarmes_L5': 2.8, 'Cartoes_Amarelos_L5': 0.6},
-            {'Jogador': 'Gerson', 'Gols_L5': 0.1, 'Finalizacoes_L5': 1.0, 'Faltas_Sofridas_L5': 2.2, 'Faltas_Cometidas_L5': 2.0, 'Desarmes_L5': 2.6, 'Cartoes_Amarelos_L5': 0.5},
-            {'Jogador': 'Erick Pulgar', 'Gols_L5': 0.0, 'Finalizacoes_L5': 0.6, 'Faltas_Sofridas_L5': 1.0, 'Faltas_Cometidas_L5': 2.4, 'Desarmes_L5': 3.1, 'Cartoes_Amarelos_L5': 0.7},
-            {'Jogador': 'Ayrton Lucas', 'Gols_L5': 0.1, 'Finalizacoes_L5': 0.9, 'Faltas_Sofridas_L5': 1.2, 'Faltas_Cometidas_L5': 1.5, 'Desarmes_L5': 2.4, 'Cartoes_Amarelos_L5': 0.5},
-            {'Jogador': 'Léo Pereira', 'Gols_L5': 0.1, 'Finalizacoes_L5': 0.8, 'Faltas_Sofridas_L5': 0.6, 'Faltas_Cometidas_L5': 1.8, 'Desarmes_L5': 2.5, 'Cartoes_Amarelos_L5': 0.6},
-            {'Jogador': 'Agustín Rossi', 'Gols_L5': 0.0, 'Finalizacoes_L5': 0.0, 'Faltas_Sofridas_L5': 0.2, 'Faltas_Cometidas_L5': 0.0, 'Desarmes_L5': 0.2, 'Cartoes_Amarelos_L5': 0.1}
-        ],
-        'São Paulo': [
-            {'Jogador': 'Jonathan Calleri', 'Gols_L5': 0.6, 'Finalizacoes_L5': 3.0, 'Faltas_Sofridas_L5': 3.2, 'Faltas_Cometidas_L5': 1.8, 'Desarmes_L5': 0.7, 'Cartoes_Amarelos_L5': 0.5},
-            {'Jogador': 'Luciano', 'Gols_L5': 0.5, 'Finalizacoes_L5': 2.6, 'Faltas_Sofridas_L5': 2.4, 'Faltas_Cometidas_L5': 1.5, 'Desarmes_L5': 0.9, 'Cartoes_Amarelos_L5': 0.6},
-            {'Jogador': 'Lucas Moura', 'Gols_L5': 0.4, 'Finalizacoes_L5': 2.5, 'Faltas_Sofridas_L5': 2.9, 'Faltas_Cometidas_L5': 1.1, 'Desarmes_L5': 1.2, 'Cartoes_Amarelos_L5': 0.3},
-            {'Jogador': 'Pablo Maia', 'Gols_L5': 0.1, 'Finalizacoes_L5': 0.6, 'Faltas_Sofridas_L5': 1.1, 'Faltas_Cometidas_L5': 2.4, 'Desarmes_L5': 3.5, 'Cartoes_Amarelos_L5': 0.7},
-            {'Jogador': 'Robert Arboleda', 'Gols_L5': 0.1, 'Finalizacoes_L5': 0.8, 'Faltas_Sofridas_L5': 0.4, 'Faltas_Cometidas_L5': 2.0, 'Desarmes_L5': 2.9, 'Cartoes_Amarelos_L5': 0.6},
-            {'Jogador': 'Rafael', 'Gols_L5': 0.0, 'Finalizacoes_L5': 0.0, 'Faltas_Sofridas_L5': 0.2, 'Faltas_Cometidas_L5': 0.0, 'Desarmes_L5': 0.1, 'Cartoes_Amarelos_L5': 0.1}
-        ]
-    }
-    
-    jogadores_lista = []
-    for time in times:
-        elenco_base = elencos_base.get(time, [{'Jogador': f'Craque {time}', 'Gols_L5': 0.2, 'Finalizacoes_L5': 2.0, 'Faltas_Sofridas_L5': 1.5, 'Faltas_Cometidas_L5': 1.0, 'Desarmes_L5': 1.0, 'Cartoes_Amarelos_L5': 0.3}])
-        for j in elenco_base:
-            j_copy = j.copy()
-            j_copy['Time'] = time
-            jogadores_lista.append(j_copy)
+    return pd.DataFrame(dados_times)
 
-    return pd.DataFrame(dados_times), pd.DataFrame(jogadores_lista)
-
-df_times, df_jogadores = carregar_todos_os_plantels()
+df_times = carregar_dados_gerais_times()
 
 st.sidebar.header("⚙️ Configurações de Análise")
 time_principal = st.sidebar.selectbox("Escolha o Time Principal", df_times['Home'].unique())
@@ -153,18 +107,59 @@ with c4:
 
 st.markdown("---")
 
-# --- SEÇÃO 2: SCOUT DO PLANTEL (COM GOLS INCLUÍDOS) ---
-st.subheader(f"👤 Plantel Completo (Média das Últimas 5 Partidas): {time_principal}")
-df_elenco = df_jogadores[df_jogadores['Time'] == time_principal]
-st.dataframe(
-    df_elenco[['Jogador', 'Gols_L5', 'Finalizacoes_L5', 'Faltas_Sofridas_L5', 'Faltas_Cometidas_L5', 'Desarmes_L5', 'Cartoes_Amarelos_L5']],
-    use_container_width=True,
-    hide_index=True
-)
+# --- SEÇÃO 2: BUSCA DO PLANTEL COMPLETO DIRETAMENTE NA API-FOOTBALL ---
+st.subheader(f"👤 Plantel Oficial Completo (Via API): {time_principal}")
+
+@st.cache_data
+def buscar_elenco_api(nome_time, key):
+    team_id = TEAM_IDS.get(nome_time)
+    url = f"https://v3.football.api-sports.io/players/squads?team={team_id}"
+    headers = {
+        'x-rapidapi-host': 'v3.football.api-sports.io',
+        'x-rapidapi-key': key
+    }
+    
+    try:
+        response = requests.get(url, headers=headers)
+        data = response.json()
+        
+        if response.status_code == 200 and data.get('response'):
+            squad_data = data['response'][0]['players']
+            jogadores_lista = []
+            
+            for player in squad_data:
+                jogadores_lista.append({
+                    'Jogador': player.get('name'),
+                    'Posição': player.get('position'),
+                    'Idade': player.get('age'),
+                    'Gols_L5': 0.3, # Média estimada para simulação de scouts
+                    'Finalizacoes_L5': 1.8,
+                    'Faltas_Sofridas_L5': 1.2,
+                    'Faltas_Cometidas_L5': 1.0,
+                    'Desarmes_L5': 1.5,
+                    'Cartoes_Amarelos_L5': 0.3
+                })
+            return pd.DataFrame(jogadores_lista)
+        else:
+            return None
+    except Exception:
+        return None
+
+df_elenco_api = buscar_elenco_api(time_principal, API_KEY_FIXA)
+
+if df_elenco_api is not None and not df_elenco_api.empty:
+    st.dataframe(df_elenco_api, use_container_width=True, hide_index=True)
+else:
+    st.warning("⚠️ Não foi possível carregar o plantel completo da API neste momento (verifique a cota ou conexão). Exibindo dados de segurança.")
+    # Fallback caso a API caia
+    df_elenco_api = pd.DataFrame([
+        {'Jogador': 'Atleta Padrão 1', 'Posição': 'Forward', 'Idade': 26, 'Gols_L5': 0.5, 'Finalizacoes_L5': 2.5, 'Faltas_Sofridas_L5': 1.5, 'Faltas_Cometidas_L5': 1.0, 'Desarmes_L5': 1.0, 'Cartoes_Amarelos_L5': 0.3}
+    ])
+    st.dataframe(df_elenco_api, use_container_width=True, hide_index=True)
 
 st.markdown("---")
 
-# --- SEÇÃO 3: SIMULADOR DE CONFRONTO DIRETO & HISTÓRICO H2H REAL (API-FOOTBALL) ---
+# --- SEÇÃO 3: SIMULADOR DE CONFRONTO DIRETO & HISTÓRICO H2H REAL ---
 st.subheader("🤖 Simulador de Confronto Direto & Histórico H2H (API Real)")
 adversarios = [t for t in df_times['Home'].unique() if t != time_principal]
 adversario = st.selectbox("Escolha o Time Adversário para Simulação", adversarios)
@@ -189,7 +184,6 @@ else:
 
 st.markdown(f"### 📜 Histórico de Confronto Direto Real: {time_principal} vs {adversario}")
 
-# Função para buscar dados reais na API-Football
 def buscar_h2h_api(time1, time2, key):
     id1 = TEAM_IDS.get(time1)
     id2 = TEAM_IDS.get(time2)
@@ -229,9 +223,9 @@ def buscar_h2h_api(time1, time2, key):
                 })
             return pd.DataFrame(h2h_lista), None
         else:
-            return None, "Nenhum confronto recente retornado pela API para esses parâmetros ou chave inválida."
+            return None, "Nenhum confronto recente retornado pela API."
     except Exception as e:
-        return None, f"Erro na conexão com a API: {e}"
+        return None, f"Erro na conexão: {e}"
 
 df_h2h_real, erro_api = buscar_h2h_api(time_principal, adversario, API_KEY_FIXA)
 
