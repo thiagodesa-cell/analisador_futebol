@@ -4,6 +4,48 @@ import requests
 
 st.set_page_config(page_title="Painel Pro - Plantéis Completos Série A", layout="wide")
 
+# --- AJUSTES CSS PARA VERSÃO DESKTOP E MOBILE ---
+st.markdown("""
+    <style>
+    /* Estilização geral para visual moderno */
+    .stApp {
+        background-color: #121212;
+        color: #E0E0E0;
+    }
+    h1, h2, h3 {
+        color: #FFFFFF !important;
+    }
+    
+    /* Responsividade dedicada para Celulares / Smartphones */
+    @media only screen and (max-width: 768px) {
+        /* Reduz tamanho dos títulos principais em telas menores */
+        h1 {
+            font-size: 22px !important;
+        }
+        h2 {
+            font-size: 18px !important;
+        }
+        h3 {
+            font-size: 16px !important;
+        }
+        /* Ajuste de espaçamentos para evitar overflow no mobile */
+        .block-container {
+            padding-left: 10px !important;
+            padding-right: 10px !important;
+            padding-top: 20px !important;
+        }
+        /* Faz as métricas empilharem perfeitamente no celular */
+        div[data-testid="stMetric"] {
+            background-color: #1E1E1E;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            border: 1px solid #2A2A2A;
+        }
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 st.title("⚽ Painel Analisador Esportivo Pro - Elencos Completos & H2H Real")
 st.write("Plantel integral de todos os 20 clubes da Série A, estatísticas detalhadas e confronto direto via API-Football.")
 
@@ -60,30 +102,30 @@ def carregar_todos_os_plantels():
     
     elencos_base = {
         'Flamengo': [
-            {'Jogador': 'Pedro', 'Finalizacoes_L5': 3.2, 'Faltas_Sofridas_L5': 1.8, 'Faltas_Cometidas_L5': 0.8, 'Desarmes_L5': 0.4, 'Cartoes_Amarelos_L5': 0.2},
-            {'Jogador': 'Gabigol', 'Finalizacoes_L5': 2.8, 'Faltas_Sofridas_L5': 1.6, 'Faltas_Cometidas_L5': 1.2, 'Desarmes_L5': 0.5, 'Cartoes_Amarelos_L5': 0.4},
-            {'Jogador': 'Bruno Henrique', 'Finalizacoes_L5': 2.3, 'Faltas_Sofridas_L5': 1.9, 'Faltas_Cometidas_L5': 1.0, 'Desarmes_L5': 0.8, 'Cartoes_Amarelos_L5': 0.3},
-            {'Jogador': 'Giorgian de Arrascaeta', 'Finalizacoes_L5': 2.1, 'Faltas_Sofridas_L5': 2.9, 'Faltas_Cometidas_L5': 1.1, 'Desarmes_L5': 1.3, 'Cartoes_Amarelos_L5': 0.4},
-            {'Jogador': 'Nicolas De La Cruz', 'Finalizacoes_L5': 1.7, 'Faltas_Sofridas_L5': 2.5, 'Faltas_Cometidas_L5': 2.2, 'Desarmes_L5': 2.8, 'Cartoes_Amarelos_L5': 0.6},
-            {'Jogador': 'Gerson', 'Finalizacoes_L5': 1.0, 'Faltas_Sofridas_L5': 2.2, 'Faltas_Cometidas_L5': 2.0, 'Desarmes_L5': 2.6, 'Cartoes_Amarelos_L5': 0.5},
-            {'Jogador': 'Erick Pulgar', 'Finalizacoes_L5': 0.6, 'Faltas_Sofridas_L5': 1.0, 'Faltas_Cometidas_L5': 2.4, 'Desarmes_L5': 3.1, 'Cartoes_Amarelos_L5': 0.7},
-            {'Jogador': 'Ayrton Lucas', 'Finalizacoes_L5': 0.9, 'Faltas_Sofridas_L5': 1.2, 'Faltas_Cometidas_L5': 1.5, 'Desarmes_L5': 2.4, 'Cartoes_Amarelos_L5': 0.5},
-            {'Jogador': 'Léo Pereira', 'Finalizacoes_L5': 0.8, 'Faltas_Sofridas_L5': 0.6, 'Faltas_Cometidas_L5': 1.8, 'Desarmes_L5': 2.5, 'Cartoes_Amarelos_L5': 0.6},
-            {'Jogador': 'Agustín Rossi', 'Finalizacoes_L5': 0.0, 'Faltas_Sofridas_L5': 0.2, 'Faltas_Cometidas_L5': 0.0, 'Desarmes_L5': 0.2, 'Cartoes_Amarelos_L5': 0.1}
+            {'Jogador': 'Pedro', 'Gols_L5': 0.8, 'Finalizacoes_L5': 3.2, 'Faltas_Sofridas_L5': 1.8, 'Faltas_Cometidas_L5': 0.8, 'Desarmes_L5': 0.4, 'Cartoes_Amarelos_L5': 0.2},
+            {'Jogador': 'Gabigol', 'Gols_L5': 0.5, 'Finalizacoes_L5': 2.8, 'Faltas_Sofridas_L5': 1.6, 'Faltas_Cometidas_L5': 1.2, 'Desarmes_L5': 0.5, 'Cartoes_Amarelos_L5': 0.4},
+            {'Jogador': 'Bruno Henrique', 'Gols_L5': 0.4, 'Finalizacoes_L5': 2.3, 'Faltas_Sofridas_L5': 1.9, 'Faltas_Cometidas_L5': 1.0, 'Desarmes_L5': 0.8, 'Cartoes_Amarelos_L5': 0.3},
+            {'Jogador': 'Giorgian de Arrascaeta', 'Gols_L5': 0.3, 'Finalizacoes_L5': 2.1, 'Faltas_Sofridas_L5': 2.9, 'Faltas_Cometidas_L5': 1.1, 'Desarmes_L5': 1.3, 'Cartoes_Amarelos_L5': 0.4},
+            {'Jogador': 'Nicolas De La Cruz', 'Gols_L5': 0.2, 'Finalizacoes_L5': 1.7, 'Faltas_Sofridas_L5': 2.5, 'Faltas_Cometidas_L5': 2.2, 'Desarmes_L5': 2.8, 'Cartoes_Amarelos_L5': 0.6},
+            {'Jogador': 'Gerson', 'Gols_L5': 0.1, 'Finalizacoes_L5': 1.0, 'Faltas_Sofridas_L5': 2.2, 'Faltas_Cometidas_L5': 2.0, 'Desarmes_L5': 2.6, 'Cartoes_Amarelos_L5': 0.5},
+            {'Jogador': 'Erick Pulgar', 'Gols_L5': 0.0, 'Finalizacoes_L5': 0.6, 'Faltas_Sofridas_L5': 1.0, 'Faltas_Cometidas_L5': 2.4, 'Desarmes_L5': 3.1, 'Cartoes_Amarelos_L5': 0.7},
+            {'Jogador': 'Ayrton Lucas', 'Gols_L5': 0.1, 'Finalizacoes_L5': 0.9, 'Faltas_Sofridas_L5': 1.2, 'Faltas_Cometidas_L5': 1.5, 'Desarmes_L5': 2.4, 'Cartoes_Amarelos_L5': 0.5},
+            {'Jogador': 'Léo Pereira', 'Gols_L5': 0.1, 'Finalizacoes_L5': 0.8, 'Faltas_Sofridas_L5': 0.6, 'Faltas_Cometidas_L5': 1.8, 'Desarmes_L5': 2.5, 'Cartoes_Amarelos_L5': 0.6},
+            {'Jogador': 'Agustín Rossi', 'Gols_L5': 0.0, 'Finalizacoes_L5': 0.0, 'Faltas_Sofridas_L5': 0.2, 'Faltas_Cometidas_L5': 0.0, 'Desarmes_L5': 0.2, 'Cartoes_Amarelos_L5': 0.1}
         ],
         'São Paulo': [
-            {'Jogador': 'Jonathan Calleri', 'Finalizacoes_L5': 3.0, 'Faltas_Sofridas_L5': 3.2, 'Faltas_Cometidas_L5': 1.8, 'Desarmes_L5': 0.7, 'Cartoes_Amarelos_L5': 0.5},
-            {'Jogador': 'Luciano', 'Finalizacoes_L5': 2.6, 'Faltas_Sofridas_L5': 2.4, 'Faltas_Cometidas_L5': 1.5, 'Desarmes_L5': 0.9, 'Cartoes_Amarelos_L5': 0.6},
-            {'Jogador': 'Lucas Moura', 'Finalizacoes_L5': 2.5, 'Faltas_Sofridas_L5': 2.9, 'Faltas_Cometidas_L5': 1.1, 'Desarmes_L5': 1.2, 'Cartoes_Amarelos_L5': 0.3},
-            {'Jogador': 'Pablo Maia', 'Finalizacoes_L5': 0.6, 'Faltas_Sofridas_L5': 1.1, 'Faltas_Cometidas_L5': 2.4, 'Desarmes_L5': 3.5, 'Cartoes_Amarelos_L5': 0.7},
-            {'Jogador': 'Robert Arboleda', 'Finalizacoes_L5': 0.8, 'Faltas_Sofridas_L5': 0.4, 'Faltas_Cometidas_L5': 2.0, 'Desarmes_L5': 2.9, 'Cartoes_Amarelos_L5': 0.6},
-            {'Jogador': 'Rafael', 'Finalizacoes_L5': 0.0, 'Faltas_Sofridas_L5': 0.2, 'Faltas_Cometidas_L5': 0.0, 'Desarmes_L5': 0.1, 'Cartoes_Amarelos_L5': 0.1}
+            {'Jogador': 'Jonathan Calleri', 'Gols_L5': 0.6, 'Finalizacoes_L5': 3.0, 'Faltas_Sofridas_L5': 3.2, 'Faltas_Cometidas_L5': 1.8, 'Desarmes_L5': 0.7, 'Cartoes_Amarelos_L5': 0.5},
+            {'Jogador': 'Luciano', 'Gols_L5': 0.5, 'Finalizacoes_L5': 2.6, 'Faltas_Sofridas_L5': 2.4, 'Faltas_Cometidas_L5': 1.5, 'Desarmes_L5': 0.9, 'Cartoes_Amarelos_L5': 0.6},
+            {'Jogador': 'Lucas Moura', 'Gols_L5': 0.4, 'Finalizacoes_L5': 2.5, 'Faltas_Sofridas_L5': 2.9, 'Faltas_Cometidas_L5': 1.1, 'Desarmes_L5': 1.2, 'Cartoes_Amarelos_L5': 0.3},
+            {'Jogador': 'Pablo Maia', 'Gols_L5': 0.1, 'Finalizacoes_L5': 0.6, 'Faltas_Sofridas_L5': 1.1, 'Faltas_Cometidas_L5': 2.4, 'Desarmes_L5': 3.5, 'Cartoes_Amarelos_L5': 0.7},
+            {'Jogador': 'Robert Arboleda', 'Gols_L5': 0.1, 'Finalizacoes_L5': 0.8, 'Faltas_Sofridas_L5': 0.4, 'Faltas_Cometidas_L5': 2.0, 'Desarmes_L5': 2.9, 'Cartoes_Amarelos_L5': 0.6},
+            {'Jogador': 'Rafael', 'Gols_L5': 0.0, 'Finalizacoes_L5': 0.0, 'Faltas_Sofridas_L5': 0.2, 'Faltas_Cometidas_L5': 0.0, 'Desarmes_L5': 0.1, 'Cartoes_Amarelos_L5': 0.1}
         ]
     }
     
     jogadores_lista = []
     for time in times:
-        elenco_base = elencos_base.get(time, [{'Jogador': f'Craque {time}', 'Finalizacoes_L5': 2.0, 'Faltas_Sofridas_L5': 1.5, 'Faltas_Cometidas_L5': 1.0, 'Desarmes_L5': 1.0, 'Cartoes_Amarelos_L5': 0.3}])
+        elenco_base = elencos_base.get(time, [{'Jogador': f'Craque {time}', 'Gols_L5': 0.2, 'Finalizacoes_L5': 2.0, 'Faltas_Sofridas_L5': 1.5, 'Faltas_Cometidas_L5': 1.0, 'Desarmes_L5': 1.0, 'Cartoes_Amarelos_L5': 0.3}])
         for j in elenco_base:
             j_copy = j.copy()
             j_copy['Time'] = time
@@ -97,29 +139,11 @@ st.sidebar.header("⚙️ Configurações de Análise")
 time_principal = st.sidebar.selectbox("Escolha o Time Principal", df_times['Home'].unique())
 dados_time1 = df_times[df_times['Home'] == time_principal].iloc[0]
 
-mercado_visivel = st.sidebar.selectbox(
-    "Métrica Coletiva em Destaque", 
-    ["Gols", "Finalizações", "Desarmes", "Faltas Cometidas", "Faltas Sofridas", "Defesas de Goleiro", "Escanteios"]
-)
-
 # --- SEÇÃO 1: DESEMPENHO COLETIVO ---
 st.subheader(f"📊 Desempenho Coletivo: {time_principal}")
 c1, c2, c3, c4 = st.columns(4)
 with c1:
-    if mercado_visivel == "Gols":
-        st.metric("Média Gols Feitos", dados_time1['gols_feitos_media'])
-    elif mercado_visivel == "Finalizações":
-        st.metric("Média Finalizações", dados_time1['finalizacoes_media'])
-    elif mercado_visivel == "Desarmes":
-        st.metric("Média Desarmes", dados_time1['desarmes_media'])
-    elif mercado_visivel == "Faltas Cometidas":
-        st.metric("Média Faltas Cometidas", dados_time1['faltas_cometidas_media'])
-    elif mercado_visivel == "Faltas Sofridas":
-        st.metric("Média Faltas Sofridas", dados_time1['faltas_sofridas_media'])
-    elif mercado_visivel == "Defesas de Goleiro":
-        st.metric("Média Defesas do Goleiro", dados_time1['defesas_goleiro_media'])
-    else:
-        st.metric("Média Escanteios", dados_time1['escanteios_media'])
+    st.metric("Média Gols Feitos", dados_time1['gols_feitos_media'])
 with c2:
     st.metric("Média Gols Sofridos", dados_time1['gols_sofridos_media'])
 with c3:
@@ -129,11 +153,11 @@ with c4:
 
 st.markdown("---")
 
-# --- SEÇÃO 2: SCOUT DO PLANTEL ---
+# --- SEÇÃO 2: SCOUT DO PLANTEL (COM GOLS INCLUÍDOS) ---
 st.subheader(f"👤 Plantel Completo (Média das Últimas 5 Partidas): {time_principal}")
 df_elenco = df_jogadores[df_jogadores['Time'] == time_principal]
 st.dataframe(
-    df_elenco[['Jogador', 'Finalizacoes_L5', 'Faltas_Sofridas_L5', 'Faltas_Cometidas_L5', 'Desarmes_L5', 'Cartoes_Amarelos_L5']],
+    df_elenco[['Jogador', 'Gols_L5', 'Finalizacoes_L5', 'Faltas_Sofridas_L5', 'Faltas_Cometidas_L5', 'Desarmes_L5', 'Cartoes_Amarelos_L5']],
     use_container_width=True,
     hide_index=True
 )
@@ -182,12 +206,11 @@ def buscar_h2h_api(time1, time2, key):
         
         if response.status_code == 200 and data.get('results', 0) > 0:
             fixtures = data['response']
-            # Ordena por data decrescente (mais recentes primeiro) e pega as últimas 6
             fixtures = sorted(fixtures, key=lambda x: x['fixture']['date'], reverse=True)[:6]
             
             h2h_lista = []
             for match in fixtures:
-                data_jogo = match['fixture']['date'][:10] # Formato AAAA-MM-DD
+                data_jogo = match['fixture']['date'][:10]
                 data_formatada = f"{data_jogo[8:10]}/{data_jogo[5:7]}/{data_jogo[0:4]}"
                 competicao = match['league']['name']
                 mandante = match['teams']['home']['name']
@@ -210,7 +233,6 @@ def buscar_h2h_api(time1, time2, key):
     except Exception as e:
         return None, f"Erro na conexão com a API: {e}"
 
-# Executa a busca H2H real com a chave fixa
 df_h2h_real, erro_api = buscar_h2h_api(time_principal, adversario, API_KEY_FIXA)
 
 if df_h2h_real is not None and not df_h2h_real.empty:
