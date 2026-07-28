@@ -85,17 +85,33 @@ def buscar_estatisticas_time(team_id, season, key, data_cache):
 
 @st.cache_data
 def buscar_scout_elenco_u5(team_id, season, key, data_cache):
-    """Busca as estatísticas individuais dos jogadores baseadas estritamente nas últimas 5 partidas."""
+    """Busca as estatísticas individuais dos jogadores e a forma do time nas últimas 5 partidas."""
     url_fixtures = f"https://v3.football.api-sports.io/fixtures?league={LEAGUE_ID}&season={season}&team={team_id}&last=5"
     headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
     
+    forma_lista = []
     try:
         res_fix = requests.get(url_fixtures, headers=headers)
         data_fix = res_fix.json()
         if data_fix.get('results', 0) == 0:
-            return pd.DataFrame()
+            return pd.DataFrame(), "Sem dados"
         
         fixtures = data_fix['response']
+        
+        # Mapeia a forma recente (Vitória, Empate, Derrota) de trás para frente (cronológica)
+        for f_item in reversed(fixtures):
+            home_id = f_item['teams']['home']['id']
+            home_winner = f_item['teams']['home']['winner']
+            away_winner = f_item['teams']['away']['winner']
+            
+            if home_winner is None and away_winner is None:
+                forma_lista.append("🟡")
+            elif (home_id == team_id and home_winner is True) or (home_id != team_id and away_winner is True):
+                forma_lista.append("🟢")
+            else:
+                forma_lista.append("🔴")
+                
+        forma_string = " ".join(forma_lista)
         player_data = {}
         
         # Varre cada uma das últimas 5 partidas coletando o scout minucioso
@@ -112,7 +128,6 @@ def buscar_scout_elenco_u5(team_id, season, key, data_cache):
                             p_name = p_item['player']['name']
                             stats = p_item['statistics'][0] if p_item['statistics'] else {}
                             
-                            # Verifica se o jogador realmente entrou em campo nessa partida
                             minutes = stats.get('games', {}).get('minutes')
                             try:
                                 mins = int(minutes) if minutes else 0
@@ -153,7 +168,6 @@ def buscar_scout_elenco_u5(team_id, season, key, data_cache):
                                 player_data[p_name]['Amarelos'] += yellow
                                 player_data[p_name]['Vermelhos'] += red
         
-        # Consolida os dados e calcula as médias por partida jogada
         rows = []
         for name, data in player_data.items():
             j = data['Jogos (U5)']
@@ -174,13 +188,12 @@ def buscar_scout_elenco_u5(team_id, season, key, data_cache):
         
         df = pd.DataFrame(rows)
         if not df.empty:
-            # Ordena por quem fez mais gols e depois por quem finalizou mais
             df = df.sort_values(by=['Gols (Total U5)', 'Finalizações Média'], ascending=[False, False])
-        return df
+        return df, forma_string
         
     except Exception as e:
         st.error(f"Erro API (Scout U5): {e}")
-        return pd.DataFrame()
+        return pd.DataFrame(), "Erro"
 
 @st.cache_data
 def buscar_h2h_api(id1, id2, key, data_cache):
@@ -232,11 +245,15 @@ with st.spinner("Extraindo e calculando dados reais da API..."):
     
     stats_t1 = buscar_estatisticas_time(id_time1, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     stats_t2 = buscar_estatisticas_time(id_time2, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-    df_elenco_u5 = buscar_scout_elenco_u5(id_time1, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    df_elenco_u5, string_forma_t1 = buscar_scout_elenco_u5(id_time1, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
 
 # --- SEÇÃO 1: DESEMPENHO COLETIVO ---
 st.subheader(f"📊 Desempenho Coletivo (Temporada {SEASON}): {time_principal}")
+
+# Exibe a sequência de forma recente bem destacada
+st.markdown(f"**Forma Recente (Últimas 5 partidas, da mais antiga para a mais recente):** H2H 👉 {string_forma_t1}")
+
 c1, c2, c3, c4 = st.columns(4)
 with c1:
     st.metric("Jogos Disputados", stats_t1['jogos'])
@@ -250,11 +267,27 @@ with c4:
 st.markdown("---")
 
 
-# --- SEÇÃO 2: SCOUT DO PLANTEL (MÉDIA ÚLTIMOS 5 JOGOS REAL) ---
+# --- SEÇÃO 2: SCOUT DO PLANTEL (DESIGN PREMIUM PRO - ÚLTIMOS 5 JOGOS) ---
 st.subheader(f"👤 Scout do Plantel (Média das Últimas 5 Partidas): {time_principal}")
-st.caption("Estatísticas individuais calculadas com base nas últimas 5 partidas oficiais do clube. Colunas de Gols e Cartões refletem a soma total acumulada nessas 5 partidas.")
+st.caption("Visualização Analítica Avançada. As médias de finalizações, chutes ao alvo e desarmes possuem barras dinâmicas para rápida comparação visual.")
+
 if df_elenco_u5 is not None and not df_elenco_u5.empty:
-    st.dataframe(df_elenco_u5, use_container_width=True, hide_index=True)
+    # Configuração Avançada de Colunas do Streamlit (Barras de progresso e Formatação de Ícones)
+    st.dataframe(
+        df_elenco_u5, 
+        use_container_width=True, 
+        hide_index=True,
+        column_config={
+            "Gols (Total U5)": st.column_config.NumberColumn("Gols (Total U5)", format="%d ⚽"),
+            "Finalizações Média": st.column_config.ProgressColumn("Finalizações Média", min_value=0, max_value=5, format="%.2f"),
+            "Chutes no Alvo Média": st.column_config.ProgressColumn("Chutes no Alvo Média", min_value=0, max_value=3, format="%.2f"),
+            "Desarmes Média": st.column_config.ProgressColumn("Desarmes Média", min_value=0, max_value=6, format="%.2f"),
+            "Amarelos (Total U5)": st.column_config.NumberColumn("Amarelos (Total U5)", format="%d 🟨"),
+            "Vermelhos (Total U5)": st.column_config.NumberColumn("Vermelhos (Total U5)", format="%d 🟥"),
+            "Faltas Cometidas Média": st.column_config.NumberColumn("Faltas Cometidas Média", format="%.2f ⏱️"),
+            "Faltas Sofridas Média": st.column_config.NumberColumn("Faltas Sofridas Média", format="%.2f 🚀")
+        }
+    )
 else:
     st.warning("Não há dados de scout disponíveis para as últimas 5 partidas deste clube no momento.")
 
