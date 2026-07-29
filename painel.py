@@ -3,9 +3,9 @@ import pandas as pd
 import requests
 from datetime import datetime, timedelta
 
-st.set_page_config(page_title="Painel Pro - Plantéis, Classificação, Escanteios & Cartões", layout="wide")
+st.set_page_config(page_title="Painel Pro - Plantéis, Classificação, Escanteios, Cartões & Árbitros", layout="wide")
 
-st.title("⚽ Painel Analisador Esportivo Pro - Elencos, Escanteios & Cartões")
+st.title("⚽ Painel Analisador Esportivo Pro - Elencos, Escanteios, Cartões & Árbitros")
 st.write("Dados extraídos da API-Football (Atualização Diária Automática às 08:00h).")
 
 # --- CONFIGURAÇÃO DA API E TELEGRAM ---
@@ -105,13 +105,63 @@ def buscar_tabela_classificacao(season, key, data_cache):
     return pd.DataFrame()
 
 @st.cache_data
+def buscar_dados_arbitros(season, key, data_cache):
+    """Busca todas as partidas da competição e mapeia os árbitros atuantes."""
+    url = f"https://v3.football.api-sports.io/fixtures?league={LEAGUE_ID}&season={season}"
+    headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
+    try:
+        res = requests.get(url, headers=headers)
+        data = res.json()
+        if data.get('results', 0) > 0:
+            fixtures = data['response']
+            ref_data = {}
+            for f in fixtures:
+                ref = f['fixture']['referee']
+                if not ref:
+                    ref = "Não Divulgado / Desconhecido"
+                
+                status = f['fixture']['status']['short']
+                if status in ['FT', 'AET', 'PEN', '1H', '2H', 'HT', 'ET']: 
+                    home_team = f['teams']['home']['name']
+                    away_team = f['teams']['away']['name']
+                    match_date = f['fixture']['date'][:10]
+                    
+                    if ref not in ref_data:
+                        ref_data[ref] = {
+                            'Jogos': 0,
+                            'Partidas_Detalhes': []
+                        }
+                    ref_data[ref]['Jogos'] += 1
+                    ref_data[ref]['Partidas_Detalhes'].append({
+                        'Data': f"{match_date[8:10]}/{match_date[5:7]}/{match_date[0:4]}",
+                        'Confronto': f"{home_team} x {away_team}"
+                    })
+            
+            rows = []
+            for ref, info in ref_data.items():
+                rows.append({
+                    'Árbitro': ref,
+                    'Jogos Apitados': info['Jogos'],
+                    'Últimos Confrontos': ", ".join([p['Confronto'] for p in info['Partidas_Detalhes'][:3]]) + ("..." if len(info['Partidas_Detalhes']) > 3 else "")
+                })
+            
+            df_ref = pd.DataFrame(rows)
+            if not df_ref.empty:
+                df_ref = df_ref.sort_values(by='Jogos Apitados', ascending=False)
+            return df_ref
+    except Exception as e:
+        st.error(f"Erro ao buscar árbitros: {e}")
+    return pd.DataFrame()
+
+@st.cache_data
 def buscar_medias_escanteios(team_id, season, key, data_cache):
-    """Calcula as médias reais de escanteios (pró e contra) baseadas nas últimas partidas da equipe."""
+    """Calcula médias e retorna o histórico detalhado das últimas partidas para análise de escanteios."""
     url_fixtures = f"https://v3.football.api-sports.io/fixtures?league={LEAGUE_ID}&season={season}&team={team_id}&last=10"
     headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
     
     cantos_pro_casa, cantos_contra_casa = [], []
     cantos_pro_fora, cantos_contra_fora = [], []
+    detalhes_partidas_cantos = []
     
     try:
         res = requests.get(url_fixtures, headers=headers)
@@ -121,6 +171,10 @@ def buscar_medias_escanteios(team_id, season, key, data_cache):
             for f in fixtures:
                 f_id = f['fixture']['id']
                 home_id = f['teams']['home']['id']
+                away_id = f['teams']['away']['id']
+                home_name = f['teams']['home']['name']
+                away_name = f['teams']['away']['name']
+                match_date = f['fixture']['date'][:10]
                 is_home = (home_id == team_id)
                 
                 url_stats = f"https://v3.football.api-sports.io/fixtures/statistics?fixture={f_id}"
@@ -153,6 +207,15 @@ def buscar_medias_escanteios(team_id, season, key, data_cache):
                         cantos_pro_fora.append(team_corners)
                         cantos_contra_fora.append(opponent_corners)
                         
+                    detalhes_partidas_cantos.append({
+                        'Data': f"{match_date[8:10]}/{match_date[5:7]}/{match_date[0:4]}",
+                        'Adversário': away_name if is_home else home_name,
+                        'Mando': 'Casa' if is_home else 'Fora',
+                        'Cantos Pró': team_corners,
+                        'Cantos Contra': opponent_corners,
+                        'Total na Partida': team_corners + opponent_corners
+                    })
+                        
         cf_home = sum(cantos_pro_casa) / len(cantos_pro_casa) if cantos_pro_casa else 0.0
         ca_home = sum(cantos_contra_casa) / len(cantos_contra_casa) if cantos_contra_casa else 0.0
         cf_away = sum(cantos_pro_fora) / len(cantos_pro_fora) if cantos_pro_fora else 0.0
@@ -163,13 +226,22 @@ def buscar_medias_escanteios(team_id, season, key, data_cache):
         cf_geral = sum(todos_pro) / len(todos_pro) if todos_pro else 0.0
         ca_geral = sum(todos_contra) / len(todos_contra) if todos_contra else 0.0
         
-        return {
+        df_historico_cantos = pd.DataFrame(detalhes_partidas_cantos)
+        
+        resumo_medias = {
             'corners_for_geral': cf_geral, 'corners_ag_geral': ca_geral,
             'corners_for_home': cf_home, 'corners_ag_home': ca_home,
-            'corners_for_away': cf_away, 'corners_ag_away': ca_away
+            'corners_for_away': cf_away, 'corners_ag_away': ca_away,
+            'df_historico': df_historico_cantos
         }
+        return resumo_medias
     except Exception as e:
-        return {'corners_for_geral': 0.0, 'corners_ag_geral': 0.0, 'corners_for_home': 0.0, 'corners_ag_home': 0.0, 'corners_for_away': 0.0, 'corners_ag_away': 0.0}
+        return {
+            'corners_for_geral': 0.0, 'corners_ag_geral': 0.0, 
+            'corners_for_home': 0.0, 'corners_ag_home': 0.0, 
+            'corners_for_away': 0.0, 'corners_ag_away': 0.0,
+            'df_historico': pd.DataFrame()
+        }
 
 @st.cache_data
 def buscar_estatisticas_time(team_id, season, key, data_cache):
@@ -182,26 +254,20 @@ def buscar_estatisticas_time(team_id, season, key, data_cache):
         if data.get('results', 0) > 0:
             stats = data['response']
             
-            # Médias gerais de gols
             goals_for = stats.get('goals', {}).get('for', {}).get('average', {}).get('total', '0')
             goals_against = stats.get('goals', {}).get('against', {}).get('average', {}).get('total', '0')
             
-            # Médias Casa (Home)
             gf_home = stats.get('goals', {}).get('for', {}).get('average', {}).get('home', '0')
             ga_home = stats.get('goals', {}).get('against', {}).get('average', {}).get('home', '0')
             
-            # Médias Fora (Away)
             gf_away = stats.get('goals', {}).get('for', {}).get('average', {}).get('away', '0')
             ga_away = stats.get('goals', {}).get('against', {}).get('average', {}).get('away', '0')
             
             jogos = stats.get('fixtures', {}).get('played', {}).get('total', 0)
             clean_sheets = stats.get('clean_sheet', {}).get('total', 0)
             
-            # Minutagem de Gols
             gf_min = stats.get('goals', {}).get('for', {}).get('minute', {})
             ga_min = stats.get('goals', {}).get('against', {}).get('minute', {})
-            
-            # Minutagem de Cartões Amarelos (Estrutura direta na API)
             yellow_cards_data = stats.get('cards', {}).get('yellow', {})
             
             intervals = ["0-15", "16-30", "31-45", "46-60", "61-75", "76-90", "91-105", "106-120"]
@@ -254,7 +320,6 @@ def buscar_estatisticas_time(team_id, season, key, data_cache):
 
 @st.cache_data
 def buscar_scout_elenco_u5(team_id, season, key, data_cache):
-    """Busca as estatísticas individuais dos jogadores e a forma do time nas últimas 5 partidas."""
     url_fixtures = f"https://v3.football.api-sports.io/fixtures?league={LEAGUE_ID}&season={season}&team={team_id}&last=5"
     headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
     
@@ -405,16 +470,17 @@ times_disponiveis.sort()
 
 time_principal = st.sidebar.selectbox("Escolha o Time Principal para Análise", times_disponiveis)
 
-with st.spinner("Extraindo e calculando dados reais da API (Gols, Escanteios e Cartões)..."):
+with st.spinner("Extraindo e calculando dados reais da API (Gols, Escanteios, Cartões e Árbitros)..."):
     id_time1 = TEAM_IDS[time_principal]
     stats_t1 = buscar_estatisticas_time(id_time1, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     corners_t1 = buscar_medias_escanteios(id_time1, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     df_elenco_u5, string_forma_t1 = buscar_scout_elenco_u5(id_time1, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     df_tabela = buscar_tabela_classificacao(SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    df_arbitros = buscar_dados_arbitros(SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
 
 # --- ABAS DE NAVEGAÇÃO SUPERIOR PARA ORGANIZAR O PAINEL ---
-aba_painel, aba_tabela = st.tabs(["📊 Painel de Análise & Elenco", "🏆 Tabela do Brasileirão"])
+aba_painel, aba_arbitros, aba_tabela = st.tabs(["📊 Painel de Análise & Elenco", "⚖️ Árbitros", "🏆 Tabela do Brasileirão"])
 
 with aba_tabela:
     st.subheader(f"🏆 Classificação Atual - Brasileirão Série A ({SEASON})")
@@ -431,6 +497,21 @@ with aba_tabela:
         )
     else:
         st.warning("Tabela de classificação indisponível no momento.")
+
+with aba_arbitros:
+    st.subheader("⚖️ Perfil dos Árbitros do Campeonato")
+    st.caption("Relação de árbitros atuantes na competição e o histórico de partidas apitadas.")
+    if not df_arbitros.empty:
+        st.dataframe(
+            df_arbitros,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Jogos Apitados": st.column_config.NumberColumn("Jogos Apitados", format="%d 🟨")
+            }
+        )
+    else:
+        st.warning("Dados de arbitragem indisponíveis no momento.")
 
 with aba_painel:
     # --- SEÇÃO 1: DESEMPENHO COLETIVO & CASA/FORA ---
@@ -461,9 +542,9 @@ with aba_painel:
 
     st.markdown("---")
 
-    # --- SEÇÃO 1.1: MÉDIAS DE ESCANTEIOS (CORNERS) ---
-    st.subheader(f"🚩 Estatísticas de Escanteios (Corners): {time_principal}")
-    st.caption("Médias de escanteios a favor e contra calculadas por partida na competição.")
+    # --- SEÇÃO 1.1: MÉDIAS E HISTÓRICO DE ESCANTEIOS ---
+    st.subheader(f"🚩 Estatísticas e Histórico de Escanteios (Corners): {time_principal}")
+    st.caption("Médias gerais e detalhamento por partida recente.")
 
     co1, co2, co3, co4, co5, co6 = st.columns(6)
     with co1:
@@ -478,6 +559,22 @@ with aba_painel:
         st.metric("Pró (Fora)", f"{corners_t1['corners_for_away']:.2f}")
     with co6:
         st.metric("Contra (Fora)", f"{corners_t1['corners_ag_away']:.2f}")
+
+    st.markdown("##### 📈 Comportamento de Escanteios nas Últimas Partidas")
+    df_hist_cantos = corners_t1.get('df_historico', pd.DataFrame())
+    if not df_hist_cantos.empty:
+        st.dataframe(
+            df_hist_cantos,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Cantos Pró": st.column_config.NumberColumn("Cantos Pró", format="%d 🚩"),
+                "Cantos Contra": st.column_config.NumberColumn("Cantos Contra", format="%d 🛡️"),
+                "Total na Partida": st.column_config.NumberColumn("Total na Partida", format="%d ⚽")
+            }
+        )
+    else:
+        st.info("Histórico de partidas de escanteios indisponível.")
 
     st.markdown("---")
 
@@ -560,12 +657,10 @@ with aba_painel:
             stats_t2 = buscar_estatisticas_time(id_time2, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
             corners_t2 = buscar_medias_escanteios(id_time2, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
-            # Cálculo refinado considerando mandante (Time Principal) e visitante (Adversário)
             gols_t1 = (stats_t1['gf_home'] + stats_t2['ga_away']) / 2
             gols_t2 = (stats_t2['gf_away'] + stats_t1['ga_home']) / 2
             total_gols = gols_t1 + gols_t2
             
-            # Estimativa de Escanteios do Jogo
             escanteios_jogo = (corners_t1['corners_for_home'] + corners_t2['corners_for_away']) / 2
 
             sc1, sc2, sc3, sc4 = st.columns(4)
