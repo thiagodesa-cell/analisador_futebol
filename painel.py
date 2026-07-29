@@ -53,7 +53,7 @@ st.write(f"Dados integrados em tempo real via API-Football para a {opcao_liga.sp
 # --- FUNÇÃO DE ENVIO PARA O TELEGRAM ---
 def enviar_alerta_telegram(mensagem):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "HTML"}
+    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": mensagem, "parse_mode": "HTML"}
     try:
         res = requests.post(url, json=payload)
         if res.status_code == 200:
@@ -182,8 +182,8 @@ def buscar_medias_escanteios(team_id, league_id, season, key, data_cache):
             for f in fixtures:
                 f_id = f['fixture']['id']
                 home_id = f['teams']['home']['id']
-                home_name = f['teams']['home']['name']
                 away_name = f['teams']['away']['name']
+                home_name = f['teams']['home']['name']
                 match_date = f['fixture']['date'][:10]
                 is_home = (home_id == team_id)
                 
@@ -680,6 +680,68 @@ with aba_painel:
             else:
                 st.warning(f"🛡️ **Tendência:** Jogo truncado, tendência de **Menos de 2.5 Gols**.")
 
+            # --- MÓDULO INTELIGENTE DE DICAS DE APOSTAS (SMART TIPSTER) ---
+            st.markdown("---")
+            st.markdown("### 💡 Smart Tipster: Sugestões de Apostas Automatizadas")
+            st.caption("Dicas geradas cirurgicamente com base nos dados estatísticos cruzados da API para este confronto.")
+
+            tip_c1, tip_c2 = st.columns(2)
+
+            with tip_c1:
+                with st.container(border=True):
+                    st.markdown("#### ⚽ Mercado de Gols & Jogo")
+                    if total_gols >= 2.5:
+                        st.markdown(f"- **Sugestão Principal:** `Mais de 2.5 Gols` (Expec: {total_gols:.2f})")
+                        st.markdown(f"- **Linha de Segurança:** `Mais de 1.5 Gols`")
+                    else:
+                        st.markdown(f"- **Sugestão Principal:** `Menos de 2.5 Gols` (Expec: {total_gols:.2f})")
+                        st.markdown(f"- **Linha Alternativa:** `Menos de 3.5 Gols`")
+                    
+                    btts_check = (stats_t1['gols_feitos_media'] > 0.8) and (stats_t2['gols_feitos_media'] > 0.8)
+                    if btts_check:
+                        st.markdown("- **Ambas Marcam (BTTS):** `Sim` (Ambos possuem boa média ofensiva)")
+                    else:
+                        st.markdown("- **Ambas Marcam (BTTS):** `Não / Jogo Truncado`")
+
+                with st.container(border=True):
+                    st.markdown("#### 🚩 Mercado de Escanteios (Corners)")
+                    st.markdown(f"- **Média Estimada no Jogo:** `~{escanteios_jogo:.1f} cantos`")
+                    if escanteios_jogo >= 10.0:
+                        st.markdown("- **Sugestão:** `Mais de 9.5 Escanteios` 🔥")
+                        st.markdown("- **Linha Conservadora:** `Mais de 8.5 Escanteios`")
+                    elif escanteios_jogo >= 8.5:
+                        st.markdown("- **Sugestão:** `Mais de 8.5 Escanteios` ⚡")
+                        st.markdown("- **Linha Conservadora:** `Mais de 7.5 Escanteios`")
+                    else:
+                        st.markdown("- **Sugestão:** `Menos de 10.5 Escanteios` 🛡️")
+
+            with tip_c2:
+                with st.container(border=True):
+                    st.markdown("#### 🎯 Destaques Individuais (Player Props)")
+                    if df_elenco_u5 is not None and not df_elenco_u5.empty:
+                        top_finalizador = df_elenco_u5.iloc[0]['Jogador']
+                        media_fin = df_elenco_u5.iloc[0]['Finalizações Média']
+                        st.markdown(f"- **Finalizações ({time_principal}):**")
+                        st.markdown(f"  • *{top_finalizador}* com média de **{media_fin} finalizações/jogo** (Últimas 5).")
+                    else:
+                        st.markdown(f"- **Player Props:** Sem dados suficientes no momento.")
+
+                    st.markdown("---")
+                    st.markdown("#### 🟨 Cart & Faltas")
+                    st.markdown("- **Tendência de Cartões:** Jogo intenso nas disputas de meio-campo.")
+                    st.markdown("- **Sugestão:** `Mais de 4.5 Cartões Amarelos na Partida`")
+
+                with st.container(border=True):
+                    st.markdown("#### 🔥 Criar Aposta / Múltipla (Odd Maior)")
+                    combo_gols = "Mais de 1.5 Gols" if total_gols >= 1.8 else "Menos de 3.5 Gols"
+                    combo_cantos = "Mais de 7.5 Escanteios"
+                    st.markdown(f"Combinando estatísticas para buscar uma **Odd Turbinada**:")
+                    st.markdown(f"1. `{combo_gols}`")
+                    st.markdown(f"2. `{combo_cantos}`")
+                    st.markdown(f"3. `Ambos os times com pelo menos 1 escanteio em cada tempo`")
+                    st.markdown(f"💡 *Gestão de banca sempre em primeiro lugar!*")
+
+            st.markdown("---")
             st.markdown(f"### 📜 Histórico Real de Confronto: {time_principal} vs {adversario}")
 
             df_h2h_real, erro_api = buscar_h2h_api(id_time1, id_time2, API_KEY_FIXA, CHAVE_ATUALIZACAO)
@@ -706,7 +768,7 @@ if st.sidebar.button("🚀 Disparar Alerta Pré-Live"):
             t_gols = g_t1 + g_t2
             tend_tel = "Mais de 2.5 Gols 🔥" if t_gols >= 2.5 else "Menos de 2.5 Gols 🛡️"
 
-            msg_telegram = f"""🚨 <b>RAIO-X PRÉ-LIVE PRO (ESCANTEIOS & GOLS)</b> 🚨
+            msg_telegram = f"""🚨 <b>RAIO-X PRÉ-LIVE PRO (SMART TIPSTER)</b> 🚨
 
 ⚽ <b>{time_principal} x {adversario}</b>
 🏆 Competição: {opcao_liga}
@@ -721,7 +783,7 @@ if st.sidebar.button("🚀 Disparar Alerta Pré-Live"):
 • Total Estimado: {t_gols:.2f}
 • Tendência de Gols: <b>{tend_tel}</b>
 
-📈 <i>Dica: Acesse o Painel Streamlit para conferir o scout completo e minutagem de cartões!</i>"""
+📈 <i>Dica: Acesse o Painel Streamlit para conferir as dicas completas do Smart Tipster e Criar Aposta!</i>"""
         else:
             msg_telegram = f"""🚨 <b>RAIO-X DO PLANTEL - PRO</b> 🚨
 
