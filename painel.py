@@ -3,7 +3,7 @@ import pandas as pd
 import requests
 from datetime import datetime, timedelta
 
-st.set_page_config(page_title="Painel Pro - Futebol & Trading", layout="wide")
+st.set_page_config(page_title="Painel Pro - Global Trading & Futebol", layout="wide")
 
 # --- CONFIGURAÇÃO DA API E TELEGRAM ---
 API_KEY_FIXA = "E89cc081ecbaaf1a7074e878c1cae0ff"
@@ -24,10 +24,17 @@ def obter_chave_atualizacao():
 CHAVE_ATUALIZACAO = obter_chave_atualizacao()
 
 # --- BOTÃO DE SELEÇÃO DE LIGA NA BARRA LATERAL ---
-st.sidebar.header("🏆 Seleção da Competição")
+st.sidebar.header("🏆 Seleção da Competição Global")
 opcao_liga = st.sidebar.radio(
     "Escolha qual campeonato deseja analisar:",
-    ["Brasileirão Série A", "Brasileirão Série B", "Campeonato Argentino"]
+    [
+        "Brasileirão Série A", 
+        "Brasileirão Série B", 
+        "Campeonato Argentino",
+        "Premier League (Inglaterra)",
+        "La Liga (Espanha)",
+        "Bundesliga (Alemanha)"
+    ]
 )
 
 # Define o ID dinamicamente com base na liga escolhida
@@ -35,8 +42,14 @@ if opcao_liga == "Brasileirão Série A":
     LEAGUE_ID = 71
 elif opcao_liga == "Brasileirão Série B":
     LEAGUE_ID = 72
+elif opcao_liga == "Campeonato Argentino":
+    LEAGUE_ID = 128
+elif opcao_liga == "Premier League (Inglaterra)":
+    LEAGUE_ID = 39
+elif opcao_liga == "La Liga (Espanha)":
+    LEAGUE_ID = 140
 else:
-    LEAGUE_ID = 128  # Liga Profesional Argentina
+    LEAGUE_ID = 78  # Bundesliga (Alemanha)
 
 st.sidebar.success(f"✅ Ativo: {opcao_liga} (Temporada {SEASON})!")
 st.sidebar.info(f"🔄 Última atualização base: {CHAVE_ATUALIZACAO} às 08:00")
