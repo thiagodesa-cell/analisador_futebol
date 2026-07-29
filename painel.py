@@ -305,44 +305,46 @@ else:
 st.markdown("---")
 
 
-# --- SEÇÃO 3: SIMULADOR DE CONFRONTO DIRETO & HISTÓRICO (OPCIONAL/MODULAR) ---
+# --- SEÇÃO 3: SIMULADOR DE CONFRONTO DIRETO & HISTÓRICO (TOTALMENTE OPCIONAL) ---
 st.subheader("🤖 Simulador de Confronto Direto & H2H")
-st.markdown(f"Selecione um adversário abaixo para simular o confronto direto contra o **{time_principal}**:")
+usar_comparacao = st.checkbox("Ativar comparação e simulação contra um adversário")
 
-adversario = st.selectbox("Escolha o Time Adversário para Análise de Confronto", [t for t in times_disponiveis if t != time_principal])
+adversario = None
+if usar_comparacao:
+    adversario = st.selectbox("Escolha o Time Adversário para Análise de Confronto", [t for t in times_disponiveis if t != time_principal])
 
-if adversario:
-    id_time2 = TEAM_IDS[adversario]
-    stats_t2 = buscar_estatisticas_time(id_time2, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    if adversario:
+        id_time2 = TEAM_IDS[adversario]
+        stats_t2 = buscar_estatisticas_time(id_time2, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
-    gols_t1 = (stats_t1['gols_feitos_media'] + stats_t2['gols_sofridos_media']) / 2
-    gols_t2 = (stats_t2['gols_feitos_media'] + stats_t1['gols_sofridos_media']) / 2
-    total_gols = gols_t1 + gols_t2
+        gols_t1 = (stats_t1['gols_feitos_media'] + stats_t2['gols_sofridos_media']) / 2
+        gols_t2 = (stats_t2['gols_feitos_media'] + stats_t1['gols_sofridos_media']) / 2
+        total_gols = gols_t1 + gols_t2
 
-    sc1, sc2, sc3 = st.columns(3)
-    with sc1:
-        st.metric(f"Expec. Gols ({time_principal})", f"{gols_t1:.2f}")
-    with sc2:
-        st.metric(f"Expec. Gols ({adversario})", f"{gols_t2:.2f}")
-    with sc3:
-        st.metric("Total de Gols Esperados", f"{total_gols:.2f}")
+        sc1, sc2, sc3 = st.columns(3)
+        with sc1:
+            st.metric(f"Expec. Gols ({time_principal})", f"{gols_t1:.2f}")
+        with sc2:
+            st.metric(f"Expec. Gols ({adversario})", f"{gols_t2:.2f}")
+        with sc3:
+            st.metric("Total de Gols Esperados", f"{total_gols:.2f}")
 
-    tendencia_texto = ""
-    if total_gols >= 2.5:
-        tendencia_texto = "Mais de 2.5 Gols 🔥"
-        st.success(f"🔥 **Tendência:** Alta probabilidade de **Mais de 2.5 Gols**.")
-    else:
-        tendencia_texto = "Menos de 2.5 Gols 🛡️"
-        st.warning(f"🛡️ **Tendência:** Jogo truncado, tendência de **Menos de 2.5 Gols**.")
+        tendencia_texto = ""
+        if total_gols >= 2.5:
+            tendencia_texto = "Mais de 2.5 Gols 🔥"
+            st.success(f"🔥 **Tendência:** Alta probabilidade de **Mais de 2.5 Gols**.")
+        else:
+            tendencia_texto = "Menos de 2.5 Gols 🛡️"
+            st.warning(f"🛡️ **Tendência:** Jogo truncado, tendência de **Menos de 2.5 Gols**.")
 
-    st.markdown(f"### 📜 Histórico Real de Confronto: {time_principal} vs {adversario}")
+        st.markdown(f"### 📜 Histórico Real de Confronto: {time_principal} vs {adversario}")
 
-    df_h2h_real, erro_api = buscar_h2h_api(id_time1, id_time2, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+        df_h2h_real, erro_api = buscar_h2h_api(id_time1, id_time2, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
-    if df_h2h_real is not None and not df_h2h_real.empty:
-        st.dataframe(df_h2h_real, use_container_width=True, hide_index=True)
-    else:
-        st.info(erro_api if erro_api else "Sem dados recentes de H2H na API.")
+        if df_h2h_real is not None and not df_h2h_real.empty:
+            st.dataframe(df_h2h_real, use_container_width=True, hide_index=True)
+        else:
+            st.info(erro_api if erro_api else "Sem dados recentes de H2H na API.")
 
 
 # --- DISPARADOR DO TELEGRAM VIA SIDEBAR ---
@@ -352,15 +354,15 @@ if st.sidebar.button("🚀 Disparar Alerta Pré-Live"):
     if TELEGRAM_CHAT_ID == "DIGITE_SEU_ID_AQUI":
         st.sidebar.warning("⚠️ Insira o seu ID do Telegram no código antes de enviar!")
     else:
-        # Pega as stats do adversário selecionado na seção de confronto se houver
-        id_time2_tel = TEAM_IDS.get(adversario, list(TEAM_IDS.values())[0])
-        stats_t2_tel = buscar_estatisticas_time(id_time2_tel, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-        g_t1 = (stats_t1['gols_feitos_media'] + stats_t2_tel['gols_sofridos_media']) / 2
-        g_t2 = (stats_t2_tel['gols_feitos_media'] + stats_t1['gols_sofridos_media']) / 2
-        t_gols = g_t1 + g_t2
-        tend_tel = "Mais de 2.5 Gols 🔥" if t_gols >= 2.5 else "Menos de 2.5 Gols 🛡️"
+        if usar_comparacao and adversario:
+            id_time2_tel = TEAM_IDS.get(adversario, list(TEAM_IDS.values())[0])
+            stats_t2_tel = buscar_estatisticas_time(id_time2_tel, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+            g_t1 = (stats_t1['gols_feitos_media'] + stats_t2_tel['gols_sofridos_media']) / 2
+            g_t2 = (stats_t2_tel['gols_feitos_media'] + stats_t1['gols_sofridos_media']) / 2
+            t_gols = g_t1 + g_t2
+            tend_tel = "Mais de 2.5 Gols 🔥" if t_gols >= 2.5 else "Menos de 2.5 Gols 🛡️"
 
-        msg_telegram = f"""🚨 <b>RAIO-X PRÉ-LIVE PRO</b> 🚨
+            msg_telegram = f"""🚨 <b>RAIO-X PRÉ-LIVE PRO</b> 🚨
 
 ⚽ <b>{time_principal} x {adversario}</b>
 🏆 Competição: Brasileirão Série A
@@ -373,11 +375,24 @@ if st.sidebar.button("🚀 Disparar Alerta Pré-Live"):
 
 🤖 <b>PROJEÇÃO E TENDÊNCIAS:</b>
 • Expec. Gols {time_principal}: {g_t1:.2f}
-• Expec. Gols {adversario}: {g_t2}:.2f if False else f"{g_t2:.2f}"
+• Expec. Gols {adversario}: {g_t2:.2f}
 • Total Estimado: {t_gols:.2f}
 • Tendência de Gols: <b>{tend_tel}</b>
 
 📈 <i>Dica: Acesse o Painel Streamlit para conferir o scout completo!</i>"""
+        else:
+            msg_telegram = f"""🚨 <b>RAIO-X DO PLANTEL - PRO</b> 🚨
+
+⚽ <b>Time: {time_principal}</b>
+🏆 Competição: Brasileirão Série A
+
+📊 <b>MÉDIAS NA TEMPORADA:</b>
+• Jogos Disputados: {stats_t1['jogos']}
+• Média Gols Feitos: {stats_t1['gols_feitos_media']:.2f}/j
+• Média Gols Sofridos: {stats_t1['gols_sofridos_media']:.2f}/j
+• Jogos Sem Sofrer Gol: {stats_t1['clean_sheets']}
+
+📈 <i>Dica: Acesse o Painel Streamlit para conferir o scout completo do elenco!</i>"""
         
         with st.sidebar.spinner("Enviando..."):
             sucesso = enviar_alerta_telegram(msg_telegram)
