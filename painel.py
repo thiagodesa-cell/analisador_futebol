@@ -385,13 +385,18 @@ with aba_painel:
 
     df_min = stats_t1.get('df_minutagem', pd.DataFrame())
     if not df_min.empty:
+        max_f = int(df_min['Gols Feitos'].max()) if not pd.isna(df_min['Gols Feitos'].max()) else 5
+        max_s = int(df_min['Gols Sofridos'].max()) if not pd.isna(df_min['Gols Sofridos'].max()) else 5
+        limite_f = max(max_f, 5)
+        limite_s = max(max_s, 5)
+
         st.dataframe(
             df_min,
             use_container_width=True,
             hide_index=True,
             column_config={
-                "Gols Feitos": st.column_config.ProgressColumn("Gols Feitos", min_value=0, max_value=max(df_min['Gols Feitos'].max(), 5), format="%d ⚽"),
-                "Gols Sofridos": st.column_config.ProgressColumn("Gols Sofridos", min_value=0, max_value=max(df_min['Gols Sofridos'].max(), 5), format="%d 🛡️")
+                "Gols Feitos": st.column_config.ProgressColumn("Gols Feitos", min_value=0, max_value=limite_f, format="%d ⚽"),
+                "Gols Sofridos": st.column_config.ProgressColumn("Gols Sofridos", min_value=0, max_value=limite_s, format="%d 🛡️")
             }
         )
     else:
@@ -494,7 +499,7 @@ if st.sidebar.button("🚀 Disparar Alerta Pré-Live"):
 • Total Estimado: {t_gols:.2f}
 • Tendência de Gols: <b>{tend_tel}</b>
 
-📈 <i>Dica: Acesse o Painel Streamlit para conferir o scout completo e minutagem!</i>"""
+📈 <i>Dica: Acesse o Painel Streamlit para conferir o scout completo!</i>"""
         else:
             msg_telegram = f"""🚨 <b>RAIO-X DO PLANTEL - PRO</b> 🚨
 
