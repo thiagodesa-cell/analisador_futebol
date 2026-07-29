@@ -3,14 +3,10 @@ import pandas as pd
 import requests
 from datetime import datetime, timedelta
 
-st.set_page_config(page_title="Painel Pro - Plantéis, Classificação, Escanteios, Cartões & Árbitros", layout="wide")
-
-st.title("⚽ Painel Analisador Esportivo Pro - Elencos, Escanteios, Cartões & Árbitros")
-st.write("Dados extraídos da API-Football (Atualização Diária Automática às 08:00h).")
+st.set_page_config(page_title="Painel Pro - Brasileirão Série A & B", layout="wide")
 
 # --- CONFIGURAÇÃO DA API E TELEGRAM ---
 API_KEY_FIXA = "E89cc081ecbaaf1a7074e878c1cae0ff"
-LEAGUE_ID = 71  # ID Oficial do Brasileirão Série A na API
 SEASON = datetime.now().year 
 
 TELEGRAM_TOKEN = "8281259090:AAEggXJKpCMxRbhhrcCZymcmNUKWNoOPFfY"
@@ -27,8 +23,21 @@ def obter_chave_atualizacao():
 
 CHAVE_ATUALIZACAO = obter_chave_atualizacao()
 
-st.sidebar.success(f"✅ Painel Integrado via API (Temporada {SEASON})!")
-st.sidebar.info(f"🔄 Última atualização dos dados base: {CHAVE_ATUALIZACAO} às 08:00")
+# --- BOTÃO DE SELEÇÃO DE DIVISÃO NA BARRA LATERAL (VIRAR A PÁGINA) ---
+st.sidebar.header("🏆 Seleção da Competição")
+opcao_liga = st.sidebar.radio(
+    "Escolha qual divisão deseja analisar:",
+    ["Brasileirão Série A", "Brasileirão Série B"]
+)
+
+# Define o ID dinamicamente com base no botão clicado
+if opcao_liga == "Brasileirão Série A":
+    LEAGUE_ID = 71
+else:
+    LEAGUE_ID = 72
+
+st.sidebar.success(f"✅ Ativo: {opcao_liga} (Temporada {SEASON})!")
+st.sidebar.info(f"🔄 Última atualização base: {CHAVE_ATUALIZACAO} às 08:00")
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 👨‍💻 Painel Desenvolvido por:")
 st.sidebar.markdown("**Thiago Oliveira De sá**")
@@ -36,11 +45,15 @@ st.sidebar.markdown("📧 `thiago.desa@yahoo.com.br`")
 st.sidebar.markdown("📞 `(21) 96485-9482`")
 st.sidebar.markdown("---")
 
+# Título dinâmico na tela principal
+st.title(f"⚽ Painel Analisador Esportivo Pro - {opcao_liga}")
+st.write(f"Dados integrados em tempo real via API-Football para a {opcao_liga.split()[-1]}.")
+
 
 # --- FUNÇÃO DE ENVIO PARA O TELEGRAM ---
 def enviar_alerta_telegram(mensagem):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": mensagem, "parse_mode": "HTML"}
+    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "HTML"}
     try:
         res = requests.post(url, json=payload)
         if res.status_code == 200:
@@ -53,11 +66,11 @@ def enviar_alerta_telegram(mensagem):
         return False
 
 
-# --- FUNÇÕES DE BUSCA NA API (COM CACHE DIÁRIO) ---
+# --- FUNÇÕES DE BUSCA NA API (COM CACHE DIÁRIO ISOLADO POR LIGA) ---
 
 @st.cache_data
-def buscar_times_serie_a(season, key, data_cache):
-    url = f"https://v3.football.api-sports.io/teams?league={LEAGUE_ID}&season={season}"
+def buscar_times_por_liga(league_id, season, key, data_cache):
+    url = f"https://v3.football.api-sports.io/teams?league={league_id}&season={season}"
     headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
     
     try:
@@ -77,8 +90,8 @@ def buscar_times_serie_a(season, key, data_cache):
     return {}
 
 @st.cache_data
-def buscar_tabela_classificacao(season, key, data_cache):
-    url = f"https://v3.football.api-sports.io/standings?league={LEAGUE_ID}&season={season}"
+def buscar_tabela_classificacao(league_id, season, key, data_cache):
+    url = f"https://v3.football.api-sports.io/standings?league={league_id}&season={season}"
     headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
     try:
         res = requests.get(url, headers=headers)
@@ -105,9 +118,8 @@ def buscar_tabela_classificacao(season, key, data_cache):
     return pd.DataFrame()
 
 @st.cache_data
-def buscar_dados_arbitros(season, key, data_cache):
-    """Busca todas as partidas da competição e mapeia os árbitros atuantes."""
-    url = f"https://v3.football.api-sports.io/fixtures?league={LEAGUE_ID}&season={season}"
+def buscar_dados_arbitros(league_id, season, key, data_cache):
+    url = f"https://v3.football.api-sports.io/fixtures?league={league_id}&season={season}"
     headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
     try:
         res = requests.get(url, headers=headers)
@@ -154,9 +166,8 @@ def buscar_dados_arbitros(season, key, data_cache):
     return pd.DataFrame()
 
 @st.cache_data
-def buscar_medias_escanteios(team_id, season, key, data_cache):
-    """Calcula médias e retorna o histórico detalhado das últimas partidas para análise de escanteios."""
-    url_fixtures = f"https://v3.football.api-sports.io/fixtures?league={LEAGUE_ID}&season={season}&team={team_id}&last=10"
+def buscar_medias_escanteios(team_id, league_id, season, key, data_cache):
+    url_fixtures = f"https://v3.football.api-sports.io/fixtures?league={league_id}&season={season}&team={team_id}&last=10"
     headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
     
     cantos_pro_casa, cantos_contra_casa = [], []
@@ -171,7 +182,6 @@ def buscar_medias_escanteios(team_id, season, key, data_cache):
             for f in fixtures:
                 f_id = f['fixture']['id']
                 home_id = f['teams']['home']['id']
-                away_id = f['teams']['away']['id']
                 home_name = f['teams']['home']['name']
                 away_name = f['teams']['away']['name']
                 match_date = f['fixture']['date'][:10]
@@ -228,13 +238,12 @@ def buscar_medias_escanteios(team_id, season, key, data_cache):
         
         df_historico_cantos = pd.DataFrame(detalhes_partidas_cantos)
         
-        resumo_medias = {
+        return {
             'corners_for_geral': cf_geral, 'corners_ag_geral': ca_geral,
             'corners_for_home': cf_home, 'corners_ag_home': ca_home,
             'corners_for_away': cf_away, 'corners_ag_away': ca_away,
             'df_historico': df_historico_cantos
         }
-        return resumo_medias
     except Exception as e:
         return {
             'corners_for_geral': 0.0, 'corners_ag_geral': 0.0, 
@@ -244,8 +253,8 @@ def buscar_medias_escanteios(team_id, season, key, data_cache):
         }
 
 @st.cache_data
-def buscar_estatisticas_time(team_id, season, key, data_cache):
-    url = f"https://v3.football.api-sports.io/teams/statistics?league={LEAGUE_ID}&season={season}&team={team_id}"
+def buscar_estatisticas_time(team_id, league_id, season, key, data_cache):
+    url = f"https://v3.football.api-sports.io/teams/statistics?league={league_id}&season={season}&team={team_id}"
     headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
     
     try:
@@ -319,8 +328,8 @@ def buscar_estatisticas_time(team_id, season, key, data_cache):
     }
 
 @st.cache_data
-def buscar_scout_elenco_u5(team_id, season, key, data_cache):
-    url_fixtures = f"https://v3.football.api-sports.io/fixtures?league={LEAGUE_ID}&season={season}&team={team_id}&last=5"
+def buscar_scout_elenco_u5(team_id, league_id, season, key, data_cache):
+    url_fixtures = f"https://v3.football.api-sports.io/fixtures?league={league_id}&season={season}&team={team_id}&last=5"
     headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
     
     forma_lista = []
@@ -455,35 +464,33 @@ def buscar_h2h_api(id1, id2, key, data_cache):
         return None, f"Erro na conexão com a API: {e}"
 
 
-# --- CARREGAMENTO INICIAL DOS TIMES E TABELA ---
-TEAM_IDS = buscar_times_serie_a(SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+# --- CARREGAMENTO INICIAL DINÂMICO DOS TIMES E DADOS ---
+TEAM_IDS = buscar_times_por_liga(LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
 if not TEAM_IDS:
-    st.warning(f"⚠️ Não foi possível carregar os times da temporada {SEASON}.")
+    st.warning(f"⚠️ Não foi possível carregar os times da competição selecionada ({opcao_liga}).")
     st.stop()
 
-
-# --- INTERFACE E SELEÇÃO NA SIDEBAR ---
 st.sidebar.header("⚙️ Configurações de Análise")
 times_disponiveis = list(TEAM_IDS.keys())
 times_disponiveis.sort() 
 
-time_principal = st.sidebar.selectbox("Escolha o Time Principal para Análise", times_disponiveis)
+time_principal = st.sidebar.selectbox(f"Escolha o Time da {opcao_liga.split()[-1]}", times_disponiveis)
 
-with st.spinner("Extraindo e calculando dados reais da API (Gols, Escanteios, Cartões e Árbitros)..."):
+with st.spinner(f"Extraindo dados reais da {opcao_liga}..."):
     id_time1 = TEAM_IDS[time_principal]
-    stats_t1 = buscar_estatisticas_time(id_time1, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-    corners_t1 = buscar_medias_escanteios(id_time1, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-    df_elenco_u5, string_forma_t1 = buscar_scout_elenco_u5(id_time1, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-    df_tabela = buscar_tabela_classificacao(SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-    df_arbitros = buscar_dados_arbitros(SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    stats_t1 = buscar_estatisticas_time(id_time1, LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    corners_t1 = buscar_medias_escanteios(id_time1, LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    df_elenco_u5, string_forma_t1 = buscar_scout_elenco_u5(id_time1, LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    df_tabela = buscar_tabela_classificacao(LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    df_arbitros = buscar_dados_arbitros(LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
 
-# --- ABAS DE NAVEGAÇÃO SUPERIOR PARA ORGANIZAR O PAINEL ---
-aba_painel, aba_arbitros, aba_tabela = st.tabs(["📊 Painel de Análise & Elenco", "⚖️ Árbitros", "🏆 Tabela do Brasileirão"])
+# --- ABAS DE NAVEGAÇÃO SUPERIOR ---
+aba_painel, aba_arbitros, aba_tabela = st.tabs(["📊 Painel de Análise & Elenco", "⚖️ Árbitros", f"🏆 Tabela ({opcao_liga.split()[-1]})"])
 
 with aba_tabela:
-    st.subheader(f"🏆 Classificação Atual - Brasileirão Série A ({SEASON})")
+    st.subheader(f"🏆 Classificação Atual - {opcao_liga} ({SEASON})")
     if not df_tabela.empty:
         st.dataframe(
             df_tabela, 
@@ -499,8 +506,8 @@ with aba_tabela:
         st.warning("Tabela de classificação indisponível no momento.")
 
 with aba_arbitros:
-    st.subheader("⚖️ Perfil dos Árbitros do Campeonato")
-    st.caption("Relação de árbitros atuantes na competição e o histórico de partidas apitadas.")
+    st.subheader(f"⚖️ Perfil dos Árbitros - {opcao_liga}")
+    st.caption("Relação de árbitros atuantes na competição e histórico de partidas recentes apitadas.")
     if not df_arbitros.empty:
         st.dataframe(
             df_arbitros,
@@ -514,8 +521,8 @@ with aba_arbitros:
         st.warning("Dados de arbitragem indisponíveis no momento.")
 
 with aba_painel:
-    # --- SEÇÃO 1: DESEMPENHO COLETIVO & CASA/FORA ---
-    st.subheader(f"📊 Desempenho Coletivo (Temporada {SEASON}): {time_principal}")
+    # --- SEÇÃO 1: DESEMPENHO COLETIVO ---
+    st.subheader(f"📊 Desempenho Coletivo: {time_principal}")
     st.markdown(f"**Forma Recente (Últimas 5 partidas):** {string_forma_t1}")
 
     c1, c2, c3, c4 = st.columns(4)
@@ -528,7 +535,6 @@ with aba_painel:
     with c4:
         st.metric("Jogos Sem Sofrer Gol", stats_t1['clean_sheets'])
 
-    # Sub-métricas de Casa vs Fora
     st.markdown("##### 🏟️ Recorte de Mando de Campo (Gols)")
     cc1, cc2, cc3, cc4 = st.columns(4)
     with cc1:
@@ -544,8 +550,7 @@ with aba_painel:
 
     # --- SEÇÃO 1.1: MÉDIAS E HISTÓRICO DE ESCANTEIOS ---
     st.subheader(f"🚩 Estatísticas e Histórico de Escanteios (Corners): {time_principal}")
-    st.caption("Médias gerais e detalhamento por partida recente.")
-
+    
     co1, co2, co3, co4, co5, co6 = st.columns(6)
     with co1:
         st.metric("Cantos Pró (Geral)", f"{corners_t1['corners_for_geral']:.2f}")
@@ -560,7 +565,7 @@ with aba_painel:
     with co6:
         st.metric("Contra (Fora)", f"{corners_t1['corners_ag_away']:.2f}")
 
-    st.markdown("##### 📈 Comportamento de Escanteios nas Últimas Partidas")
+    st.markdown("##### 📈 Linhas Reais por Jogo (Últimas Partidas)")
     df_hist_cantos = corners_t1.get('df_historico', pd.DataFrame())
     if not df_hist_cantos.empty:
         st.dataframe(
@@ -583,7 +588,6 @@ with aba_painel:
 
     with col_min1:
         st.subheader("⏱️ Minutagem de Gols")
-        st.caption("Distribuição de quando o time marca e sofre gols.")
         df_min = stats_t1.get('df_minutagem', pd.DataFrame())
         if not df_min.empty:
             max_f = int(df_min['Gols Feitos'].max()) if not pd.isna(df_min['Gols Feitos'].max()) else 5
@@ -602,7 +606,6 @@ with aba_painel:
 
     with col_min2:
         st.subheader("🟨 Minutagem de Cartões")
-        st.caption("Distribuição de cartões amarelos recebidos por faixa.")
         df_car = stats_t1.get('df_cartoes', pd.DataFrame())
         if not df_car.empty:
             max_c = int(df_car['Cartões Amarelos'].max()) if not pd.isna(df_car['Cartões Amarelos'].max()) else 5
@@ -619,9 +622,8 @@ with aba_painel:
 
     st.markdown("---")
 
-    # --- SEÇÃO 2: SCOUT DO PLANTEL (DESIGN PREMIUM PRO - ÚLTIMOS 5 JOGOS) ---
-    st.subheader(f"👤 Scout do Plantel (Média das Últimas 5 Partidas): {time_principal}")
-    st.caption("Visualização Analítica Avançada com barras dinâmicas.")
+    # --- SEÇÃO 2: SCOUT DO PLANTEL ---
+    st.subheader(f"👤 Scout do Plantel (Média Móvel U5): {time_principal}")
 
     if df_elenco_u5 is not None and not df_elenco_u5.empty:
         st.dataframe(
@@ -640,22 +642,22 @@ with aba_painel:
             }
         )
     else:
-        st.warning("Não há dados de scout disponíveis para as últimas 5 partidas deste clube no momento.")
+        st.warning("Não há dados de scout disponíveis para as últimas 5 partidas.")
 
     st.markdown("---")
 
-    # --- SEÇÃO 3: SIMULADOR DE CONFRONTO DIRETO & HISTÓRICO (TOTALMENTE OPCIONAL) ---
+    # --- SEÇÃO 3: SIMULADOR DE CONFRONTO DIRETO & HISTÓRICO H2H ---
     st.subheader("🤖 Simulador de Confronto Direto & H2H")
     usar_comparacao = st.checkbox("Ativar comparação e simulação contra um adversário")
 
     adversario = None
     if usar_comparacao:
-        adversario = st.selectbox("Escolha o Time Adversário para Análise de Confronto", [t for t in times_disponiveis if t != time_principal])
+        adversario = st.selectbox("Escolha o Time Adversário para Análise", [t for t in times_disponiveis if t != time_principal])
 
         if adversario:
             id_time2 = TEAM_IDS[adversario]
-            stats_t2 = buscar_estatisticas_time(id_time2, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-            corners_t2 = buscar_medias_escanteios(id_time2, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+            stats_t2 = buscar_estatisticas_time(id_time2, LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+            corners_t2 = buscar_medias_escanteios(id_time2, LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
             gols_t1 = (stats_t1['gf_home'] + stats_t2['ga_away']) / 2
             gols_t2 = (stats_t2['gf_away'] + stats_t1['ga_home']) / 2
@@ -697,8 +699,8 @@ if st.sidebar.button("🚀 Disparar Alerta Pré-Live"):
     else:
         if usar_comparacao and adversario:
             id_time2_tel = TEAM_IDS.get(adversario, list(TEAM_IDS.values())[0])
-            corners_t2_tel = buscar_medias_escanteios(id_time2_tel, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-            stats_t2_tel = buscar_estatisticas_time(id_time2_tel, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+            corners_t2_tel = buscar_medias_escanteios(id_time2_tel, LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+            stats_t2_tel = buscar_estatisticas_time(id_time2_tel, LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
             g_t1 = (stats_t1['gf_home'] + stats_t2_tel['ga_away']) / 2
             g_t2 = (stats_t2_tel['gf_away'] + stats_t1['ga_home']) / 2
             t_gols = g_t1 + g_t2
@@ -707,7 +709,7 @@ if st.sidebar.button("🚀 Disparar Alerta Pré-Live"):
             msg_telegram = f"""🚨 <b>RAIO-X PRÉ-LIVE PRO (ESCANTEIOS & GOLS)</b> 🚨
 
 ⚽ <b>{time_principal} x {adversario}</b>
-🏆 Competição: Brasileirão Série A
+🏆 Competição: {opcao_liga}
 
 📊 <b>MÉDIAS DE MANDO & ESCANTEIOS:</b>
 • Cantos Pró {time_principal} (Casa): {corners_t1['corners_for_home']:.2f}
@@ -724,7 +726,7 @@ if st.sidebar.button("🚀 Disparar Alerta Pré-Live"):
             msg_telegram = f"""🚨 <b>RAIO-X DO PLANTEL - PRO</b> 🚨
 
 ⚽ <b>Time: {time_principal}</b>
-🏆 Competição: Brasileirão Série A
+🏆 Competição: {opcao_liga}
 
 📊 <b>MÉDIAS NA TEMPORADA:</b>
 • Jogos Disputados: {stats_t1['jogos']}
