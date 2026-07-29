@@ -133,6 +133,51 @@ def buscar_tabela_classificacao(league_id, season, key, data_cache):
     return pd.DataFrame()
 
 @st.cache_data
+def buscar_jogos_liga(league_id, season, key, data_cache):
+    """Busca todos os confrontos da temporada para montar o calendário e jogos do dia."""
+    url = f"https://v3.football.api-sports.io/fixtures?league={league_id}&season={season}"
+    headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
+    try:
+        res = requests.get(url, headers=headers)
+        data = res.json()
+        if data.get('results', 0) > 0:
+            fixtures = data['response']
+            jogos_lista = []
+            for f in fixtures:
+                date_str = f['fixture']['date'] # Ex: '2026-07-29T20:30:00+00:00'
+                match_date = date_str[:10]
+                match_time = date_str[11:16]
+                status = f['fixture']['status']['short']
+                
+                home_name = f['teams']['home']['name']
+                away_name = f['teams']['away']['name']
+                
+                goals_home = f['goals']['home']
+                goals_away = f['goals']['away']
+                
+                if goals_home is not None and goals_away is not None:
+                    placar_str = f"{goals_home} x {goals_away}"
+                else:
+                    placar_str = "vs"
+                
+                round_name = f['league'].get('round', 'Rodada')
+                
+                jogos_lista.append({
+                    'Data': f"{match_date[8:10]}/{match_date[5:7]}/{match_date[0:4]}",
+                    'Horário': match_time,
+                    'Rodada': round_name,
+                    'Mandante': home_name,
+                    'Placar': placar_str,
+                    'Visitante': away_name,
+                    'Status': status,
+                    'Raw_Date': match_date
+                })
+            return pd.DataFrame(jogos_lista)
+    except Exception as e:
+        st.error(f"Erro ao buscar os jogos da liga: {e}")
+    return pd.DataFrame()
+
+@st.cache_data
 def buscar_dados_arbitros(league_id, season, key, data_cache):
     url = f"https://v3.football.api-sports.io/fixtures?league={league_id}&season={season}"
     headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
@@ -499,10 +544,16 @@ with st.spinner(f"Extraindo dados reais de {opcao_liga}..."):
     df_elenco_u5, string_forma_t1 = buscar_scout_elenco_u5(id_time1, LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     df_tabela = buscar_tabela_classificacao(LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     df_arbitros = buscar_dados_arbitros(LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    df_jogos_liga = buscar_jogos_liga(LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
 
-# --- ABAS DE NAVEGAÇÃO SUPERIOR ---
-aba_painel, aba_arbitros, aba_tabela = st.tabs(["📊 Painel de Análise & Elenco", "⚖️ Árbitros", f"🏆 Tabela ({opcao_liga})"])
+# --- ABAS DE NAVEGAÇÃO SUPERIOR (COM A NOVA ABA DE JOGOS) ---
+aba_painel, aba_jogos_dia, aba_arbitros, aba_tabela = st.tabs([
+    "📊 Painel de Análise & Elenco", 
+    "📅 Jogos & Rodada", 
+    "⚖️ Árbitros", 
+    f"🏆 Tabela ({opcao_liga})"
+])
 
 with aba_tabela:
     st.subheader(f"🏆 Classificação Atual - {opcao_liga} ({SEASON})")
@@ -519,6 +570,35 @@ with aba_tabela:
         )
     else:
         st.warning("Tabela de classificação indisponível no momento.")
+
+with aba_jogos_dia:
+    st.subheader(f"📅 Calendário e Partidas da Rodada - {opcao_liga}")
+    st.caption("Consulte os confrontos da competição, horários e placares em tempo real.")
+    
+    if not df_jogos_liga.empty:
+        # Filtro rápido por data ou exibição completa
+        data_hoje_str = datetime.now().strftime("%d/%m/%Y")
+        
+        filtro_opcao = st.radio(
+            "Filtrar visualização:",
+            ["Ver Apenas Jogos de Hoje", "Ver Todos os Jogos da Temporada"],
+            horizontal=True
+        )
+        
+        df_exibir = df_jogos_liga.copy()
+        if filtro_opcao == "Ver Apenas Jogos de Hoje":
+            df_exibir = df_exibir[df_exibir['Data'] == data_hoje_str]
+            if df_exibir.empty:
+                st.info(f"Nenhuma partida programada para hoje ({data_hoje_str}) nesta liga. Alterne para 'Ver Todos os Jogos da Temporada' para conferir o calendário completo.")
+        
+        if not df_exibir.empty:
+            st.dataframe(
+                df_exibir[['Data', 'Horário', 'Rodada', 'Mandante', 'Placar', 'Visitante', 'Status']],
+                use_container_width=True,
+                hide_index=True
+            )
+    else:
+        st.warning("Calendário de jogos indisponível no momento.")
 
 with aba_arbitros:
     st.subheader(f"⚖️ Perfil dos Árbitros - {opcao_liga}")
