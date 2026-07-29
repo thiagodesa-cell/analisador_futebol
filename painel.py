@@ -3,9 +3,9 @@ import pandas as pd
 import requests
 from datetime import datetime, timedelta
 
-st.set_page_config(page_title="Painel Pro - Plantéis Completos Série A", layout="wide")
+st.set_page_config(page_title="Painel Pro - Plantéis, Classificação & Minutagem", layout="wide")
 
-st.title("⚽ Painel Analisador Esportivo Pro - Elencos & H2H Real")
+st.title("⚽ Painel Analisador Esportivo Pro - Elencos, Classificação & Minutagem")
 st.write("Dados extraídos da API-Football (Atualização Diária Automática às 08:00h).")
 
 # --- CONFIGURAÇÃO DA API E TELEGRAM ---
@@ -77,6 +77,34 @@ def buscar_times_serie_a(season, key, data_cache):
     return {}
 
 @st.cache_data
+def buscar_tabela_classificacao(season, key, data_cache):
+    url = f"https://v3.football.api-sports.io/standings?league={LEAGUE_ID}&season={season}"
+    headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
+    try:
+        res = requests.get(url, headers=headers)
+        data = res.json()
+        if data.get('results', 0) > 0:
+            standings = data['response'][0]['league']['standings'][0]
+            tabela = []
+            for s in standings:
+                tabela.append({
+                    'Pos': s['rank'],
+                    'Time': s['team']['name'],
+                    'Pts': s['points'],
+                    'J': s['all']['played'],
+                    'V': s['all']['win'],
+                    'E': s['all']['draw'],
+                    'D': s['all']['lose'],
+                    'GP': s['all']['goals']['for'],
+                    'GC': s['all']['goals']['against'],
+                    'SG': s['goalsDiff']
+                })
+            return pd.DataFrame(tabela)
+    except Exception as e:
+        st.error(f"Erro ao buscar tabela de classificação: {e}")
+    return pd.DataFrame()
+
+@st.cache_data
 def buscar_estatisticas_time(team_id, season, key, data_cache):
     url = f"https://v3.football.api-sports.io/teams/statistics?league={LEAGUE_ID}&season={season}&team={team_id}"
     headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
@@ -86,21 +114,62 @@ def buscar_estatisticas_time(team_id, season, key, data_cache):
         data = res.json()
         if data.get('results', 0) > 0:
             stats = data['response']
+            
+            # Médias gerais
             goals_for = stats.get('goals', {}).get('for', {}).get('average', {}).get('total', '0')
             goals_against = stats.get('goals', {}).get('against', {}).get('average', {}).get('total', '0')
+            
+            # Médias Casa (Home)
+            gf_home = stats.get('goals', {}).get('for', {}).get('average', {}).get('home', '0')
+            ga_home = stats.get('goals', {}).get('against', {}).get('average', {}).get('home', '0')
+            
+            # Médias Fora (Away)
+            gf_away = stats.get('goals', {}).get('for', {}).get('average', {}).get('away', '0')
+            ga_away = stats.get('goals', {}).get('against', {}).get('average', {}).get('away', '0')
+            
             jogos = stats.get('fixtures', {}).get('played', {}).get('total', 0)
             clean_sheets = stats.get('clean_sheet', {}).get('total', 0)
+            
+            # Minutagem de Gols (Feitos e Sofridos)
+            gf_min = stats.get('goals', {}).get('for', {}).get('minute', {})
+            ga_min = stats.get('goals', {}).get('against', {}).get('minute', {})
+            
+            intervals = ["0-15", "16-30", "31-45", "46-60", "61-75", "76-90", "91-105", "106-120"]
+            min_data = []
+            for interv in intervals:
+                f_obj = gf_min.get(interv, {}) if gf_min.get(interv) else {}
+                a_obj = ga_min.get(interv, {}) if ga_min.get(interv) else {}
+                
+                f_val = f_obj.get('total') if f_obj.get('total') is not None else 0
+                a_val = a_obj.get('total') if a_obj.get('total') is not None else 0
+                
+                min_data.append({
+                    'Intervalo': f"{interv} min",
+                    'Gols Feitos': int(f_val),
+                    'Gols Sofridos': int(a_val)
+                })
+            
+            df_minutagem = pd.DataFrame(min_data)
             
             return {
                 'jogos': jogos,
                 'gols_feitos_media': float(goals_for) if goals_for else 0.0,
                 'gols_sofridos_media': float(goals_against) if goals_against else 0.0,
-                'clean_sheets': clean_sheets
+                'gf_home': float(gf_home) if gf_home else 0.0,
+                'ga_home': float(ga_home) if ga_home else 0.0,
+                'gf_away': float(gf_away) if gf_away else 0.0,
+                'ga_away': float(ga_away) if ga_away else 0.0,
+                'clean_sheets': clean_sheets,
+                'df_minutagem': df_minutagem
             }
     except Exception as e:
         st.error(f"Erro API (Stats Time): {e}")
         
-    return {'jogos': 0, 'gols_feitos_media': 0.0, 'gols_sofridos_media': 0.0, 'clean_sheets': 0}
+    return {
+        'jogos': 0, 'gols_feitos_media': 0.0, 'gols_sofridos_media': 0.0,
+        'gf_home': 0.0, 'ga_home': 0.0, 'gf_away': 0.0, 'ga_away': 0.0, 'clean_sheets': 0,
+        'df_minutagem': pd.DataFrame()
+    }
 
 @st.cache_data
 def buscar_scout_elenco_u5(team_id, season, key, data_cache):
@@ -240,7 +309,7 @@ def buscar_h2h_api(id1, id2, key, data_cache):
         return None, f"Erro na conexão com a API: {e}"
 
 
-# --- CARREGAMENTO INICIAL DOS TIMES ---
+# --- CARREGAMENTO INICIAL DOS TIMES E TABELA ---
 TEAM_IDS = buscar_times_serie_a(SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
 if not TEAM_IDS:
@@ -248,7 +317,7 @@ if not TEAM_IDS:
     st.stop()
 
 
-# --- INTERFACE E PROCESSAMENTO DO DASHBOARD (FOCO EM UM SÓ TIME NA SIDEBAR) ---
+# --- INTERFACE E SELEÇÃO NA SIDEBAR ---
 st.sidebar.header("⚙️ Configurações de Análise")
 times_disponiveis = list(TEAM_IDS.keys())
 times_disponiveis.sort() 
@@ -259,92 +328,140 @@ with st.spinner("Extraindo e calculando dados reais da API..."):
     id_time1 = TEAM_IDS[time_principal]
     stats_t1 = buscar_estatisticas_time(id_time1, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     df_elenco_u5, string_forma_t1 = buscar_scout_elenco_u5(id_time1, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    df_tabela = buscar_tabela_classificacao(SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
 
-# --- SEÇÃO 1: DESEMPENHO COLETIVO ---
-st.subheader(f"📊 Desempenho Coletivo (Temporada {SEASON}): {time_principal}")
+# --- ABAS DE NAVEGAÇÃO SUPERIOR PARA ORGANIZAR O PAINEL ---
+aba_painel, aba_tabela = st.tabs(["📊 Painel de Análise & Elenco", "🏆 Tabela do Brasileirão"])
 
-st.markdown(f"**Forma Recente (Últimas 5 partidas):** {string_forma_t1}")
+with aba_tabela:
+    st.subheader(f"🏆 Classificação Atual - Brasileirão Série A ({SEASON})")
+    if not df_tabela.empty:
+        st.dataframe(
+            df_tabela, 
+            use_container_width=True, 
+            hide_index=True,
+            column_config={
+                "Pos": st.column_config.NumberColumn("Pos", format="%d º"),
+                "Pts": st.column_config.NumberColumn("Pts", format="%d pts"),
+                "SG": st.column_config.NumberColumn("SG", format="%d")
+            }
+        )
+    else:
+        st.warning("Tabela de classificação indisponível no momento.")
 
-c1, c2, c3, c4 = st.columns(4)
-with c1:
-    st.metric("Jogos Disputados", stats_t1['jogos'])
-with c2:
-    st.metric("Média Gols Feitos", f"{stats_t1['gols_feitos_media']:.2f}")
-with c3:
-    st.metric("Média Gols Sofridos", f"{stats_t1['gols_sofridos_media']:.2f}")
-with c4:
-    st.metric("Jogos Sem Sofrer Gol", stats_t1['clean_sheets'])
+with aba_painel:
+    # --- SEÇÃO 1: DESEMPENHO COLETIVO & CASA/FORA ---
+    st.subheader(f"📊 Desempenho Coletivo (Temporada {SEASON}): {time_principal}")
+    st.markdown(f"**Forma Recente (Últimas 5 partidas):** {string_forma_t1}")
 
-st.markdown("---")
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        st.metric("Jogos Disputados", stats_t1['jogos'])
+    with c2:
+        st.metric("Média Gols Feitos (Geral)", f"{stats_t1['gols_feitos_media']:.2f}")
+    with c3:
+        st.metric("Média Gols Sofridos (Geral)", f"{stats_t1['gols_sofridos_media']:.2f}")
+    with c4:
+        st.metric("Jogos Sem Sofrer Gol", stats_t1['clean_sheets'])
 
+    # Sub-métricas de Casa vs Fora
+    st.markdown("##### 🏟️ Recorte de Mando de Campo")
+    cc1, cc2, cc3, cc4 = st.columns(4)
+    with cc1:
+        st.metric("GF em Casa", f"{stats_t1['gf_home']:.2f}")
+    with cc2:
+        st.metric("GC em Casa", f"{stats_t1['ga_home']:.2f}")
+    with cc3:
+        st.metric("GF Fora", f"{stats_t1['gf_away']:.2f}")
+    with cc4:
+        st.metric("GC Fora", f"{stats_t1['ga_away']:.2f}")
 
-# --- SEÇÃO 2: SCOUT DO PLANTEL (DESIGN PREMIUM PRO - ÚLTIMOS 5 JOGOS) ---
-st.subheader(f"👤 Scout do Plantel (Média das Últimas 5 Partidas): {time_principal}")
-st.caption("Visualização Analítica Avançada com barras dinâmicas.")
+    st.markdown("---")
 
-if df_elenco_u5 is not None and not df_elenco_u5.empty:
-    st.dataframe(
-        df_elenco_u5, 
-        use_container_width=True, 
-        hide_index=True,
-        column_config={
-            "Gols (Total U5)": st.column_config.NumberColumn("Gols (Total U5)", format="%d ⚽"),
-            "Finalizações Média": st.column_config.ProgressColumn("Finalizações Média", min_value=0, max_value=5, format="%.2f"),
-            "Chutes no Alvo Média": st.column_config.ProgressColumn("Chutes no Alvo Média", min_value=0, max_value=3, format="%.2f"),
-            "Desarmes Média": st.column_config.ProgressColumn("Desarmes Média", min_value=0, max_value=6, format="%.2f"),
-            "Amarelos (Total U5)": st.column_config.NumberColumn("Amarelos (Total U5)", format="%d 🟨"),
-            "Vermelhos (Total U5)": st.column_config.NumberColumn("Vermelhos (Total U5)", format="%d 🟥"),
-            "Faltas Cometidas Média": st.column_config.NumberColumn("Faltas Cometidas Média", format="%.2f ⏱️"),
-            "Faltas Sofridas Média": st.column_config.NumberColumn("Faltas Sofridas Média", format="%.2f 🚀")
-        }
-    )
-else:
-    st.warning("Não há dados de scout disponíveis para as últimas 5 partidas deste clube no momento.")
+    # --- SEÇÃO 1.1: MINUTAGEM DE GOLS ---
+    st.subheader(f"⏱️ Minutagem de Gols: {time_principal}")
+    st.caption("Distribuição de quando o time marca e sofre gols ao longo da partida.")
 
-st.markdown("---")
+    df_min = stats_t1.get('df_minutagem', pd.DataFrame())
+    if not df_min.empty:
+        st.dataframe(
+            df_min,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Gols Feitos": st.column_config.ProgressColumn("Gols Feitos", min_value=0, max_value=max(df_min['Gols Feitos'].max(), 5), format="%d ⚽"),
+                "Gols Sofridos": st.column_config.ProgressColumn("Gols Sofridos", min_value=0, max_value=max(df_min['Gols Sofridos'].max(), 5), format="%d 🛡️")
+            }
+        )
+    else:
+        st.info("Dados de minutagem indisponíveis para este clube.")
 
+    st.markdown("---")
 
-# --- SEÇÃO 3: SIMULADOR DE CONFRONTO DIRETO & HISTÓRICO (TOTALMENTE OPCIONAL) ---
-st.subheader("🤖 Simulador de Confronto Direto & H2H")
-usar_comparacao = st.checkbox("Ativar comparação e simulação contra um adversário")
+    # --- SEÇÃO 2: SCOUT DO PLANTEL (DESIGN PREMIUM PRO - ÚLTIMOS 5 JOGOS) ---
+    st.subheader(f"👤 Scout do Plantel (Média das Últimas 5 Partidas): {time_principal}")
+    st.caption("Visualização Analítica Avançada com barras dinâmicas.")
 
-adversario = None
-if usar_comparacao:
-    adversario = st.selectbox("Escolha o Time Adversário para Análise de Confronto", [t for t in times_disponiveis if t != time_principal])
+    if df_elenco_u5 is not None and not df_elenco_u5.empty:
+        st.dataframe(
+            df_elenco_u5, 
+            use_container_width=True, 
+            hide_index=True,
+            column_config={
+                "Gols (Total U5)": st.column_config.NumberColumn("Gols (Total U5)", format="%d ⚽"),
+                "Finalizações Média": st.column_config.ProgressColumn("Finalizações Média", min_value=0, max_value=5, format="%.2f"),
+                "Chutes no Alvo Média": st.column_config.ProgressColumn("Chutes no Alvo Média", min_value=0, max_value=3, format="%.2f"),
+                "Desarmes Média": st.column_config.ProgressColumn("Desarmes Média", min_value=0, max_value=6, format="%.2f"),
+                "Amarelos (Total U5)": st.column_config.NumberColumn("Amarelos (Total U5)", format="%d 🟨"),
+                "Vermelhos (Total U5)": st.column_config.NumberColumn("Vermelhos (Total U5)", format="%d 🟥"),
+                "Faltas Cometidas Média": st.column_config.NumberColumn("Faltas Cometidas Média", format="%.2f ⏱️"),
+                "Faltas Sofridas Média": st.column_config.NumberColumn("Faltas Sofridas Média", format="%.2f 🚀")
+            }
+        )
+    else:
+        st.warning("Não há dados de scout disponíveis para as últimas 5 partidas deste clube no momento.")
 
-    if adversario:
-        id_time2 = TEAM_IDS[adversario]
-        stats_t2 = buscar_estatisticas_time(id_time2, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    st.markdown("---")
 
-        gols_t1 = (stats_t1['gols_feitos_media'] + stats_t2['gols_sofridos_media']) / 2
-        gols_t2 = (stats_t2['gols_feitos_media'] + stats_t1['gols_sofridos_media']) / 2
-        total_gols = gols_t1 + gols_t2
+    # --- SEÇÃO 3: SIMULADOR DE CONFRONTO DIRETO & HISTÓRICO (TOTALMENTE OPCIONAL) ---
+    st.subheader("🤖 Simulador de Confronto Direto & H2H")
+    usar_comparacao = st.checkbox("Ativar comparação e simulação contra um adversário")
 
-        sc1, sc2, sc3 = st.columns(3)
-        with sc1:
-            st.metric(f"Expec. Gols ({time_principal})", f"{gols_t1:.2f}")
-        with sc2:
-            st.metric(f"Expec. Gols ({adversario})", f"{gols_t2:.2f}")
-        with sc3:
-            st.metric("Total de Gols Esperados", f"{total_gols:.2f}")
+    adversario = None
+    if usar_comparacao:
+        adversario = st.selectbox("Escolha o Time Adversário para Análise de Confronto", [t for t in times_disponiveis if t != time_principal])
 
-        tendencia_texto = ""
-        if total_gols >= 2.5:
-            tendencia_texto = "Mais de 2.5 Gols 🔥"
-            st.success(f"🔥 **Tendência:** Alta probabilidade de **Mais de 2.5 Gols**.")
-        else:
-            tendencia_texto = "Menos de 2.5 Gols 🛡️"
-            st.warning(f"🛡️ **Tendência:** Jogo truncado, tendência de **Menos de 2.5 Gols**.")
+        if adversario:
+            id_time2 = TEAM_IDS[adversario]
+            stats_t2 = buscar_estatisticas_time(id_time2, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
-        st.markdown(f"### 📜 Histórico Real de Confronto: {time_principal} vs {adversario}")
+            # Cálculo refinado considerando mandante (Time Principal) e visitante (Adversário)
+            gols_t1 = (stats_t1['gf_home'] + stats_t2['ga_away']) / 2
+            gols_t2 = (stats_t2['gf_away'] + stats_t1['ga_home']) / 2
+            total_gols = gols_t1 + gols_t2
 
-        df_h2h_real, erro_api = buscar_h2h_api(id_time1, id_time2, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+            sc1, sc2, sc3 = st.columns(3)
+            with sc1:
+                st.metric(f"Expec. Gols ({time_principal} - Mandante)", f"{gols_t1:.2f}")
+            with sc2:
+                st.metric(f"Expec. Gols ({adversario} - Visitante)", f"{gols_t2:.2f}")
+            with sc3:
+                st.metric("Total de Gols Esperados", f"{total_gols:.2f}")
 
-        if df_h2h_real is not None and not df_h2h_real.empty:
-            st.dataframe(df_h2h_real, use_container_width=True, hide_index=True)
-        else:
-            st.info(erro_api if erro_api else "Sem dados recentes de H2H na API.")
+            if total_gols >= 2.5:
+                st.success(f"🔥 **Tendência:** Alta probabilidade de **Mais de 2.5 Gols**.")
+            else:
+                st.warning(f"🛡️ **Tendência:** Jogo truncado, tendência de **Menos de 2.5 Gols**.")
+
+            st.markdown(f"### 📜 Histórico Real de Confronto: {time_principal} vs {adversario}")
+
+            df_h2h_real, erro_api = buscar_h2h_api(id_time1, id_time2, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+
+            if df_h2h_real is not None and not df_h2h_real.empty:
+                st.dataframe(df_h2h_real, use_container_width=True, hide_index=True)
+            else:
+                st.info(erro_api if erro_api else "Sem dados recentes de H2H na API.")
 
 
 # --- DISPARADOR DO TELEGRAM VIA SIDEBAR ---
@@ -357,21 +474,19 @@ if st.sidebar.button("🚀 Disparar Alerta Pré-Live"):
         if usar_comparacao and adversario:
             id_time2_tel = TEAM_IDS.get(adversario, list(TEAM_IDS.values())[0])
             stats_t2_tel = buscar_estatisticas_time(id_time2_tel, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-            g_t1 = (stats_t1['gols_feitos_media'] + stats_t2_tel['gols_sofridos_media']) / 2
-            g_t2 = (stats_t2_tel['gols_feitos_media'] + stats_t1['gols_sofridos_media']) / 2
+            g_t1 = (stats_t1['gf_home'] + stats_t2_tel['ga_away']) / 2
+            g_t2 = (stats_t2_tel['gf_away'] + stats_t1['ga_home']) / 2
             t_gols = g_t1 + g_t2
             tend_tel = "Mais de 2.5 Gols 🔥" if t_gols >= 2.5 else "Menos de 2.5 Gols 🛡️"
 
-            msg_telegram = f"""🚨 <b>RAIO-X PRÉ-LIVE PRO</b> 🚨
+            msg_telegram = f"""🚨 <b>RAIO-X PRÉ-LIVE PRO (MINUTAGEM & MANDO)</b> 🚨
 
 ⚽ <b>{time_principal} x {adversario}</b>
 🏆 Competição: Brasileirão Série A
 
-📊 <b>MÉDIAS NA TEMPORADA:</b>
-• Gols Feitos ({time_principal}): {stats_t1['gols_feitos_media']:.2f}/j
-• Gols Sofridos ({time_principal}): {stats_t1['gols_sofridos_media']:.2f}/j
-• Gols Feitos ({adversario}): {stats_t2_tel['gols_feitos_media']:.2f}/j
-• Gols Sofridos ({adversario}): {stats_t2_tel['gols_sofridos_media']:.2f}/j
+📊 <b>MÉDIAS DE MANDO DE CAMPO:</b>
+• GF {time_principal} (Casa): {stats_t1['gf_home']:.2f} | Sofridos: {stats_t1['ga_home']:.2f}
+• GF {adversario} (Fora): {stats_t2_tel['gf_away']:.2f} | Sofridos: {stats_t2_tel['ga_away']:.2f}
 
 🤖 <b>PROJEÇÃO E TENDÊNCIAS:</b>
 • Expec. Gols {time_principal}: {g_t1:.2f}
@@ -379,7 +494,7 @@ if st.sidebar.button("🚀 Disparar Alerta Pré-Live"):
 • Total Estimado: {t_gols:.2f}
 • Tendência de Gols: <b>{tend_tel}</b>
 
-📈 <i>Dica: Acesse o Painel Streamlit para conferir o scout completo!</i>"""
+📈 <i>Dica: Acesse o Painel Streamlit para conferir o scout completo e minutagem!</i>"""
         else:
             msg_telegram = f"""🚨 <b>RAIO-X DO PLANTEL - PRO</b> 🚨
 
