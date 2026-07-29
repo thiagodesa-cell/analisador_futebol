@@ -3,7 +3,7 @@ import pandas as pd
 import requests
 from datetime import datetime, timedelta
 
-st.set_page_config(page_title="Painel Pro - Brasileirão Série A & B", layout="wide")
+st.set_page_config(page_title="Painel Pro - Futebol & Trading", layout="wide")
 
 # --- CONFIGURAÇÃO DA API E TELEGRAM ---
 API_KEY_FIXA = "E89cc081ecbaaf1a7074e878c1cae0ff"
@@ -23,18 +23,20 @@ def obter_chave_atualizacao():
 
 CHAVE_ATUALIZACAO = obter_chave_atualizacao()
 
-# --- BOTÃO DE SELEÇÃO DE DIVISÃO NA BARRA LATERAL (VIRAR A PÁGINA) ---
+# --- BOTÃO DE SELEÇÃO DE LIGA NA BARRA LATERAL ---
 st.sidebar.header("🏆 Seleção da Competição")
 opcao_liga = st.sidebar.radio(
-    "Escolha qual divisão deseja analisar:",
-    ["Brasileirão Série A", "Brasileirão Série B"]
+    "Escolha qual campeonato deseja analisar:",
+    ["Brasileirão Série A", "Brasileirão Série B", "Campeonato Argentino"]
 )
 
-# Define o ID dinamicamente com base no botão clicado
+# Define o ID dinamicamente com base na liga escolhida
 if opcao_liga == "Brasileirão Série A":
     LEAGUE_ID = 71
-else:
+elif opcao_liga == "Brasileirão Série B":
     LEAGUE_ID = 72
+else:
+    LEAGUE_ID = 128  # Liga Profesional Argentina
 
 st.sidebar.success(f"✅ Ativo: {opcao_liga} (Temporada {SEASON})!")
 st.sidebar.info(f"🔄 Última atualização base: {CHAVE_ATUALIZACAO} às 08:00")
@@ -47,7 +49,7 @@ st.sidebar.markdown("---")
 
 # Título dinâmico na tela principal
 st.title(f"⚽ Painel Analisador Esportivo Pro - {opcao_liga}")
-st.write(f"Dados integrados em tempo real via API-Football para a {opcao_liga.split()[-1]}.")
+st.write(f"Dados integrados em tempo real via API-Football para a competição {opcao_liga}.")
 
 
 # --- FUNÇÃO DE ENVIO PARA O TELEGRAM ---
@@ -66,7 +68,7 @@ def enviar_alerta_telegram(mensagem):
         return False
 
 
-# --- FUNÇÕES DE BUSCA NA API (COM CACHE DIÁRIO ISOLADO POR LIGA) ---
+# --- FUNÇÕES DE BUSCA NA API (COM CACHE DIÁRIO ISOLADO) ---
 
 @st.cache_data
 def buscar_times_por_liga(league_id, season, key, data_cache):
@@ -475,9 +477,9 @@ st.sidebar.header("⚙️ Configurações de Análise")
 times_disponiveis = list(TEAM_IDS.keys())
 times_disponiveis.sort() 
 
-time_principal = st.sidebar.selectbox(f"Escolha o Time da {opcao_liga.split()[-1]}", times_disponiveis)
+time_principal = st.sidebar.selectbox("Escolha o Time", times_disponiveis)
 
-with st.spinner(f"Extraindo dados reais da {opcao_liga}..."):
+with st.spinner(f"Extraindo dados reais de {opcao_liga}..."):
     id_time1 = TEAM_IDS[time_principal]
     stats_t1 = buscar_estatisticas_time(id_time1, LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     corners_t1 = buscar_medias_escanteios(id_time1, LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
@@ -487,7 +489,7 @@ with st.spinner(f"Extraindo dados reais da {opcao_liga}..."):
 
 
 # --- ABAS DE NAVEGAÇÃO SUPERIOR ---
-aba_painel, aba_arbitros, aba_tabela = st.tabs(["📊 Painel de Análise & Elenco", "⚖️ Árbitros", f"🏆 Tabela ({opcao_liga.split()[-1]})"])
+aba_painel, aba_arbitros, aba_tabela = st.tabs(["📊 Painel de Análise & Elenco", "⚖️ Árbitros", f"🏆 Tabela ({opcao_liga})"])
 
 with aba_tabela:
     st.subheader(f"🏆 Classificação Atual - {opcao_liga} ({SEASON})")
@@ -642,7 +644,7 @@ with aba_painel:
             }
         )
     else:
-        st.warning("Não hay dados de scout disponíveis para as últimas 5 partidas.")
+        st.warning("Não há dados de scout disponíveis para as últimas 5 partidas.")
 
     st.markdown("---")
 
