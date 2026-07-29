@@ -642,7 +642,7 @@ with aba_painel:
             }
         )
     else:
-        st.warning("Não há dados de scout disponíveis para as últimas 5 partidas.")
+        st.warning("Não hay dados de scout disponíveis para as últimas 5 partidas.")
 
     st.markdown("---")
 
@@ -658,6 +658,7 @@ with aba_painel:
             id_time2 = TEAM_IDS[adversario]
             stats_t2 = buscar_estatisticas_time(id_time2, LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
             corners_t2 = buscar_medias_escanteios(id_time2, LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+            df_elenco_u5_t2, _ = buscar_scout_elenco_u5(id_time2, LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
             gols_t1 = (stats_t1['gf_home'] + stats_t2['ga_away']) / 2
             gols_t2 = (stats_t2['gf_away'] + stats_t1['ga_home']) / 2
@@ -717,19 +718,10 @@ with aba_painel:
 
             with tip_c2:
                 with st.container(border=True):
-                    st.markdown("#### 🎯 Destaques Individuais (Player Props)")
-                    if df_elenco_u5 is not None and not df_elenco_u5.empty:
-                        top_finalizador = df_elenco_u5.iloc[0]['Jogador']
-                        media_fin = df_elenco_u5.iloc[0]['Finalizações Média']
-                        st.markdown(f"- **Finalizações ({time_principal}):**")
-                        st.markdown(f"  • *{top_finalizador}* com média de **{media_fin} finalizações/jogo** (Últimas 5).")
-                    else:
-                        st.markdown(f"- **Player Props:** Sem dados suficientes no momento.")
-
-                    st.markdown("---")
-                    st.markdown("#### 🟨 Cart & Faltas")
-                    st.markdown("- **Tendência de Cartões:** Jogo intenso nas disputas de meio-campo.")
+                    st.markdown("#### 🟨 Cartões & Faltas Coletivas")
+                    st.markdown("- **Tendência de Disciplina:** Jogo intenso nas disputas de meio-campo.")
                     st.markdown("- **Sugestão:** `Mais de 4.5 Cartões Amarelos na Partida`")
+                    st.markdown("- **Faltas:** Expectativa de alta intensidade e interrupções.")
 
                 with st.container(border=True):
                     st.markdown("#### 🔥 Criar Aposta / Múltipla (Odd Maior)")
@@ -740,6 +732,74 @@ with aba_painel:
                     st.markdown(f"2. `{combo_cantos}`")
                     st.markdown(f"3. `Ambos os times com pelo menos 1 escanteio em cada tempo`")
                     st.markdown(f"💡 *Gestão de banca sempre em primeiro lugar!*")
+
+            # --- SUBMÓDULO ESTENDIDO DE PLAYER PROPS (COM ABAS E TOP 4/3) ---
+            st.markdown("---")
+            with st.container(border=True):
+                st.markdown("#### 🎯 Raio-X Avançado de Player Props (Scout U5)")
+                st.caption("Destaques individuais detalhados para finalizações, desarmes, faltas e cartões de cada equipe.")
+                
+                tab_p1, tab_p2 = st.tabs([f"⚽ {time_principal}", f"🛡️ {adversario}"])
+                
+                with tab_p1:
+                    df_p = df_elenco_u5
+                    if df_p is not None and not df_p.empty:
+                        pp_c1, pp_c2 = st.columns(2)
+                        with pp_c1:
+                            st.markdown("**🎯 Top 4 Finalizadores (Chutes/Jogo):**")
+                            top_fin = df_p.sort_values(by='Finalizações Média', ascending=False).head(4)
+                            for _, row in top_fin.iterrows():
+                                st.markdown(f"- **{row['Jogador']}**: {row['Finalizações Média']} fin. (*{row['Chutes no Alvo Média']} no alvo*)")
+                            
+                            st.markdown("<br>", unsafe_allow_html=True)
+                            st.markdown("**🛡️ Top Desarmadores (Roubadas):**")
+                            top_des = df_p.sort_values(by='Desarmes Média', ascending=False).head(3)
+                            for _, row in top_des.iterrows():
+                                st.markdown(f"- **{row['Jogador']}**: {row['Desarmes Média']} desarmes/j")
+                        
+                        with pp_c2:
+                            st.markdown("**🟨 Mais Faltas Cometidas & Amarelos:**")
+                            top_fal = df_p.sort_values(by='Faltas Cometidas Média', ascending=False).head(3)
+                            for _, row in top_fal.iterrows():
+                                st.markdown(f"- **{row['Jogador']}**: {row['Faltas Cometidas Média']} faltas/j | **{row['Amarelos (Total U5)']} 🟨**")
+                            
+                            st.markdown("<br>", unsafe_allow_html=True)
+                            st.markdown("**⚡ Alvos (Sofrem Mais Faltas):**")
+                            top_sof = df_p.sort_values(by='Faltas Sofridas Média', ascending=False).head(3)
+                            for _, row in top_sof.iterrows():
+                                st.markdown(f"- **{row['Jogador']}**: {row['Faltas Sofridas Média']} sofridas/j")
+                    else:
+                        st.info("Sem dados de scout disponíveis para este time.")
+
+                with tab_p2:
+                    df_p2 = df_elenco_u5_t2
+                    if df_p2 is not None and not df_p2.empty:
+                        pp_c3, pp_c4 = st.columns(2)
+                        with pp_c3:
+                            st.markdown("**🎯 Top 4 Finalizadores (Chutes/Jogo):**")
+                            top_fin2 = df_p2.sort_values(by='Finalizações Média', ascending=False).head(4)
+                            for _, row in top_fin2.iterrows():
+                                st.markdown(f"- **{row['Jogador']}**: {row['Finalizações Média']} fin. (*{row['Chutes no Alvo Média']} no alvo*)")
+                            
+                            st.markdown("<br>", unsafe_allow_html=True)
+                            st.markdown("**🛡️ Top Desarmadores (Roubadas):**")
+                            top_des2 = df_p2.sort_values(by='Desarmes Média', ascending=False).head(3)
+                            for _, row in top_des2.iterrows():
+                                st.markdown(f"- **{row['Jogador']}**: {row['Desarmes Média']} desarmes/j")
+                        
+                        with pp_c4:
+                            st.markdown("**🟨 Mais Faltas Cometidas & Amarelos:**")
+                            top_fal2 = df_p2.sort_values(by='Faltas Cometidas Média', ascending=False).head(3)
+                            for _, row in top_fal2.iterrows():
+                                st.markdown(f"- **{row['Jogador']}**: {row['Faltas Cometidas Média']} faltas/j | **{row['Amarelos (Total U5)']} 🟨**")
+                            
+                            st.markdown("<br>", unsafe_allow_html=True)
+                            st.markdown("**⚡ Alvos (Sofrem Mais Faltas):**")
+                            top_sof2 = df_p2.sort_values(by='Faltas Sofridas Média', ascending=False).head(3)
+                            for _, row in top_sof2.iterrows():
+                                st.markdown(f"- **{row['Jogador']}**: {row['Faltas Sofridas Média']} sofridas/j")
+                    else:
+                        st.info("Sem dados de scout disponíveis para o time adversário.")
 
             st.markdown("---")
             st.markdown(f"### 📜 Histórico Real de Confronto: {time_principal} vs {adversario}")
@@ -783,7 +843,7 @@ if st.sidebar.button("🚀 Disparar Alerta Pré-Live"):
 • Total Estimado: {t_gols:.2f}
 • Tendência de Gols: <b>{tend_tel}</b>
 
-📈 <i>Dica: Acesse o Painel Streamlit para conferir as dicas completas do Smart Tipster e Criar Aposta!</i>"""
+📈 <i>Dica: Acesse o Painel Streamlit para conferir o Raio-X completo de Player Props e Criar Aposta!</i>"""
         else:
             msg_telegram = f"""🚨 <b>RAIO-X DO PLANTEL - PRO</b> 🚨
 
