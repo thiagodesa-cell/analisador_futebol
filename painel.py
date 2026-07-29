@@ -3,9 +3,9 @@ import pandas as pd
 import requests
 from datetime import datetime, timedelta
 
-st.set_page_config(page_title="Painel Pro - Plantéis, Classificação & Minutagem", layout="wide")
+st.set_page_config(page_title="Painel Pro - Plantéis, Classificação, Escanteios & Cartões", layout="wide")
 
-st.title("⚽ Painel Analisador Esportivo Pro - Elencos, Classificação & Minutagem")
+st.title("⚽ Painel Analisador Esportivo Pro - Elencos, Escanteios & Cartões")
 st.write("Dados extraídos da API-Football (Atualização Diária Automática às 08:00h).")
 
 # --- CONFIGURAÇÃO DA API E TELEGRAM ---
@@ -115,7 +115,7 @@ def buscar_estatisticas_time(team_id, season, key, data_cache):
         if data.get('results', 0) > 0:
             stats = data['response']
             
-            # Médias gerais
+            # Médias gerais de gols
             goals_for = stats.get('goals', {}).get('for', {}).get('average', {}).get('total', '0')
             goals_against = stats.get('goals', {}).get('against', {}).get('average', {}).get('total', '0')
             
@@ -130,26 +130,50 @@ def buscar_estatisticas_time(team_id, season, key, data_cache):
             jogos = stats.get('fixtures', {}).get('played', {}).get('total', 0)
             clean_sheets = stats.get('clean_sheet', {}).get('total', 0)
             
-            # Minutagem de Gols (Feitos e Sofridos)
+            # --- ESCANTEIOS (CORNERS) ---
+            corners_for = stats.get('corners', {}).get('for', {}).get('average', {})
+            corners_ag = stats.get('corners', {}).get('against', {}).get('average', {})
+            
+            cf_geral = corners_for.get('total', '0')
+            ca_geral = corners_ag.get('total', '0')
+            cf_home = corners_for.get('home', '0')
+            ca_home = corners_ag.get('home', '0')
+            cf_away = corners_for.get('away', '0')
+            ca_away = corners_ag.get('away', '0')
+            
+            # Minutagem de Gols
             gf_min = stats.get('goals', {}).get('for', {}).get('minute', {})
             ga_min = stats.get('goals', {}).get('against', {}).get('minute', {})
             
+            # Minutagem de Cartões Amarelos
+            yellow_min = stats.get('cards', {}).get('yellow', {}).get('minute', {})
+            
             intervals = ["0-15", "16-30", "31-45", "46-60", "61-75", "76-90", "91-105", "106-120"]
             min_data = []
+            card_data = []
+            
             for interv in intervals:
                 f_obj = gf_min.get(interv, {}) if gf_min.get(interv) else {}
                 a_obj = ga_min.get(interv, {}) if ga_min.get(interv) else {}
+                y_obj = yellow_min.get(interv, {}) if yellow_min.get(interv) else {}
                 
                 f_val = f_obj.get('total') if f_obj.get('total') is not None else 0
                 a_val = a_obj.get('total') if a_obj.get('total') is not None else 0
+                y_val = y_obj.get('total') if y_obj.get('total') is not None else 0
                 
                 min_data.append({
                     'Intervalo': f"{interv} min",
                     'Gols Feitos': int(f_val),
                     'Gols Sofridos': int(a_val)
                 })
+                
+                card_data.append({
+                    'Intervalo': f"{interv} min",
+                    'Cartões Amarelos': int(y_val)
+                })
             
             df_minutagem = pd.DataFrame(min_data)
+            df_cartoes = pd.DataFrame(card_data)
             
             return {
                 'jogos': jogos,
@@ -160,7 +184,14 @@ def buscar_estatisticas_time(team_id, season, key, data_cache):
                 'gf_away': float(gf_away) if gf_away else 0.0,
                 'ga_away': float(ga_away) if ga_away else 0.0,
                 'clean_sheets': clean_sheets,
-                'df_minutagem': df_minutagem
+                'corners_for_geral': float(cf_geral) if cf_geral else 0.0,
+                'corners_ag_geral': float(ca_geral) if ca_geral else 0.0,
+                'corners_for_home': float(cf_home) if cf_home else 0.0,
+                'corners_ag_home': float(ca_home) if ca_home else 0.0,
+                'corners_for_away': float(cf_away) if cf_away else 0.0,
+                'corners_ag_away': float(ca_away) if ca_away else 0.0,
+                'df_minutagem': df_minutagem,
+                'df_cartoes': df_cartoes
             }
     except Exception as e:
         st.error(f"Erro API (Stats Time): {e}")
@@ -168,7 +199,8 @@ def buscar_estatisticas_time(team_id, season, key, data_cache):
     return {
         'jogos': 0, 'gols_feitos_media': 0.0, 'gols_sofridos_media': 0.0,
         'gf_home': 0.0, 'ga_home': 0.0, 'gf_away': 0.0, 'ga_away': 0.0, 'clean_sheets': 0,
-        'df_minutagem': pd.DataFrame()
+        'corners_for_geral': 0.0, 'corners_ag_geral': 0.0, 'corners_for_home': 0.0, 'corners_ag_home': 0.0, 'corners_for_away': 0.0, 'corners_ag_away': 0.0,
+        'df_minutagem': pd.DataFrame(), 'df_cartoes': pd.DataFrame()
     }
 
 @st.cache_data
@@ -366,7 +398,7 @@ with aba_painel:
         st.metric("Jogos Sem Sofrer Gol", stats_t1['clean_sheets'])
 
     # Sub-métricas de Casa vs Fora
-    st.markdown("##### 🏟️ Recorte de Mando de Campo")
+    st.markdown("##### 🏟️ Recorte de Mando de Campo (Gols)")
     cc1, cc2, cc3, cc4 = st.columns(4)
     with cc1:
         st.metric("GF em Casa", f"{stats_t1['gf_home']:.2f}")
@@ -379,28 +411,64 @@ with aba_painel:
 
     st.markdown("---")
 
-    # --- SEÇÃO 1.1: MINUTAGEM DE GOLS ---
-    st.subheader(f"⏱️ Minutagem de Gols: {time_principal}")
-    st.caption("Distribuição de quando o time marca e sofre gols ao longo da partida.")
+    # --- SEÇÃO 1.1: MÉDIAS DE ESCANTEIOS (CORNERS) ---
+    st.subheader(f"🚩 Estatísticas de Escanteios (Corners): {time_principal}")
+    st.caption("Médias de escanteios a favor e contra por partida na competição.")
 
-    df_min = stats_t1.get('df_minutagem', pd.DataFrame())
-    if not df_min.empty:
-        max_f = int(df_min['Gols Feitos'].max()) if not pd.isna(df_min['Gols Feitos'].max()) else 5
-        max_s = int(df_min['Gols Sofridos'].max()) if not pd.isna(df_min['Gols Sofridos'].max()) else 5
-        limite_f = max(max_f, 5)
-        limite_s = max(max_s, 5)
+    co1, co2, co3, co4, co5, co6 = st.columns(6)
+    with co1:
+        st.metric("Cantos Pró (Geral)", f"{stats_t1['corners_for_geral']:.2f}")
+    with co2:
+        st.metric("Cantos Contra (Geral)", f"{stats_t1['corners_ag_geral']:.2f}")
+    with co3:
+        st.metric("Pró (Casa)", f"{stats_t1['corners_for_home']:.2f}")
+    with co4:
+        st.metric("Contra (Casa)", f"{stats_t1['corners_ag_home']:.2f}")
+    with co5:
+        st.metric("Pró (Fora)", f"{stats_t1['corners_for_away']:.2f}")
+    with co6:
+        st.metric("Contra (Fora)", f"{stats_t1['corners_ag_away']:.2f}")
 
-        st.dataframe(
-            df_min,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "Gols Feitos": st.column_config.ProgressColumn("Gols Feitos", min_value=0, max_value=limite_f, format="%d ⚽"),
-                "Gols Sofridos": st.column_config.ProgressColumn("Gols Sofridos", min_value=0, max_value=limite_s, format="%d 🛡️")
-            }
-        )
-    else:
-        st.info("Dados de minutagem indisponíveis para este clube.")
+    st.markdown("---")
+
+    # --- SEÇÃO 1.2: MINUTAGEM DE GOLS & CARTÕES ---
+    col_min1, col_min2 = st.columns(2)
+
+    with col_min1:
+        st.subheader("⏱️ Minutagem de Gols")
+        st.caption("Distribuição de quando o time marca e sofre gols.")
+        df_min = stats_t1.get('df_minutagem', pd.DataFrame())
+        if not df_min.empty:
+            max_f = int(df_min['Gols Feitos'].max()) if not pd.isna(df_min['Gols Feitos'].max()) else 5
+            max_s = int(df_min['Gols Sofridos'].max()) if not pd.isna(df_min['Gols Sofridos'].max()) else 5
+            st.dataframe(
+                df_min,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Gols Feitos": st.column_config.ProgressColumn("Gols Feitos", min_value=0, max_value=max(max_f, 5), format="%d ⚽"),
+                    "Gols Sofridos": st.column_config.ProgressColumn("Gols Sofridos", min_value=0, max_value=max(max_s, 5), format="%d 🛡️")
+                }
+            )
+        else:
+            st.info("Dados indisponíveis.")
+
+    with col_min2:
+        st.subheader("🟨 Minutagem de Cartões")
+        st.caption("Distribuição de cartões amarelos recebidos por faixa.")
+        df_car = stats_t1.get('df_cartoes', pd.DataFrame())
+        if not df_car.empty:
+            max_c = int(df_car['Cartões Amarelos'].max()) if not pd.isna(df_car['Cartões Amarelos'].max()) else 5
+            st.dataframe(
+                df_car,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Cartões Amarelos": st.column_config.ProgressColumn("Cartões Amarelos", min_value=0, max_value=max(max_c, 5), format="%d 🟨")
+                }
+            )
+        else:
+            st.info("Dados indisponíveis.")
 
     st.markdown("---")
 
@@ -445,14 +513,19 @@ with aba_painel:
             gols_t1 = (stats_t1['gf_home'] + stats_t2['ga_away']) / 2
             gols_t2 = (stats_t2['gf_away'] + stats_t1['ga_home']) / 2
             total_gols = gols_t1 + gols_t2
+            
+            # Estimativa de Escanteios do Jogo
+            escanteios_jogo = (stats_t1['corners_for_home'] + stats_t2['corners_for_away']) / 2
 
-            sc1, sc2, sc3 = st.columns(3)
+            sc1, sc2, sc3, sc4 = st.columns(4)
             with sc1:
-                st.metric(f"Expec. Gols ({time_principal} - Mandante)", f"{gols_t1:.2f}")
+                st.metric(f"Expec. Gols ({time_principal})", f"{gols_t1:.2f}")
             with sc2:
-                st.metric(f"Expec. Gols ({adversario} - Visitante)", f"{gols_t2:.2f}")
+                st.metric(f"Expec. Gols ({adversario})", f"{gols_t2:.2f}")
             with sc3:
                 st.metric("Total de Gols Esperados", f"{total_gols:.2f}")
+            with sc4:
+                st.metric("Média Estimada de Cantos", f"{escanteios_jogo:.1f}")
 
             if total_gols >= 2.5:
                 st.success(f"🔥 **Tendência:** Alta probabilidade de **Mais de 2.5 Gols**.")
@@ -484,14 +557,14 @@ if st.sidebar.button("🚀 Disparar Alerta Pré-Live"):
             t_gols = g_t1 + g_t2
             tend_tel = "Mais de 2.5 Gols 🔥" if t_gols >= 2.5 else "Menos de 2.5 Gols 🛡️"
 
-            msg_telegram = f"""🚨 <b>RAIO-X PRÉ-LIVE PRO (MINUTAGEM & MANDO)</b> 🚨
+            msg_telegram = f"""🚨 <b>RAIO-X PRÉ-LIVE PRO (ESCANTEIOS & GOLS)</b> 🚨
 
 ⚽ <b>{time_principal} x {adversario}</b>
 🏆 Competição: Brasileirão Série A
 
-📊 <b>MÉDIAS DE MANDO DE CAMPO:</b>
-• GF {time_principal} (Casa): {stats_t1['gf_home']:.2f} | Sofridos: {stats_t1['ga_home']:.2f}
-• GF {adversario} (Fora): {stats_t2_tel['gf_away']:.2f} | Sofridos: {stats_t2_tel['ga_away']:.2f}
+📊 <b>MÉDIAS DE MANDO & ESCANTEIOS:</b>
+• Cantos Pró {time_principal} (Casa): {stats_t1['corners_for_home']:.2f}
+• Cantos Pró {adversario} (Fora): {stats_t2_tel['corners_for_away']:.2f}
 
 🤖 <b>PROJEÇÃO E TENDÊNCIAS:</b>
 • Expec. Gols {time_principal}: {g_t1:.2f}
@@ -499,7 +572,7 @@ if st.sidebar.button("🚀 Disparar Alerta Pré-Live"):
 • Total Estimado: {t_gols:.2f}
 • Tendência de Gols: <b>{tend_tel}</b>
 
-📈 <i>Dica: Acesse o Painel Streamlit para conferir o scout completo!</i>"""
+📈 <i>Dica: Acesse o Painel Streamlit para conferir o scout completo e minutagem de cartões!</i>"""
         else:
             msg_telegram = f"""🚨 <b>RAIO-X DO PLANTEL - PRO</b> 🚨
 
@@ -508,9 +581,9 @@ if st.sidebar.button("🚀 Disparar Alerta Pré-Live"):
 
 📊 <b>MÉDIAS NA TEMPORADA:</b>
 • Jogos Disputados: {stats_t1['jogos']}
+• Média Escanteios Pró: {stats_t1['corners_for_geral']:.2f}/j
 • Média Gols Feitos: {stats_t1['gols_feitos_media']:.2f}/j
 • Média Gols Sofridos: {stats_t1['gols_sofridos_media']:.2f}/j
-• Jogos Sem Sofrer Gol: {stats_t1['clean_sheets']}
 
 📈 <i>Dica: Acesse o Painel Streamlit para conferir o scout completo do elenco!</i>"""
         
