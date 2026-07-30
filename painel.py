@@ -67,7 +67,7 @@ st.write(f"Dados integrados em tempo real via API-Football para a competição {
 # --- FUNÇÃO DE ENVIO PARA O TELEGRAM ---
 def enviar_alerta_telegram(mensagem):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "HTML"}
+    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": mensagem, "parse_mode": "HTML"}
     try:
         res = requests.post(url, json=payload)
         return res.status_code == 200
@@ -152,7 +152,6 @@ def buscar_jogos_liga(league_id, season, key, data_cache):
         pass
     return pd.DataFrame()
 
-# --- NOVA FUNÇÃO: BUSCA A RODADA ATUAL ATIVA DA API ---
 @st.cache_data
 def buscar_rodada_atual(league_id, season, key, data_cache):
     url = f"https://v3.football.api-sports.io/fixtures/rounds?league={league_id}&season={season}&current=true"
@@ -161,7 +160,7 @@ def buscar_rodada_atual(league_id, season, key, data_cache):
         res = requests.get(url, headers=headers)
         data = res.json()
         if data.get('response') and len(data['response']) > 0:
-            return data['response'][0]  # Retorna exatamente o texto da rodada ativa (Ex: "Regular Season - 21")
+            return data['response'][0]
     except:
         pass
     return None
@@ -192,6 +191,7 @@ def buscar_dados_arbitros(league_id, season, key, data_cache):
         pass
     return pd.DataFrame()
 
+# --- REORGANIZAÇÃO COMPACTA: BUSCA DE CANTOS + GOLS DOS ÚLTIMOS 10 JOGOS ---
 @st.cache_data
 def buscar_medias_escanteios(team_id, league_id, season, key, data_cache):
     url_fixtures = f"https://v3.football.api-sports.io/fixtures?league={league_id}&season={season}&team={team_id}&last=10"
@@ -208,6 +208,13 @@ def buscar_medias_escanteios(team_id, league_id, season, key, data_cache):
                 is_home = (f['teams']['home']['id'] == team_id)
                 adv = f['teams']['away']['name'] if is_home else f['teams']['home']['name']
                 dt = f['fixture']['date'][:10]
+                
+                # Extração paralela de gols reais da partida
+                g_home = f['goals']['home'] if f['goals']['home'] is not None else 0
+                g_away = f['goals']['away'] if f['goals']['away'] is not None else 0
+                g_pro = g_home if is_home else g_away
+                g_contra = g_away if is_home else g_home
+                placar_real = f"{g_home} x {g_away}"
                 
                 time.sleep(0.15)
                 res_s = requests.get(f"https://v3.football.api-sports.io/fixtures/statistics?fixture={f_id}", headers=headers)
@@ -229,8 +236,9 @@ def buscar_medias_escanteios(team_id, league_id, season, key, data_cache):
                     
                     detalhes.append({
                         'Data': f"{dt[8:10]}/{dt[5:7]}/{dt[0:4]}", 'Adversário': adv,
-                        'Mando': 'Casa' if is_home else 'Fora', 'Cantos Pró': t_corners,
-                        'Cantos Contra': o_corners, 'Total na Partida': t_corners + o_corners
+                        'Mando': 'Casa' if is_home else 'Fora', 'Placar': placar_real,
+                        'Gols Marcados': g_pro, 'Gols Sofridos': g_contra,
+                        'Cantos Pró': t_corners, 'Cantos Contra': o_corners, 'Total Cantos': t_corners + o_corners
                     })
         return {
             'corners_for_geral': (sum(cantos_pro_casa+cantos_pro_fora)/max(len(cantos_pro_casa+cantos_pro_fora),1)),
@@ -350,8 +358,6 @@ with st.spinner(f"Extraindo dados reais de {opcao_liga}..."):
     df_tabela = buscar_tabela_classificacao(LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     df_arbitros = buscar_dados_arbitros(LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     df_jogos_liga = buscar_jogos_liga(LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-    
-    # Executa a busca da rodada atual ativa
     rodada_atual_str = buscar_rodada_atual(LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
 # --- ABAS DE NAVEGAÇÃO SUPERIOR ---
@@ -364,71 +370,79 @@ with aba_tabela:
     if not df_tabela.empty:
         st.dataframe(df_tabela, use_container_width=True, hide_index=True)
 
-# --- MODIFICAÇÃO CIRÚRGICA: FILTRO DE RODADA DA API ---
 with aba_jogos_dia:
     st.subheader(f"📅 Calendário e Partidas da Rodada - {opcao_liga}")
-    st.caption("Consulte os confrontos da competição organizados por rodada ativa na API.")
-    
     if not df_jogos_liga.empty:
-        filtro_opcao = st.radio(
-            "Filtrar visualização:",
-            ["Ver Jogos da Rodada Atual", "Ver Todos os Jogos da Temporada"],
-            horizontal=True
-        )
-        
+        filtro_opcao = st.radio("Filtrar visualização:", ["Ver Jogos da Rodada Atual", "Ver Todos os Jogos da Temporada"], horizontal=True)
         df_exibir = df_jogos_liga.copy()
         if filtro_opcao == "Ver Jogos da Rodada Atual":
             if rodada_atual_str:
-                # Filtra cirurgicamente pela rodada exata do momento na API
                 df_exibir = df_exibir[df_exibir['Rodada'] == rodada_atual_str]
                 st.success(f"📌 Exibindo jogos da **{rodada_atual_str}**")
-            else:
-                st.warning("⚠️ Não foi possível sincronizar a rodada atual. Exibindo todos os jogos.")
-        
         if not df_exibir.empty:
-            st.dataframe(
-                df_exibir[['Data', 'Horário', 'Rodada', 'Mandante', 'Placar', 'Visitante', 'Status']],
-                use_container_width=True,
-                hide_index=True
-            )
-        else:
-            st.info("Nenhum jogo localizado.")
+            st.dataframe(df_exibir[['Data', 'Horário', 'Rodada', 'Mandante', 'Placar', 'Visitante', 'Status']], use_container_width=True, hide_index=True)
 
 with aba_arbitros:
     st.subheader(f"⚖️ Perfil dos Árbitros - {opcao_liga}")
     if not df_arbitros.empty:
         st.dataframe(df_arbitros, use_container_width=True, hide_index=True)
 
+# --- MODIFICAÇÃO CIRÚRGICA: NOVO LAYOUT LADO A LADO (GOLS VS ESCANTEIOS) ---
 with aba_painel:
-    st.subheader(f"📊 Desempenho Coletivo: {time_principal}")
+    st.subheader(f"📊 Análise Estruturada de Rendimento: {time_principal}")
     st.markdown(f"**Forma Recente (Últimas 5 partidas):** {string_forma_t1}")
     
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Jogos Disputados", stats_t1['jogos'])
-    c2.metric("Média Gols Feitos (Geral)", f"{stats_t1['gols_feitos_media']:.2f}")
-    c3.metric("Média Gols Sofridos (Geral)", f"{stats_t1['gols_sofridos_media']:.2f}")
-    c4.metric("Jogos Sem Sofrer Gol", stats_t1['clean_sheets'])
-    
-    st.markdown("##### 🏟️ Recorte de Mando de Campo (Gols)")
-    cc1, cc2, cc3, cc4 = st.columns(4)
-    cc1.metric("GF em Casa", f"{stats_t1['gf_home']:.2f}")
-    cc2.metric("GC em Casa", f"{stats_t1['ga_home']:.2f}")
-    cc3.metric("GF Fora", f"{stats_t1['gf_away']:.2f}")
-    cc4.metric("GC Fora", f"{stats_t1['ga_away']:.2f}")
+    # Resumo Geral Rápido
+    rg1, rg2, rg3 = st.columns(3)
+    rg1.metric("Jogos Disputados na Temporada", stats_t1['jogos'])
+    rg2.metric("Jogos sem Sofrer Gols (Clean Sheets)", stats_t1['clean_sheets'])
+    rg3.markdown("💡 *As tabelas abaixo mostram os mesmos últimos 10 confrontos cruzando dados sob duas perspectivas.*")
     
     st.markdown("---")
-    st.subheader(f"🚩 Estatísticas e Histórico de Escanteios: {time_principal}")
-    co1, co2, co3, co4, co5, co6 = st.columns(6)
-    co1.metric("Cantos Pró (Geral)", f"{corners_t1['corners_for_geral']:.2f}")
-    co2.metric("Cantos Contra (Geral)", f"{corners_t1['corners_ag_geral']:.2f}")
-    co3.metric("Pró (Casa)", f"{corners_t1['corners_for_home']:.2f}")
-    co4.metric("Contra (Casa)", f"{corners_t1['corners_ag_home']:.2f}")
-    co5.metric("Pró (Fora)", f"{corners_t1['corners_for_away']:.2f}")
-    co6.metric("Contra (Fora)", f"{corners_t1['corners_ag_away']:.2f}")
     
-    if not corners_t1['df_historico'].empty:
-        st.dataframe(corners_t1['df_historico'], use_container_width=True, hide_index=True)
+    # Divisão Visual Master da Aba
+    col_esquerda_gols, col_direita_cantos = st.columns(2)
+    
+    # --- COLUNA DA ESQUERDA: MERCADO DE GOLS ---
+    with col_esquerda_gols:
+        st.markdown("### ⚽ Estatísticas e Histórico de Gols")
         
+        g_col1, g_col2 = st.columns(2)
+        g_col1.metric("Média Gols Feitos (Geral)", f"{stats_t1['gols_feitos_media']:.2f}")
+        g_col2.metric("Média Gols Sofridos (Geral)", f"{stats_t1['gols_sofridos_media']:.2f}")
+        
+        g_col3, g_col4 = st.columns(2)
+        g_col3.metric("Mando Casa (Pró / Contra)", f"{stats_t1['gf_home']:.2f} / {stats_t1['ga_home']:.2f}")
+        g_col4.metric("Mando Fora (Pró / Contra)", f"{stats_t1['gf_away']:.2f} / {stats_t1['ga_away']:.2f}")
+        
+        if not corners_t1['df_historico'].empty:
+            st.markdown("**Últimas 10 Partidas (Histórico de Placeres & Gols):**")
+            st.dataframe(
+                corners_t1['df_historico'][['Data', 'Adversário', 'Mando', 'Placar', 'Gols Marcados', 'Gols Sofridos']],
+                use_container_width=True,
+                hide_index=True
+            )
+
+    # --- COLUNA DA DIREITA: MERCADO DE ESCANTEIOS ---
+    with col_direita_cantos:
+        st.markdown("### 🚩 Estatísticas e Histórico de Escanteios")
+        
+        e_col1, e_col2 = st.columns(2)
+        e_col1.metric("Cantos Pró (Média Geral)", f"{corners_t1['corners_for_geral']:.2f}")
+        e_col2.metric("Cantos Contra (Média Geral)", f"{corners_t1['corners_ag_geral']:.2f}")
+        
+        e_col3, e_col4 = st.columns(2)
+        e_col3.metric("Mando Casa (Pró / Contra)", f"{corners_t1['corners_for_home']:.2f} / {corners_t1['corners_ag_home']:.2f}")
+        e_col4.metric("Mando Fora (Pró / Contra)", f"{corners_t1['corners_for_away']:.2f} / {corners_t1['corners_ag_away']:.2f}")
+        
+        if not corners_t1['df_historico'].empty:
+            st.markdown("**Últimas 10 Partidas (Histórico de Tiros de Canto):**")
+            st.dataframe(
+                corners_t1['df_historico'][['Data', 'Adversário', 'Mando', 'Cantos Pró', 'Cantos Contra', 'Total Cantos']],
+                use_container_width=True,
+                hide_index=True
+            )
+            
     st.markdown("---")
     col_min1, col_min2 = st.columns(2)
     with col_min1:
@@ -455,7 +469,6 @@ with aba_painel:
             id_time2 = TEAM_IDS[adversario]
             stats_t2 = buscar_estatisticas_time(id_time2, LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
             corners_t2 = buscar_medias_escanteios(id_time2, LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-            df_elenco_u5_t2, _ = buscar_scout_elenco_u5(id_time2, LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
             
             gols_t1 = (stats_t1['gf_home'] + stats_t2['ga_away']) / 2
             gols_t2 = (stats_t2['gf_away'] + stats_t1['ga_home']) / 2
