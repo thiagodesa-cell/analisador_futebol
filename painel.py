@@ -541,6 +541,23 @@ time_principal = st.sidebar.selectbox("⭐ Escolha o Time Principal", times_disp
 times_adversarios = [t for t in times_disponiveis if t != time_principal]
 time_adversario = st.sidebar.selectbox("⚔️ Escolha o Time Adversário", times_adversarios if times_adversarios else times_disponiveis)
 
+st.sidebar.markdown("---")
+
+# --- BOTÃO DE DISPARO PARA O TELEGRAM NA BARRA LATERAL ---
+if st.sidebar.button("📤 Enviar Análise para o Telegram"):
+    mensagem_telegram = (
+        f"⚽ <b>Painel Pro - {opcao_liga}</b>\n\n"
+        f"⭐ <b>Time Principal:</b> {time_principal}\n"
+        f"⚔️ <b>Adversário:</b> {time_adversario}\n"
+        f"📈 <b>Média Gols Feitos:</b> {buscar_estatisticas_time(TEAM_IDS[time_principal], LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)['gols_feitos_media']:.2f}\n"
+        f"🛡️ <b>Média Gols Sofridos:</b> {buscar_estatisticas_time(TEAM_IDS[time_principal], LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)['gols_sofridos_media']:.2f}\n\n"
+        f"🤖 <i>Relatório gerado automaticamente pelo Painel Pro.</i>"
+    )
+    if enviar_alerta_telegram(mensagem_telegram):
+        st.sidebar.success("✅ Análise enviada com sucesso para o Telegram!")
+    else:
+        st.sidebar.error("❌ Falha ao enviar para o Telegram.")
+
 with st.spinner(f"Extraindo dados reais de {opcao_liga}..."):
     id_time1 = TEAM_IDS[time_principal]
     id_time2 = TEAM_IDS[time_adversario]
@@ -553,7 +570,7 @@ with st.spinner(f"Extraindo dados reais de {opcao_liga}..."):
     df_jogos_liga = buscar_jogos_liga(LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
 
-# --- ABAS DE NAVEGAÇÃO SUPERIOR (COM A ABA DE H2H REINSERIDA) ---
+# --- ABAS DE NAVEGAÇÃO SUPERIOR ---
 aba_painel, aba_confronto, aba_jogos_dia, aba_arbitros, aba_tabela = st.tabs([
     "📊 Painel de Análise & Elenco", 
     "⚔️ Confronto Direto (H2H)", 
