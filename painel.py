@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import requests
+import time
 from datetime import datetime, timedelta
 
 st.set_page_config(page_title="Painel Pro - Global Trading & Futebol", layout="wide")
@@ -68,7 +69,7 @@ st.write(f"Dados integrados em tempo real via API-Football para a competição {
 # --- FUNÇÃO DE ENVIO PARA O TELEGRAM ---
 def enviar_alerta_telegram(mensagem):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": mensagem, "parse_mode": "HTML"}
+    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "HTML"}
     try:
         res = requests.post(url, json=payload)
         if res.status_code == 200:
@@ -144,7 +145,7 @@ def buscar_jogos_liga(league_id, season, key, data_cache):
             fixtures = data['response']
             jogos_lista = []
             for f in fixtures:
-                date_str = f['fixture']['date'] # Ex: '2026-07-29T20:30:00+00:00'
+                date_str = f['fixture']['date']
                 match_date = date_str[:10]
                 match_time = date_str[11:16]
                 status = f['fixture']['status']['short']
@@ -248,6 +249,9 @@ def buscar_medias_escanteios(team_id, league_id, season, key, data_cache):
                 is_home = (home_id == team_id)
                 
                 url_stats = f"https://v3.football.api-sports.io/fixtures/statistics?fixture={f_id}"
+                
+                # Proteção de cadência de requisição
+                time.sleep(0.2)
                 res_stats = requests.get(url_stats, headers=headers)
                 data_stats = res_stats.json()
                 
@@ -419,6 +423,9 @@ def buscar_scout_elenco_u5(team_id, league_id, season, key, data_cache):
         for f_item in fixtures:
             f_id = f_item['fixture']['id']
             url_players = f"https://v3.football.api-sports.io/fixtures/players?fixture={f_id}"
+            
+            # Proteção de cadência de requisição
+            time.sleep(0.2)
             res_play = requests.get(url_players, headers=headers)
             data_play = res_play.json()
             
@@ -547,7 +554,7 @@ with st.spinner(f"Extraindo dados reais de {opcao_liga}..."):
     df_jogos_liga = buscar_jogos_liga(LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
 
-# --- ABAS DE NAVEGAÇÃO SUPERIOR (COM A NOVA ABA DE JOGOS) ---
+# --- ABAS DE NAVEGAÇÃO SUPERIOR ---
 aba_painel, aba_jogos_dia, aba_arbitros, aba_tabela = st.tabs([
     "📊 Painel de Análise & Elenco", 
     "📅 Jogos & Rodada", 
@@ -576,7 +583,6 @@ with aba_jogos_dia:
     st.caption("Consulte os confrontos da competição, horários e placares em tempo real.")
     
     if not df_jogos_liga.empty:
-        # Filtro rápido por data ou exibição completa
         data_hoje_str = datetime.now().strftime("%d/%m/%Y")
         
         filtro_opcao = st.radio(
@@ -616,7 +622,7 @@ with aba_arbitros:
         st.warning("Dados de arbitragem indisponíveis no momento.")
 
 with aba_painel:
-    # --- SEÇÃO 1: DESEMPENHO COLETIVO ---
+    # --- DESEMPENHO COLETIVO ---
     st.subheader(f"📊 Desempenho Coletivo: {time_principal}")
     st.markdown(f"**Forma Recente (Últimas 5 partidas):** {string_forma_t1}")
 
@@ -643,7 +649,7 @@ with aba_painel:
 
     st.markdown("---")
 
-    # --- SEÇÃO 1.1: MÉDIAS E HISTÓRICO DE ESCANTEIOS ---
+    # --- MÉDIAS E HISTÓRICO DE ESCANTEIOS ---
     st.subheader(f"🚩 Estatísticas e Histórico de Escanteios (Corners): {time_principal}")
     
     co1, co2, co3, co4, co5, co6 = st.columns(6)
@@ -678,7 +684,7 @@ with aba_painel:
 
     st.markdown("---")
 
-    # --- SEÇÃO 1.2: MINUTAGEM DE GOLS & CARTÕES ---
+    # --- MINUTAGEM DE GOLS & CARTÕES ---
     col_min1, col_min2 = st.columns(2)
 
     with col_min1:
@@ -717,7 +723,7 @@ with aba_painel:
 
     st.markdown("---")
 
-    # --- SEÇÃO 2: SCOUT DO PLANTEL ---
+    # --- SCOUT DO PLANTEL ---
     st.subheader(f"👤 Scout do Plantel (Média Móvel U5): {time_principal}")
 
     if df_elenco_u5 is not None and not df_elenco_u5.empty:
@@ -741,7 +747,7 @@ with aba_painel:
 
     st.markdown("---")
 
-    # --- SEÇÃO 3: SIMULADOR DE CONFRONTO DIRETO & HISTÓRICO H2H ---
+    # --- SIMULADOR DE CONFRONTO DIRETO & HISTÓRICO H2H ---
     st.subheader("🤖 Simulador de Confronto Direto & H2H")
     usar_comparacao = st.checkbox("Ativar comparação e simulação contra um adversário")
 
@@ -776,7 +782,7 @@ with aba_painel:
             else:
                 st.warning(f"🛡️ **Tendência:** Jogo truncado, tendência de **Menos de 2.5 Gols**.")
 
-            # --- MÓDULO INTELIGENTE DE DICAS DE APOSTAS (SMART TIPSTER) ---
+            # --- SMART TIPSTER ---
             st.markdown("---")
             st.markdown("### 💡 Smart Tipster: Sugestões de Apostas Automatizadas")
             st.caption("Dicas geradas cirurgicamente com base nos dados estatísticos cruzados da API para este confronto.")
@@ -828,7 +834,7 @@ with aba_painel:
                     st.markdown(f"3. `Ambos os times com pelo menos 1 escanteio em cada tempo`")
                     st.markdown(f"💡 *Gestão de banca sempre em primeiro lugar!*")
 
-            # --- SUBMÓDULO ESTENDIDO DE PLAYER PROPS (COM ABAS E TOP 4/3) ---
+            # --- RAIO-X AVANÇADO DE PLAYER PROPS ---
             st.markdown("---")
             with st.container(border=True):
                 st.markdown("#### 🎯 Raio-X Avançado de Player Props (Scout U5)")
