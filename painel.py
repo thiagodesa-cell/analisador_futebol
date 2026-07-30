@@ -134,7 +134,6 @@ def buscar_tabela_classificacao(league_id, season, key, data_cache):
 
 @st.cache_data
 def buscar_jogos_liga(league_id, season, key, data_cache):
-    """Busca todos os confrontos da temporada para montar o calendário e jogos do dia."""
     url = f"https://v3.football.api-sports.io/fixtures?league={league_id}&season={season}"
     headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
     try:
@@ -519,7 +518,7 @@ def buscar_h2h_api(id1, id2, key, data_cache):
                     'Visitante': match['teams']['away']['name']
                 })
             return pd.DataFrame(h2h_lista), None
-        return None, "Nenhum confronto recente retornado."
+        return None, "Nenhum confronto recente retornado entre estas equipes."
     except Exception as e:
         return None, f"Erro na conexão com a API: {e}"
 
@@ -535,10 +534,17 @@ st.sidebar.header("⚙️ Configurações de Análise")
 times_disponiveis = list(TEAM_IDS.keys())
 times_disponiveis.sort() 
 
-time_principal = st.sidebar.selectbox("Escolha o Time", times_disponiveis)
+# 1ª Caixinha: Time Principal
+time_principal = st.sidebar.selectbox("⭐ Escolha o Time Principal", times_disponiveis)
+
+# 2ª Caixinha: Time Adversário (para análise de confronto direto / H2H)
+times_adversarios = [t for t in times_disponiveis if t != time_principal]
+time_adversario = st.sidebar.selectbox("⚔️ Escolha o Time Adversário", times_adversarios if times_adversarios else times_disponiveis)
 
 with st.spinner(f"Extraindo dados reais de {opcao_liga}..."):
     id_time1 = TEAM_IDS[time_principal]
+    id_time2 = TEAM_IDS[time_adversario]
+    
     stats_t1 = buscar_estatisticas_time(id_time1, LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     corners_t1 = buscar_medias_escanteios(id_time1, LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     df_elenco_u5, string_forma_t1 = buscar_scout_elenco_u5(id_time1, LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
@@ -547,9 +553,10 @@ with st.spinner(f"Extraindo dados reais de {opcao_liga}..."):
     df_jogos_liga = buscar_jogos_liga(LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
 
-# --- ABAS DE NAVEGAÇÃO SUPERIOR (COM A NOVA ABA DE JOGOS) ---
-aba_painel, aba_jogos_dia, aba_arbitros, aba_tabela = st.tabs([
+# --- ABAS DE NAVEGAÇÃO SUPERIOR (COM A ABA DE H2H REINSERIDA) ---
+aba_painel, aba_confronto, aba_jogos_dia, aba_arbitros, aba_tabela = st.tabs([
     "📊 Painel de Análise & Elenco", 
+    "⚔️ Confronto Direto (H2H)", 
     "📅 Jogos & Rodada", 
     "⚖️ Árbitros", 
     f"🏆 Tabela ({opcao_liga})"
@@ -570,6 +577,22 @@ with aba_tabela:
         )
     else:
         st.warning("Tabela de classificação indisponível no momento.")
+
+with aba_confronto:
+    st.subheader(f"⚔️ Histórico de Confronto Direto (H2H)")
+    st.markdown(f"Comparativo entre **{time_principal}** e **{time_adversario}** nas últimas temporadas:")
+    
+    df_h2h, erro_h2h = buscar_h2h_api(id_time1, id_time2, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    if erro_h2h:
+        st.info(erro_h2h)
+    elif df_h2h is not None and not df_h2h.empty:
+        st.dataframe(
+            df_h2h,
+            use_container_width=True,
+            hide_index=True
+        )
+    else:
+        st.warning("Nenhum histórico recente de confronto direto encontrado entre estas duas equipes.")
 
 with aba_jogos_dia:
     st.subheader(f"📅 Calendário e Partidas da Rodada - {opcao_liga}")
