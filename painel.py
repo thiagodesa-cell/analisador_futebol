@@ -69,7 +69,7 @@ st.write(f"Dados integrados em tempo real via API-Football para a competição {
 # --- FUNÇÃO DE ENVIO PARA O TELEGRAM ---
 def enviar_alerta_telegram(mensagem):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "HTML"}
+    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": mensagem, "parse_mode": "HTML"}
     try:
         res = requests.post(url, json=payload)
         if res.status_code == 200:
@@ -135,7 +135,6 @@ def buscar_tabela_classificacao(league_id, season, key, data_cache):
 
 @st.cache_data
 def buscar_jogos_liga(league_id, season, key, data_cache):
-    """Busca todos os confrontos da temporada para montar o calendário e jogos do dia."""
     url = f"https://v3.football.api-sports.io/fixtures?league={league_id}&season={season}"
     headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
     try:
@@ -250,7 +249,6 @@ def buscar_medias_escanteios(team_id, league_id, season, key, data_cache):
                 
                 url_stats = f"https://v3.football.api-sports.io/fixtures/statistics?fixture={f_id}"
                 
-                # Proteção de cadência de requisição
                 time.sleep(0.2)
                 res_stats = requests.get(url_stats, headers=headers)
                 data_stats = res_stats.json()
@@ -424,7 +422,6 @@ def buscar_scout_elenco_u5(team_id, league_id, season, key, data_cache):
             f_id = f_item['fixture']['id']
             url_players = f"https://v3.football.api-sports.io/fixtures/players?fixture={f_id}"
             
-            # Proteção de cadência de requisição
             time.sleep(0.2)
             res_play = requests.get(url_players, headers=headers)
             data_play = res_play.json()
@@ -743,7 +740,7 @@ with aba_painel:
             }
         )
     else:
-        st.warning("Não há dados de scout disponíveis para as últimas 5 partidas.")
+        st.warning("Não hay dados de scout disponíveis para as últimas 5 partidas.")
 
     st.markdown("---")
 
@@ -761,12 +758,28 @@ with aba_painel:
             corners_t2 = buscar_medias_escanteios(id_time2, LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
             df_elenco_u5_t2, _ = buscar_scout_elenco_u5(id_time2, LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
+            # --- MOTORES PREDITIVOS BASEADOS EM CRUZA DE MANDO REAL ---
+            # Projeção Exata de Gols (Mando de Campo Específico)
             gols_t1 = (stats_t1['gf_home'] + stats_t2['ga_away']) / 2
             gols_t2 = (stats_t2['gf_away'] + stats_t1['ga_home']) / 2
             total_gols = gols_t1 + gols_t2
             
-            escanteios_jogo = (corners_t1['corners_for_home'] + corners_t2['corners_for_away']) / 2
+            # Projeção Refinada de Cantos (Cruzando ataque vs defesa por mando)
+            cantos_projetados_t1 = (corners_t1['corners_for_home'] + corners_t2['corners_ag_away']) / 2
+            cantos_projetados_t2 = (corners_t2['corners_for_away'] + corners_t1['corners_ag_home']) / 2
+            escanteios_jogo = cantos_projetados_t1 + cantos_projetados_t2
 
+            # Projeção Real de Cartões Amarelos (Extraído das tabelas de minutagem da API)
+            t1_j = stats_t1['jogos'] if stats_t1['jogos'] > 0 else 1
+            t2_j = stats_t2['jogos'] if stats_t2['jogos'] > 0 else 1
+            t1_cartoes_totais = stats_t1['df_cartoes']['Cartões Amarelos'].sum() if not stats_t1['df_cartoes'].empty else 0
+            t2_cartoes_totais = stats_t2['df_cartoes']['Cartões Amarelos'].sum() if not stats_t2['df_cartoes'].empty else 0
+            
+            media_cartoes_t1 = t1_cartoes_totais / t1_j
+            media_cartoes_t2 = t2_cartoes_totais / t2_j
+            total_cartoes_projetados = media_cartoes_t1 + media_cartoes_t2
+
+            # Renderização dos Indicadores de Topo
             sc1, sc2, sc3, sc4 = st.columns(4)
             with sc1:
                 st.metric(f"Expec. Gols ({time_principal})", f"{gols_t1:.2f}")
@@ -782,7 +795,7 @@ with aba_painel:
             else:
                 st.warning(f"🛡️ **Tendência:** Jogo truncado, tendência de **Menos de 2.5 Gols**.")
 
-            # --- SMART TIPSTER ---
+            # --- SMART TIPSTER (100% AUTOMATIZADO MATEMÁTICAMENTE) ---
             st.markdown("---")
             st.markdown("### 💡 Smart Tipster: Sugestões de Apostas Automatizadas")
             st.caption("Dicas geradas cirurgicamente com base nos dados estatísticos cruzados da API para este confronto.")
@@ -791,48 +804,74 @@ with aba_painel:
 
             with tip_c1:
                 with st.container(border=True):
-                    st.markdown("#### ⚽ Mercado de Gols & Jogo")
-                    if total_gols >= 2.5:
-                        st.markdown(f"- **Sugestão Principal:** `Mais de 2.5 Gols` (Expec: {total_gols:.2f})")
-                        st.markdown(f"- **Linha de Segurança:** `Mais de 1.5 Gols`")
-                    else:
-                        st.markdown(f"- **Sugestão Principal:** `Menos de 2.5 Gols` (Expec: {total_gols:.2f})")
-                        st.markdown(f"- **Linha Alternativa:** `Menos de 3.5 Gols`")
+                    st.markdown("#### ⚽ Mercado de Gols & Projeções")
+                    st.markdown(f"- **Projeção {time_principal} (Fazer):** `{gols_t1:.2f}` gols")
+                    st.markdown(f"- **Projeção {adversario} (Fazer):** `{gols_t2:.2f}` gols")
+                    st.markdown(f"- **Total Estimado:** `{total_gols:.2f}` gols no jogo")
                     
-                    btts_check = (stats_t1['gols_feitos_media'] > 0.8) and (stats_t2['gols_feitos_media'] > 0.8)
-                    if btts_check:
-                        st.markdown("- **Ambas Marcam (BTTS):** `Sim` (Ambos possuem boa média ofensiva)")
+                    if total_gols >= 2.5:
+                        st.markdown(f"- **Sugestão Principal:** `Mais de 2.5 Gols` 🔥")
+                    elif total_gols >= 1.5:
+                        st.markdown(f"- **Sugestão Principal:** `Mais de 1.5 Gols` ⚡")
                     else:
-                        st.markdown("- **Ambas Marcam (BTTS):** `Não / Jogo Truncado`")
+                        st.markdown(f"- **Sugestão Principal:** `Menos de 2.5 Gols` 🛡️")
+                    
+                    # Ambas Marcam Baseado em Projeção Ofensiva Cruzada Real
+                    if gols_t1 >= 0.95 and gols_t2 >= 0.95:
+                        st.markdown("- **Ambas Marcam (BTTS):** `Sim` ✅ (Alta eficiência ofensiva nos mandos)")
+                    else:
+                        st.markdown("- **Ambas Marcam (BTTS):** `Não / Placar Magro` ❌")
 
                 with st.container(border=True):
-                    st.markdown("#### 🚩 Mercado de Escanteios (Corners)")
-                    st.markdown(f"- **Média Estimada no Jogo:** `~{escanteios_jogo:.1f} cantos`")
-                    if escanteios_jogo >= 10.0:
+                    st.markdown("#### 🚩 Projeção Fina de Escanteios")
+                    st.markdown(f"- **Projeção Cantos {time_principal}:** `{cantos_projetados_t1:.2f}` pró")
+                    st.markdown(f"- **Projeção Cantos {adversario}:** `{cantos_projetados_t2:.2f}` pró")
+                    st.markdown(f"- **Total Estimado da Partida:** `{escanteios_jogo:.1f}` cantos")
+                    
+                    if escanteios_jogo >= 9.8:
                         st.markdown("- **Sugestão:** `Mais de 9.5 Escanteios` 🔥")
-                        st.markdown("- **Linha Conservadora:** `Mais de 8.5 Escanteios`")
-                    elif escanteios_jogo >= 8.5:
+                    elif escanteios_jogo >= 8.8:
                         st.markdown("- **Sugestão:** `Mais de 8.5 Escanteios` ⚡")
-                        st.markdown("- **Linha Conservadora:** `Mais de 7.5 Escanteios`")
                     else:
                         st.markdown("- **Sugestão:** `Menos de 10.5 Escanteios` 🛡️")
 
             with tip_c2:
                 with st.container(border=True):
-                    st.markdown("#### 🟨 Cartões & Faltas Coletivas")
-                    st.markdown("- **Tendência de Disciplina:** Jogo intenso nas disputas de meio-campo.")
-                    st.markdown("- **Sugestão:** `Mais de 4.5 Cartões Amarelos na Partida`")
-                    st.markdown("- **Faltas:** Expectativa de alta intensidade e interrupções.")
+                    st.markdown("#### 🟨 Mercado de Cartões Real")
+                    st.markdown(f"- **Média de Cartões {time_principal}:** `{media_cartoes_t1:.2f}`/jogo")
+                    st.markdown(f"- **Média de Cartões {adversario}:** `{media_cartoes_t2:.2f}`/jogo")
+                    st.markdown(f"- **Projeção Total da Partida:** `{total_cartoes_projetados:.2f}` cartões")
+                    
+                    if total_cartoes_projetados >= 4.5:
+                        st.markdown("- **Sugestão de Entrada:** `Mais de 4.5 Cartões Amarelos` 🟨")
+                    elif total_cartoes_projetados >= 3.5:
+                        st.markdown("- **Sugestão de Entrada:** `Mais de 3.5 Cartões Amarelos` 🟨")
+                    else:
+                        st.markdown("- **Sugestão de Entrada:** `Menos de 4.5 Cartões Amarelos` 🛡️")
 
                 with st.container(border=True):
-                    st.markdown("#### 🔥 Criar Aposta / Múltipla (Odd Maior)")
-                    combo_gols = "Mais de 1.5 Gols" if total_gols >= 1.8 else "Menos de 3.5 Gols"
-                    combo_cantos = "Mais de 7.5 Escanteios"
-                    st.markdown(f"Combinando estatísticas para buscar uma **Odd Turbinada**:")
-                    st.markdown(f"1. `{combo_gols}`")
-                    st.markdown(f"2. `{combo_cantos}`")
-                    st.markdown(f"3. `Ambos os times com pelo menos 1 escanteio em cada tempo`")
-                    st.markdown(f"💡 *Gestão de banca sempre em primeiro lugar!*")
+                    st.markdown("#### 🔥 Bilhete Estruturado (Base Matemática)")
+                    
+                    # Gerador de linhas de bilhete dinâmicas
+                    opcoes_combo = []
+                    if total_gols >= 1.6:
+                        opcoes_combo.append("Mais de 1.5 Gols")
+                    else:
+                        opcoes_combo.append("Menos de 3.5 Gols")
+                        
+                    if escanteios_jogo >= 9.0:
+                        opcoes_combo.append("Mais de 8.5 Escanteios")
+                    else:
+                        time_forte_cantos = time_principal if cantos_projetados_t1 > cantos_projetados_t2 else adversario
+                        opcoes_combo.append(f"Mais de 3.5 Cantos para o {time_forte_cantos}")
+                        
+                    if total_cartoes_projetados >= 3.8:
+                        opcoes_combo.append("Mais de 2.5 Cartões Amarelos")
+                        
+                    st.markdown("Sugestão de Múltipla / Criar Aposta:")
+                    for idx, opt in enumerate(opcoes_combo, 1):
+                        st.markdown(f"{idx}. `{opt}`")
+                    st.markdown("💡 *Alvos estratégicos baseados estritamente na base de dados carregada.*")
 
             # --- RAIO-X AVANÇADO DE PLAYER PROPS ---
             st.markdown("---")
@@ -913,7 +952,7 @@ with aba_painel:
                 st.info(erro_api if erro_api else "Sem dados recentes de H2H na API.")
 
 
-# --- DISPARADOR DO TELEGRAM VIA SIDEBAR ---
+# --- DISPARADOR DO TELEGRAM VIA SIDEBAR (TOTALMENTE AUTOMATIZADO) ---
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 📢 Enviar Análise para o Telegram")
 if st.sidebar.button("🚀 Disparar Alerta Pré-Live"):
@@ -924,42 +963,68 @@ if st.sidebar.button("🚀 Disparar Alerta Pré-Live"):
             id_time2_tel = TEAM_IDS.get(adversario, list(TEAM_IDS.values())[0])
             corners_t2_tel = buscar_medias_escanteios(id_time2_tel, LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
             stats_t2_tel = buscar_estatisticas_time(id_time2_tel, LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+            
+            # Cálculo matemático espelhado
             g_t1 = (stats_t1['gf_home'] + stats_t2_tel['ga_away']) / 2
             g_t2 = (stats_t2_tel['gf_away'] + stats_t1['ga_home']) / 2
             t_gols = g_t1 + g_t2
-            tend_tel = "Mais de 2.5 Gols 🔥" if t_gols >= 2.5 else "Menos de 2.5 Gols 🛡️"
+            
+            c_proj_t1 = (corners_t1['corners_for_home'] + corners_t2_tel['corners_ag_away']) / 2
+            c_proj_t2 = (corners_t2_tel['corners_for_away'] + corners_t1['corners_ag_home']) / 2
+            t_cantos = c_proj_t1 + c_proj_t2
+            
+            t1_j_tel = stats_t1['jogos'] if stats_t1['jogos'] > 0 else 1
+            t2_j_tel = stats_t2_tel['jogos'] if stats_t2_tel['jogos'] > 0 else 1
+            t1_cards = stats_t1['df_cartoes']['Cartões Amarelos'].sum() if not stats_t1['df_cartoes'].empty else 0
+            t2_cards = stats_t2_tel['df_cartoes']['Cartões Amarelos'].sum() if not stats_t2_tel['df_cartoes'].empty else 0
+            med_c1 = t1_cards / t1_j_tel
+            med_c2 = t2_cards / t2_j_tel
+            t_cards_proj = med_c1 + med_c2
+            
+            btts_tel = "Sim ✅" if (g_t1 >= 0.95 and g_t2 >= 0.95) else "Não ❌"
 
-            msg_telegram = f"""🚨 <b>RAIO-X PRÉ-LIVE PRO (SMART TIPSTER)</b> 🚨
+            msg_telegram = f"""🚨 <b>RAIO-X PRÉ-LIVE PRO (100% AUTOMATIZADO)</b> 🚨
 
-⚽ <b>{time_principal} x {adversario}</b>
+⚽ <b>{time_principal} (Casa) x {adversario} (Fora)</b>
 🏆 Competição: {opcao_liga}
 
-📊 <b>MÉDIAS DE MANDO & ESCANTEIOS:</b>
-• Cantos Pró {time_principal} (Casa): {corners_t1['corners_for_home']:.2f}
-• Cantos Pró {adversario} (Fora): {corners_t2_tel['corners_for_away']:.2f}
+📊 <b>PROJEÇÃO DE GOLS & BTTS:</b>
+• Projeção {time_principal}: {g_t1:.2f} gols
+• Projeção {adversario}: {g_t2:.2f} gols
+• Total Estimado: {t_gols:.2f} gols
+• Ambos Marcam (BTTS): {btts_tel}
 
-🤖 <b>PROJEÇÃO E TENDÊNCIAS:</b>
-• Expec. Gols {time_principal}: {g_t1:.2f}
-• Expec. Gols {adversario}: {g_t2:.2f}
-• Total Estimado: {t_gols:.2f}
-• Tendência de Gols: <b>{tend_tel}</b>
+🚩 <b>PROJEÇÃO DE ESCANTEIOS (CANTOS):</b>
+• Projeção {time_principal}: {c_proj_t1:.2f} cantos
+• Projeção {adversario}: {c_proj_t2:.2f} cantos
+• Total Estimado no Jogo: {t_cantos:.1f} cantos
 
-📈 <i>Dica: Acesse o Painel Streamlit para conferir o Raio-X completo de Player Props e Criar Aposta!</i>"""
+🟨 <b>PROJEÇÃO DE CARTÕES AMARELOS:</b>
+• Média {time_principal}: {med_c1:.2f} por jogo
+• Média {adversario}: {med_c2:.2f} por jogo
+• Total Estimado no Jogo: {t_cards_proj:.2f} cartões
+
+📈 <i>Dica: Acesse o Painel Streamlit para conferir o Raio-X detalhado de Player Props por jogador!</i>"""
         else:
+            t1_j_tel = stats_t1['jogos'] if stats_t1['jogos'] > 0 else 1
+            t1_cards = stats_t1['df_cartoes']['Cartões Amarelos'].sum() if not stats_t1['df_cartoes'].empty else 0
+            med_c1 = t1_cards / t1_j_tel
+            
             msg_telegram = f"""🚨 <b>RAIO-X DO PLANTEL - PRO</b> 🚨
 
 ⚽ <b>Time: {time_principal}</b>
 🏆 Competição: {opcao_liga}
 
-📊 <b>MÉDIAS NA TEMPORADA:</b>
+📊 <b>MÉDIAS REAIS NA TEMPORADA:</b>
 • Jogos Disputados: {stats_t1['jogos']}
 • Média Escanteios Pró: {corners_t1['corners_for_geral']:.2f}/j
 • Média Gols Feitos: {stats_t1['gols_feitos_media']:.2f}/j
 • Média Gols Sofridos: {stats_t1['gols_sofridos_media']:.2f}/j
+• Média Cartões Amarelos: {med_c1:.2f}/j
 
 📈 <i>Dica: Acesse o Painel Streamlit para conferir o scout completo do elenco!</i>"""
         
         with st.sidebar.spinner("Enviando..."):
             sucesso = enviar_alerta_telegram(msg_telegram)
             if sucesso:
-                st.sidebar.success("🎉 Alerta enviado com sucesso para o Telegram!")
+                st.sidebar.success("🎉 Alerta dinâmico enviado com sucesso para o Telegram!")
