@@ -67,7 +67,8 @@ st.write(f"Dados integrados em tempo real via API-Football para a competição {
 # --- FUNÇÃO DE ENVIO PARA O TELEGRAM ---
 def enviar_alerta_telegram(mensagem):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "HTML"}
+    # Correção do bug: trocado 'message' por 'mensagem' para bater com o argumento
+    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": mensagem, "parse_mode": "HTML"}
     try:
         res = requests.post(url, json=payload)
         return res.status_code == 200
