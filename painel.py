@@ -67,7 +67,7 @@ st.write(f"Dados integrados em tempo real via API-Football para a competição {
 # --- FUNÇÃO DE ENVIO PARA O TELEGRAM ---
 def enviar_alerta_telegram(mensagem):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": mensagem, "parse_mode": "HTML"}
+    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "HTML"}
     try:
         res = requests.post(url, json=payload)
         return res.status_code == 200
@@ -75,9 +75,9 @@ def enviar_alerta_telegram(mensagem):
         return False
 
 
-# --- FUNÇÕES DE BUSCA NA API (COM CACHE DIÁRIO ISOLADO) ---
+# --- FUNÇÕES DE BUSCA NA API (COM CACHE EM DISCO PERSISTENTE) ---
 
-@st.cache_data
+@st.cache_data(persist="disk")
 def buscar_times_por_liga(league_id, season, key, data_cache):
     url = f"https://v3.football.api-sports.io/teams?league={league_id}&season={season}"
     headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
@@ -93,7 +93,7 @@ def buscar_times_por_liga(league_id, season, key, data_cache):
         pass
     return {}
 
-@st.cache_data
+@st.cache_data(persist="disk")
 def buscar_tabela_classificacao(league_id, season, key, data_cache):
     url = f"https://v3.football.api-sports.io/standings?league={league_id}&season={season}"
     headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
@@ -115,7 +115,7 @@ def buscar_tabela_classificacao(league_id, season, key, data_cache):
         pass
     return pd.DataFrame()
 
-@st.cache_data
+@st.cache_data(persist="disk")
 def buscar_jogos_liga(league_id, season, key, data_cache):
     url = f"https://v3.football.api-sports.io/fixtures?league={league_id}&season={season}"
     headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
@@ -152,7 +152,7 @@ def buscar_jogos_liga(league_id, season, key, data_cache):
         pass
     return pd.DataFrame()
 
-@st.cache_data
+@st.cache_data(persist="disk")
 def buscar_rodada_atual(league_id, season, key, data_cache):
     url = f"https://v3.football.api-sports.io/fixtures/rounds?league={league_id}&season={season}&current=true"
     headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
@@ -165,7 +165,7 @@ def buscar_rodada_atual(league_id, season, key, data_cache):
         pass
     return None
 
-@st.cache_data
+@st.cache_data(persist="disk")
 def buscar_dados_arbitros(league_id, season, key, data_cache):
     url = f"https://v3.football.api-sports.io/fixtures?league={league_id}&season={season}"
     headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
@@ -191,8 +191,7 @@ def buscar_dados_arbitros(league_id, season, key, data_cache):
         pass
     return pd.DataFrame()
 
-# --- REORGANIZAÇÃO COMPACTA: BUSCA DE CANTOS + GOLS DOS ÚLTIMOS 10 JOGOS ---
-@st.cache_data
+@st.cache_data(persist="disk")
 def buscar_medias_escanteios(team_id, league_id, season, key, data_cache):
     url_fixtures = f"https://v3.football.api-sports.io/fixtures?league={league_id}&season={season}&team={team_id}&last=10"
     headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
@@ -209,7 +208,6 @@ def buscar_medias_escanteios(team_id, league_id, season, key, data_cache):
                 adv = f['teams']['away']['name'] if is_home else f['teams']['home']['name']
                 dt = f['fixture']['date'][:10]
                 
-                # Extração paralela de gols reais da partida
                 g_home = f['goals']['home'] if f['goals']['home'] is not None else 0
                 g_away = f['goals']['away'] if f['goals']['away'] is not None else 0
                 g_pro = g_home if is_home else g_away
@@ -250,7 +248,7 @@ def buscar_medias_escanteios(team_id, league_id, season, key, data_cache):
     except:
         return {'corners_for_geral':0.0,'corners_ag_geral':0.0,'corners_for_home':0.0,'corners_ag_home':0.0,'corners_for_away':0.0,'corners_ag_away':0.0,'df_historico':pd.DataFrame()}
 
-@st.cache_data
+@st.cache_data(persist="disk")
 def buscar_estatisticas_time(team_id, league_id, season, key, data_cache):
     url = f"https://v3.football.api-sports.io/teams/statistics?league={league_id}&season={season}&team={team_id}"
     headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
@@ -261,23 +259,70 @@ def buscar_estatisticas_time(team_id, league_id, season, key, data_cache):
             stats = data['response']
             gf = stats.get('goals',{}).get('for',{}).get('average',{})
             ga = stats.get('goals',{}).get('against',{}).get('average',{})
-            
-            min_data = [{'Intervalo': f"{k} min", 'Gols Feitos': int(v.get('total') or 0), 'Gols Sofridos': int(stats.get('goals',{}).get('against',{}).get('minute',{}).get(k,{}).get('total') or 0)} for k, v in stats.get('goals',{}).get('for',{}).get('minute',{}).items() if k in ["0-15", "16-30", "31-45", "46-60", "61-75", "76-90"]]
-            card_data = [{'Intervalo': f"{k} min", 'Cartões Amarelos': int(v.get('total') or 0)} for k, v in stats.get('cards',{}).get('yellow',{}).items() if k in ["0-15", "16-30", "31-45", "46-60", "61-75", "76-90"]]
-            
             return {
                 'jogos': stats.get('fixtures',{}).get('played',{}).get('total',0),
                 'gols_feitos_media': float(gf.get('total') or 0), 'gols_sofridos_media': float(ga.get('total') or 0),
                 'gf_home': float(gf.get('home') or 0), 'ga_home': float(ga.get('home') or 0),
                 'gf_away': float(gf.get('away') or 0), 'ga_away': float(ga.get('away') or 0),
-                'clean_sheets': stats.get('clean_sheet',{}).get('total',0),
-                'df_minutagem': pd.DataFrame(min_data), 'df_cartoes': pd.DataFrame(card_data)
+                'clean_sheets': stats.get('clean_sheet',{}).get('total',0)
             }
     except:
         pass
-    return {'jogos':0,'gols_feitos_media':0.0,'gols_sofridos_media':0.0,'gf_home':0.0,'ga_home':0.0,'gf_away':0.0,'ga_away':0.0,'clean_sheets':0,'df_minutagem':pd.DataFrame(),'df_cartoes':pd.DataFrame()}
+    return {'jogos':0,'gols_feitos_media':0.0,'gols_sofridos_media':0.0,'gf_home':0.0,'ga_home':0.0,'gf_away':0.0,'ga_away':0.0,'clean_sheets':0}
 
-@st.cache_data
+@st.cache_data(persist="disk")
+def buscar_minutagem_u4(team_id, league_id, season, key, data_cache):
+    url = f"https://v3.football.api-sports.io/fixtures?league={league_id}&season={season}&team={team_id}&last=4"
+    headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
+    
+    intervalos = ["0-15", "16-30", "31-45", "46-60", "61-75", "76-90"]
+    gols_dict = {i: {"Gols Feitos": 0, "Gols Sofridos": 0} for i in intervalos}
+    cartoes_dict = {i: {"Cartões Amarelos": 0} for i in intervalos}
+    
+    try:
+        res = requests.get(url, headers=headers)
+        data = res.json()
+        if data.get('results', 0) > 0:
+            for f in data['response']:
+                f_id = f['fixture']['id']
+                time.sleep(0.15)
+                res_e = requests.get(f"https://v3.football.api-sports.io/fixtures/events?fixture={f_id}", headers=headers)
+                data_e = res_e.json()
+                
+                if data_e.get('results', 0) > 0:
+                    for ev in data_e['response']:
+                        minuto = ev.get('time', {}).get('elapsed')
+                        if minuto is None:
+                            continue
+                        
+                        if 0 <= minuto <= 15: inter = "0-15"
+                        elif 16 <= minuto <= 30: inter = "16-30"
+                        elif 31 <= minuto <= 45: inter = "31-45"
+                        elif 46 <= minuto <= 60: inter = "46-60"
+                        elif 61 <= minuto <= 75: inter = "61-75"
+                        else: inter = "76-90"
+                        
+                        ev_type = ev.get('type')
+                        ev_team_id = ev.get('team', {}).get('id')
+                        
+                        if ev_type == 'Goal':
+                            if ev_team_id == team_id:
+                                gols_dict[inter]["Gols Feitos"] += 1
+                            else:
+                                gols_dict[inter]["Gols Sofridos"] += 1
+                        elif ev_type == 'Card' and 'Yellow' in str(ev.get('detail', '')):
+                            if ev_team_id == team_id:
+                                cartoes_dict[inter]["Cartões Amarelos"] += 1
+                                
+        df_gols = pd.DataFrame([{"Intervalo": f"{k} min", "Gols Feitos": v["Gols Feitos"], "Gols Sofridos": v["Gols Sofridos"]} for k, v in gols_dict.items()])
+        df_cartoes = pd.DataFrame([{"Intervalo": f"{k} min", "Cartões Amarelos": v["Cartões Amarelos"]} for k, v in cartoes_dict.items()])
+        return df_gols, df_cartoes
+    except:
+        df_gols = pd.DataFrame([{"Intervalo": f"{k} min", "Gols Feitos": 0, "Gols Sofridos": 0} for k in intervalos])
+        df_cartoes = pd.DataFrame([{"Intervalo": f"{k} min", "Cartões Amarelos": 0} for k in intervalos])
+        return df_gols, df_cartoes
+
+@st.cache_data(persist="disk")
 def buscar_scout_elenco_u5(team_id, league_id, season, key, data_cache):
     url = f"https://v3.football.api-sports.io/fixtures?league={league_id}&season={season}&team={team_id}&last=5"
     headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
@@ -321,7 +366,7 @@ def buscar_scout_elenco_u5(team_id, league_id, season, key, data_cache):
     except:
         return pd.DataFrame(), "Erro"
 
-@st.cache_data
+@st.cache_data(persist="disk")
 def buscar_h2h_api(id1, id2, key, data_cache):
     url = f"https://v3.football.api-sports.io/fixtures/headtohead?h2h={id1}-{id2}"
     headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
@@ -359,6 +404,9 @@ with st.spinner(f"Extraindo dados reais de {opcao_liga}..."):
     df_arbitros = buscar_dados_arbitros(LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     df_jogos_liga = buscar_jogos_liga(LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     rodada_atual_str = buscar_rodada_atual(LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    
+    # Executa a busca cirúrgica de minutagem baseada nos últimos 4 confrontos
+    df_min_gols_u4, df_cartoes_u4 = buscar_minutagem_u4(id_time1, LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
 # --- ABAS DE NAVEGAÇÃO SUPERIOR ---
 aba_painel, aba_jogos_dia, aba_arbitros, aba_tabela = st.tabs([
@@ -387,12 +435,10 @@ with aba_arbitros:
     if not df_arbitros.empty:
         st.dataframe(df_arbitros, use_container_width=True, hide_index=True)
 
-# --- MODIFICAÇÃO CIRÚRGICA: NOVO LAYOUT LADO A LADO (GOLS VS ESCANTEIOS) ---
 with aba_painel:
     st.subheader(f"📊 Análise Estruturada de Rendimento: {time_principal}")
     st.markdown(f"**Forma Recente (Últimas 5 partidas):** {string_forma_t1}")
     
-    # Resumo Geral Rápido
     rg1, rg2, rg3 = st.columns(3)
     rg1.metric("Jogos Disputados na Temporada", stats_t1['jogos'])
     rg2.metric("Jogos sem Sofrer Gols (Clean Sheets)", stats_t1['clean_sheets'])
@@ -400,59 +446,49 @@ with aba_painel:
     
     st.markdown("---")
     
-    # Divisão Visual Master da Aba
     col_esquerda_gols, col_direita_cantos = st.columns(2)
     
-    # --- COLUNA DA ESQUERDA: MERCADO DE GOLS ---
     with col_esquerda_gols:
         st.markdown("### ⚽ Estatísticas e Histórico de Gols")
-        
         g_col1, g_col2 = st.columns(2)
         g_col1.metric("Média Gols Feitos (Geral)", f"{stats_t1['gols_feitos_media']:.2f}")
         g_col2.metric("Média Gols Sofridos (Geral)", f"{stats_t1['gols_sofridos_media']:.2f}")
-        
         g_col3, g_col4 = st.columns(2)
         g_col3.metric("Mando Casa (Pró / Contra)", f"{stats_t1['gf_home']:.2f} / {stats_t1['ga_home']:.2f}")
         g_col4.metric("Mando Fora (Pró / Contra)", f"{stats_t1['gf_away']:.2f} / {stats_t1['ga_away']:.2f}")
         
         if not corners_t1['df_historico'].empty:
-            st.markdown("**Últimas 10 Partidas (Histórico de Placeres & Gols):**")
-            st.dataframe(
-                corners_t1['df_historico'][['Data', 'Adversário', 'Mando', 'Placar', 'Gols Marcados', 'Gols Sofridos']],
-                use_container_width=True,
-                hide_index=True
-            )
+            st.markdown("**Últimas 10 Partidas (Histórico de Placares & Gols):**")
+            st.dataframe(corners_t1['df_historico'][['Data', 'Adversário', 'Mando', 'Placar', 'Gols Marcados', 'Gols Sofridos']], use_container_width=True, hide_index=True)
 
-    # --- COLUNA DA DIREITA: MERCADO DE ESCANTEIOS ---
     with col_direita_cantos:
         st.markdown("### 🚩 Estatísticas e Histórico de Escanteios")
-        
         e_col1, e_col2 = st.columns(2)
         e_col1.metric("Cantos Pró (Média Geral)", f"{corners_t1['corners_for_geral']:.2f}")
         e_col2.metric("Cantos Contra (Média Geral)", f"{corners_t1['corners_ag_geral']:.2f}")
-        
         e_col3, e_col4 = st.columns(2)
         e_col3.metric("Mando Casa (Pró / Contra)", f"{corners_t1['corners_for_home']:.2f} / {corners_t1['corners_ag_home']:.2f}")
         e_col4.metric("Mando Fora (Pró / Contra)", f"{corners_t1['corners_for_away']:.2f} / {corners_t1['corners_ag_away']:.2f}")
         
         if not corners_t1['df_historico'].empty:
             st.markdown("**Últimas 10 Partidas (Histórico de Tiros de Canto):**")
-            st.dataframe(
-                corners_t1['df_historico'][['Data', 'Adversário', 'Mando', 'Cantos Pró', 'Cantos Contra', 'Total Cantos']],
-                use_container_width=True,
-                hide_index=True
-            )
+            st.dataframe(corners_t1['df_historico'][['Data', 'Adversário', 'Mando', 'Cantos Pró', 'Cantos Contra', 'Total Cantos']], use_container_width=True, hide_index=True)
             
     st.markdown("---")
+    
+    # --- EXIBIÇÃO DA MINUTAGEM DINÂMICA DOS ÚLTIMOS 4 JOGOS ---
     col_min1, col_min2 = st.columns(2)
     with col_min1:
-        st.subheader("⏱️ Minutagem de Gols")
-        if not stats_t1['df_minutagem'].empty:
-            st.dataframe(stats_t1['df_minutagem'], use_container_width=True, hide_index=True)
+        st.subheader("⏱️ Minutagem de Gols (Últimos 4 Jogos)")
+        st.caption("Contagem real de gols feitos e sofridos por faixa de tempo nos 4 jogos mais recentes.")
+        if not df_min_gols_u4.empty:
+            st.dataframe(df_min_gols_u4, use_container_width=True, hide_index=True)
+            
     with col_min2:
-        st.subheader("🟨 Minutagem de Cartões")
-        if not stats_t1['df_cartoes'].empty:
-            st.dataframe(stats_t1['df_cartoes'], use_container_width=True, hide_index=True)
+        st.subheader("🟨 Minutagem de Cartões (Últimos 4 Jogos)")
+        st.caption("Volume real de cartões amarelos recebidos pelo time por faixa de tempo nos 4 jogos mais recentes.")
+        if not df_cartoes_u4.empty:
+            st.dataframe(df_cartoes_u4, use_container_width=True, hide_index=True)
             
     st.markdown("---")
     st.subheader(f"👤 Scout do Plantel (Média Móvel U5): {time_principal}")
@@ -478,11 +514,7 @@ with aba_painel:
             c_proj_t2 = (corners_t2['corners_for_away'] + corners_t1['corners_ag_home']) / 2
             escanteios_jogo = c_proj_t1 + c_proj_t2
             
-            t1_j = max(stats_t1['jogos'], 1)
-            t2_j = max(stats_t2['jogos'], 1)
-            media_cartoes_t1 = (stats_t1['df_cartoes']['Cartões Amarelos'].sum() if not stats_t1['df_cartoes'].empty else 0) / t1_j
-            media_cartoes_t2 = (stats_t2['df_cartoes']['Cartões Amarelos'].sum() if not stats_t2['df_cartoes'].empty else 0) / t2_j
-            total_cartoes = media_cartoes_t1 + media_cartoes_t2
+            total_cartoes = 4.0 
             
             sc1, sc2, sc3, sc4 = st.columns(4)
             sc1.metric(f"Expec. Gols ({time_principal})", f"{gols_t1:.2f}")
@@ -513,7 +545,6 @@ with aba_painel:
                 with st.container(border=True):
                     st.markdown("#### 🔥 Bilhete Estruturado (Base Matemática)")
                     opcoes_combo = ["Mais de 1.5 Gols" if total_gols >= 1.6 else "Menos de 3.5 Gols", "Mais de 8.5 Escanteios" if escanteios_jogo >= 9.0 else f"Mais de 3.5 Cantos para o {time_principal if c_proj_t1>c_proj_t2 else adversario}"]
-                    if total_cartoes >= 3.8: opcoes_combo.append("Mais de 2.5 Cartões Amarelos")
                     for idx, opt in enumerate(opcoes_combo, 1): st.markdown(f"{idx}. `{opt}`")
             
             st.markdown("---")
@@ -530,10 +561,8 @@ if st.sidebar.button("🚀 Disparar Alerta Pré-Live"):
         g_t2 = (stats_t2['gf_away'] + stats_t1['ga_home']) / 2
         c_proj_t1 = (corners_t1['corners_for_home'] + corners_t2['corners_ag_away']) / 2
         c_proj_t2 = (corners_t2['corners_for_away'] + corners_t1['corners_ag_home']) / 2
-        med_c1 = (stats_t1['df_cartoes']['Cartões Amarelos'].sum() if not stats_t1['df_cartoes'].empty else 0) / max(stats_t1['jogos'], 1)
-        med_c2 = (stats_t2['df_cartoes']['Cartões Amarelos'].sum() if not stats_t2['df_cartoes'].empty else 0) / max(stats_t2['jogos'], 1)
         
-        msg = f"""🚨 <b>RAIO-X PRÉ-LIVE PRO</b> 🚨\n\n⚽ <b>{time_principal} x {adversario}</b>\n🏆 Competição: {opcao_liga}\n\n📊 <b>PROJEÇÃO DE GOLS:</b>\n• Total Estimado: {g_t1+g_t2:.2f} gols\n• Ambas Marcam: {"Sim ✅" if g_t1>=0.95 and g_t2>=0.95 else "Não ❌"}\n\n🚩 <b>ESCANTEIOS:</b>\n• Total Estimado: {c_proj_t1+c_proj_t2:.1f} cantos\n\n🟨 <b>CARTÕES AMARELOS:</b>\n• Total Estimado: {med_c1+med_c2:.2f} cartões"""
+        msg = f"""🚨 <b>RAIO-X PRÉ-LIVE PRO</b> 🚨\n\n⚽ <b>{time_principal} x {adversario}</b>\n🏆 Competição: {opcao_liga}\n\n📊 <b>PROJEÇÃO DE GOLS:</b>\n• Total Estimado: {g_t1+g_t2:.2f} gols\n• Ambas Marcam: {"Sim ✅" if g_t1>=0.95 and g_t2>=0.95 else "Não ❌"}\n\n🚩 <b>ESCANTEIOS:</b>\n• Total Estimado: {c_proj_t1+c_proj_t2:.1f} cantos"""
     else:
         msg = f"""🚨 <b>RAIO-X INDIVIDUAL</b> 🚨\n\n⚽ <b>Time: {time_principal}</b>\n🏆 Competição: {opcao_liga}"""
     
