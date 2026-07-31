@@ -31,6 +31,7 @@ opcao_liga = st.sidebar.radio(
     [
         "Brasileirão Série A", 
         "Brasileirão Série B", 
+        "Copa do Brasil",
         "Campeonato Argentino",
         "Premier League (Inglaterra)",
         "La Liga (Espanha)",
@@ -47,6 +48,8 @@ if opcao_liga == "Brasileirão Série A":
     LEAGUE_ID = 71
 elif opcao_liga == "Brasileirão Série B":
     LEAGUE_ID = 72
+elif opcao_liga == "Copa do Brasil":
+    LEAGUE_ID = 73
 elif opcao_liga == "Campeonato Argentino":
     LEAGUE_ID = 128
 elif opcao_liga == "Premier League (Inglaterra)":
@@ -570,7 +573,7 @@ with aba_painel:
             
     st.markdown("---")
     
-    # --- NOVO BLOCO: HISTÓRICO DE CARTÕES JOGO A JOGO (PRÓ E CONTRA) ---
+    # --- HISTÓRICO DE CARTÕES JOGO A JOGO (PRÓ E CONTRA) ---
     st.subheader(f"🟨 Histórico Detalhado de Cartões por Partida (Últimos 10 Jogos): {time_principal}")
     st.caption("Quantidade real de cartões amarelos recebidos pelo time (Pró) e pelo adversário (Contra) em cada partida recente.")
     
