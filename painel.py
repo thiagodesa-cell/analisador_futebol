@@ -169,11 +169,6 @@ if termo_busca_global and len(termo_busca_global) >= 2:
     else:
         st.sidebar.warning("Nenhum clube encontrado com esse nome.")
 
-# --- BUSCA EXCLUSIVA DE JOGADORES NO TOPO DA BARRA LATERAL ---
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 🔍 Busca de Jogador")
-termo_busca_jogador = st.sidebar.text_input("Pesquisar Jogador no Elenco:", placeholder="Digite o nome do jogador...")
-
 # --- CONFIGURAÇÕES DE ANÁLISE ---
 st.sidebar.markdown("---")
 st.sidebar.header("⚙️ Configurações de Análise")
@@ -185,15 +180,15 @@ if clube_global_selecionado:
 else:
     times_disponiveis = sorted(list(TEAM_IDS.keys())) if TEAM_IDS else []
     time_principal = st.sidebar.selectbox(
-        "Escolha o Time", 
+        "Escolha o Time (Opcional)", 
         times_disponiveis, 
         index=None, 
-        placeholder="Selecione um time"
+        placeholder="Selecione para ver o Raio-X"
     )
-    if not time_principal:
-        st.info("👈 Por favor, selecione um time na barra lateral ou utilize a Busca Global de Clubes para iniciar a análise.")
-        st.stop()
-    id_time1 = TEAM_IDS[time_principal]
+    if time_principal:
+        id_time1 = TEAM_IDS[time_principal]
+    else:
+        id_time1 = None
 
 st.sidebar.success(f"✅ Ativo: {opcao_liga} (Temporada {SEASON_EFETIVA})!")
 st.sidebar.info(f"🔄 Última atualização base: {CHAVE_ATUALIZACAO} às 08:00")
@@ -203,10 +198,6 @@ st.sidebar.markdown("**Thiago Oliveira De sá**")
 st.sidebar.markdown("📧 `thiago.desa@yahoo.com.br`")
 st.sidebar.markdown("📞 `(21) 96485-9482`")
 st.sidebar.markdown("---")
-
-st.title(f"⚽ Painel Analisador Esportivo Pro - {opcao_liga}")
-st.write(f"Dados integrados em tempo real via API-Football para a competição {opcao_liga} (Temporada {SEASON_EFETIVA}).")
-
 
 # --- FUNÇÃO DE ENVIO PARA O TELEGRAM ---
 def enviar_alerta_telegram(mensagem):
@@ -482,17 +473,21 @@ def buscar_h2h_api(id1, id2, key, data_cache):
         pass
     return None, "Sem confrontos recentes."
 
-with st.spinner(f"Extraindo dados reais de {opcao_liga}..."):
-    stats_t1 = buscar_estatisticas_time(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-    corners_t1 = buscar_medias_escanteios(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-    df_elenco_u5, string_forma_t1 = buscar_scout_elenco_u5(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+# --- CARREGAMENTO DE DADOS GERAIS DA LIGA ---
+with st.spinner(f"Extraindo panorama geral de {opcao_liga}..."):
     df_tabela = buscar_tabela_classificacao(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     df_arbitros = buscar_dados_arbitros(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     df_jogos_liga = buscar_jogos_liga(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     rodada_atual_str = buscar_rodada_atual(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
+# Se um time foi selecionado, carregamos as estatísticas específicas dele
+if id_time1:
+    stats_t1 = buscar_estatisticas_time(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    corners_t1 = buscar_medias_escanteios(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    df_elenco_u5, string_forma_t1 = buscar_scout_elenco_u5(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+
 # --- PROCESSAMENTO DA BUSCA POR JOGADOR ---
-if termo_busca_jogador:
+if termo_busca_jogador and id_time1:
     st.info(f"🔍 Filtrando jogador(es) para o termo: **{termo_busca_jogador}** em **{time_principal}**")
     if not df_elenco_u5.empty:
         jogadores_encontrados = df_elenco_u5[df_elenco_u5['Jogador'].str.contains(termo_busca_jogador, case=False, na=False)]
@@ -503,159 +498,212 @@ if termo_busca_jogador:
             st.warning(f"Nenhum jogador encontrado com o nome '{termo_busca_jogador}' no elenco atual do {time_principal}.")
     st.markdown("---")
 
-# --- ABAS DE NAVEGAÇÃO SUPERIOR ---
-aba_painel, aba_jogos_dia, aba_arbitros, aba_tabela = st.tabs([
-    "📊 Painel de Análise & Elenco", "📅 Jogos & Rodada", "⚖️ Árbitros", f"🏆 Tabela ({opcao_liga})"
-])
+# =========================================================================
+# CENÁRIO 1: NENHUM TIME SELECIONADO -> EXIBIR PANORAMA GERAL DA COMPETIÇÃO
+# =========================================================================
+if not id_time1:
+    st.title(f"🏆 Panorama Geral: {opcao_liga} ({SEASON_EFETIVA})")
+    st.markdown("Bem-vindo ao Hub da Competição! Abaixo você encontra um panorama completo com a rodada atual, classificação e estatísticas gerais. Selecione um clube na barra lateral quando quiser iniciar o Raio-X individual.")
+    st.markdown("---")
 
-with aba_tabela:
-    st.subheader(f"🏆 Classificação Atual - {opcao_liga} ({SEASON_EFETIVA})")
-    if not df_tabela.empty:
-        st.dataframe(df_tabela, use_container_width=True, hide_index=True)
-    else:
-        st.info("Classificação não disponível para este formato de mata-mata ou fase atual.")
+    # Métricas de Destaque do Campeonato
+    col_m1, col_m2, col_m3 = st.columns(3)
+    col_m1.metric("Competição Ativa", opcao_liga)
+    col_m2.metric("Temporada", SEASON_EFETIVA)
+    col_m3.metric("Fase / Rodada Atual", rodada_atual_str if rodada_atual_str else "Em andamento")
 
-with aba_jogos_dia:
-    st.subheader(f"📅 Calendário e Partidas da Rodada - {opcao_liga}")
-    if not df_jogos_liga.empty:
-        filtro_opcao = st.radio("Filtrar visualização:", ["Ver Jogos da Rodada Atual", "Ver Todos os Jogos da Temporada"], horizontal=True)
-        df_exibir = df_jogos_liga.copy()
-        if filtro_opcao == "Ver Jogos da Rodada Atual":
-            if rodada_atual_str:
+    st.markdown("---")
+
+    # Abas para o Panorama da Competição
+    tab_pan_jogos, tab_pan_tabela, tab_pan_refs = st.tabs([
+        "📅 Jogos da Rodada / Calendário", "🏆 Tabela de Classificação", "⚖️ Árbitros em Destaque"
+    ])
+
+    with tab_pan_jogos:
+        st.subheader(f"📅 Partidas - {opcao_liga}")
+        if not df_jogos_liga.empty:
+            filtro_opcao = st.radio("Filtrar visualização do panorama:", ["Ver Jogos da Rodada Atual", "Ver Todos os Jogos da Temporada"], horizontal=True, key="filtro_jogos_pan")
+            df_exibir = df_jogos_liga.copy()
+            if filtro_opcao == "Ver Jogos da Rodada Atual" and rodada_atual_str:
                 df_exibir = df_exibir[df_exibir['Rodada'] == rodada_atual_str]
                 st.success(f"📌 Exibindo jogos da **{rodada_atual_str}**")
-        if not df_exibir.empty:
             st.dataframe(df_exibir[['Data', 'Horário', 'Rodada', 'Mandante', 'Placar', 'Visitante', 'Status']], use_container_width=True, hide_index=True)
+        else:
+            st.info("Nenhum jogo encontrado para esta competição no momento.")
 
-with aba_arbitros:
-    st.subheader(f"⚖️ Perfil dos Árbitros - {opcao_liga}")
-    if not df_arbitros.empty:
-        st.dataframe(df_arbitros, use_container_width=True, hide_index=True)
+    with tab_pan_tabela:
+        st.subheader(f"🏆 Classificação Atual - {opcao_liga}")
+        if not df_tabela.empty:
+            st.dataframe(df_tabela, use_container_width=True, hide_index=True)
+        else:
+            st.info("Classificação não disponível para este formato (ex: torneios eliminatórios como Copa do Brasil em fases específicas).")
 
-with aba_painel:
-    st.subheader(f"📊 Análise Estruturada de Rendimento: {time_principal}")
-    st.markdown(f"**Forma Recente (Últimas 5 partidas):** {string_forma_t1}")
+    with tab_pan_refs:
+        st.subheader(f"⚖️ Perfil dos Árbitros - {opcao_liga}")
+        if not df_arbitros.empty:
+            st.dataframe(df_arbitros, use_container_width=True, hide_index=True)
+        else:
+            st.info("Dados de arbitragem indisponíveis no momento.")
+
+# =========================================================================
+# CENÁRIO 2: TIME SELECIONADO -> EXIBIR PAINEL DE ANÁLISE DETALHADA E ELENCO
+# =========================================================================
+else:
+    st.setTitle = f"⚽ Painel Analisador Esportivo Pro - {opcao_liga}"
     
-    rg1, rg2, rg3 = st.columns(3)
-    rg1.metric("Jogos Disputados na Temporada", stats_t1['jogos'])
-    rg2.metric("Jogos sem Sofrer Gols (Clean Sheets)", stats_t1['clean_sheets'])
-    rg3.markdown("💡 *As tabelas abaixo mostram os mesmos últimos 10 confrontos cruzando dados sob duas perspectivas.*")
-    
-    st.markdown("---")
-    
-    col_esquerda_gols, col_direita_cantos = st.columns(2)
-    
-    with col_esquerda_gols:
-        st.markdown("### ⚽ Estatísticas e Histórico de Gols")
-        g_col1, g_col2 = st.columns(2)
-        g_col1.metric("Média Gols Feitos (Geral)", f"{stats_t1['gols_feitos_media']:.2f}")
-        g_col2.metric("Média Gols Sofridos (Geral)", f"{stats_t1['gols_sofridos_media']:.2f}")
-        g_col3, g_col4 = st.columns(2)
-        g_col3.metric("Mando Casa (Pró / Contra)", f"{stats_t1['gf_home']:.2f} / {stats_t1['ga_home']:.2f}")
-        g_col4.metric("Mando Fora (Pró / Contra)", f"{stats_t1['gf_away']:.2f} / {stats_t1['ga_away']:.2f}")
+    # --- ABAS DE NAVEGAÇÃO SUPERIOR ---
+    aba_painel, aba_jogos_dia, aba_arbitros, aba_tabela = st.tabs([
+        "📊 Painel de Análise & Elenco", "📅 Jogos & Rodada", "⚖️ Árbitros", f"🏆 Tabela ({opcao_liga})"
+    ])
+
+    with aba_tabela:
+        st.subheader(f"🏆 Classificação Atual - {opcao_liga} ({SEASON_EFETIVA})")
+        if not df_tabela.empty:
+            st.dataframe(df_tabela, use_container_width=True, hide_index=True)
+        else:
+            st.info("Classificação não disponível para este formato de mata-mata ou fase atual.")
+
+    with aba_jogos_dia:
+        st.subheader(f"📅 Calendário e Partidas da Rodada - {opcao_liga}")
+        if not df_jogos_liga.empty:
+            filtro_opcao = st.radio("Filtrar visualização:", ["Ver Jogos da Rodada Atual", "Ver Todos os Jogos da Temporada"], horizontal=True)
+            df_exibir = df_jogos_liga.copy()
+            if filtro_opcao == "Ver Jogos da Rodada Atual":
+                if rodada_atual_str:
+                    df_exibir = df_exibir[df_exibir['Rodada'] == rodada_atual_str]
+                    st.success(f"📌 Exibindo jogos da **{rodada_atual_str}**")
+            if not df_exibir.empty:
+                st.dataframe(df_exibir[['Data', 'Horário', 'Rodada', 'Mandante', 'Placar', 'Visitante', 'Status']], use_container_width=True, hide_index=True)
+
+    with aba_arbitros:
+        st.subheader(f"⚖️ Perfil dos Árbitros - {opcao_liga}")
+        if not df_arbitros.empty:
+            st.dataframe(df_arbitros, use_container_width=True, hide_index=True)
+
+    with aba_painel:
+        st.subheader(f"📊 Análise Estruturada de Rendimento: {time_principal}")
+        st.markdown(f"**Forma Recente (Últimas 5 partidas):** {string_forma_t1}")
+        
+        rg1, rg2, rg3 = st.columns(3)
+        rg1.metric("Jogos Disputados na Temporada", stats_t1['jogos'])
+        rg2.metric("Jogos sem Sofrer Gols (Clean Sheets)", stats_t1['clean_sheets'])
+        rg3.markdown("💡 *As tabelas abaixo mostram os mesmos últimos 10 confrontos cruzando dados sob duas perspectivas.*")
+        
+        st.markdown("---")
+        
+        col_esquerda_gols, col_direita_cantos = st.columns(2)
+        
+        with col_esquerda_gols:
+            st.markdown("### ⚽ Estatísticas e Histórico de Gols")
+            g_col1, g_col2 = st.columns(2)
+            g_col1.metric("Média Gols Feitos (Geral)", f"{stats_t1['gols_feitos_media']:.2f}")
+            g_col2.metric("Média Gols Sofridos (Geral)", f"{stats_t1['gols_sofridos_media']:.2f}")
+            g_col3, g_col4 = st.columns(2)
+            g_col3.metric("Mando Casa (Pró / Contra)", f"{stats_t1['gf_home']:.2f} / {stats_t1['ga_home']:.2f}")
+            g_col4.metric("Mando Fora (Pró / Contra)", f"{stats_t1['gf_away']:.2f} / {stats_t1['ga_away']:.2f}")
+            
+            if not corners_t1['df_historico'].empty:
+                st.markdown("**Últimas 10 Partidas (Histórico de Placares & Gols):**")
+                st.dataframe(corners_t1['df_historico'][['Data', 'Adversário', 'Mando', 'Placar', 'Gols Pró', 'Gols Contra']], use_container_width=True, hide_index=True)
+
+        with col_direita_cantos:
+            st.markdown("### 🚩 Estatísticas e Histórico de Escanteios")
+            e_col1, e_col2 = st.columns(2)
+            e_col1.metric("Cantos Pró (Média Geral)", f"{corners_t1['corners_for_geral']:.2f}")
+            e_col2.metric("Cantos Contra (Média Geral)", f"{corners_t1['corners_ag_geral']:.2f}")
+            e_col3, e_col4 = st.columns(2)
+            e_col3.metric("Mando Casa (Pró / Contra)", f"{corners_t1['corners_for_home']:.2f} / {corners_t1['corners_ag_home']:.2f}")
+            e_col4.metric("Mando Fora (Pró / Contra)", f"{corners_t1['corners_for_away']:.2f} / {corners_t1['corners_ag_away']:.2f}")
+            
+            if not corners_t1['df_historico'].empty:
+                st.markdown("**Últimas 10 Partidas (Histórico de Tiros de Canto):**")
+                st.dataframe(corners_t1['df_historico'][['Data', 'Adversário', 'Mando', 'Cantos Pró', 'Cantos Contra', 'Total Cantos']], use_container_width=True, hide_index=True)
+                
+        st.markdown("---")
+        
+        # --- HISTÓRICO DE CARTÕES JOGO A JOGO (PRÓ E CONTRA) ---
+        st.subheader(f"🟨 Histórico Detalhado de Cartões por Partida (Últimos 10 Jogos): {time_principal}")
+        st.caption("Quantidade real de cartões amarelos recebidos pelo time (Pró) e pelo adversário (Contra) em cada partida recente.")
+        
+        c_card1, c_card2 = st.columns(2)
+        c_card1.metric("Média de Cartões Pró (Favor)", f"{corners_t1['media_cartoes_pro']:.2f}")
+        c_card2.metric("Média de Cartões Contra (Adversário)", f"{corners_t1['media_cartoes_contra']:.2f}")
         
         if not corners_t1['df_historico'].empty:
-            st.markdown("**Últimas 10 Partidas (Histórico de Placares & Gols):**")
-            st.dataframe(corners_t1['df_historico'][['Data', 'Adversário', 'Mando', 'Placar', 'Gols Pró', 'Gols Contra']], use_container_width=True, hide_index=True)
-
-    with col_direita_cantos:
-        st.markdown("### 🚩 Estatísticas e Histórico de Escanteios")
-        e_col1, e_col2 = st.columns(2)
-        e_col1.metric("Cantos Pró (Média Geral)", f"{corners_t1['corners_for_geral']:.2f}")
-        e_col2.metric("Cantos Contra (Média Geral)", f"{corners_t1['corners_ag_geral']:.2f}")
-        e_col3, e_col4 = st.columns(2)
-        e_col3.metric("Mando Casa (Pró / Contra)", f"{corners_t1['corners_for_home']:.2f} / {corners_t1['corners_ag_home']:.2f}")
-        e_col4.metric("Mando Fora (Pró / Contra)", f"{corners_t1['corners_for_away']:.2f} / {corners_t1['corners_ag_away']:.2f}")
+            st.dataframe(
+                corners_t1['df_historico'][['Data', 'Adversário', 'Mando', 'Placar', 'Cartões Pró', 'Cartões Contra', 'Total Cartões']], 
+                use_container_width=True, 
+                hide_index=True
+            )
+                
+        st.markdown("---")
+        st.subheader(f"👤 Scout do Plantel (Média Móvel U5): {time_principal}")
+        if not df_elenco_u5.empty:
+            st.dataframe(df_elenco_u5, use_container_width=True, hide_index=True)
+            
+        st.markdown("---")
+        st.subheader("🤖 Simulador de Confronto Direto & H2H")
+        usar_comparacao = st.checkbox("Ativar comparação e simulação contra um adversário")
         
-        if not corners_t1['df_historico'].empty:
-            st.markdown("**Últimas 10 Partidas (Histórico de Tiros de Canto):**")
-            st.dataframe(corners_t1['df_historico'][['Data', 'Adversário', 'Mando', 'Cantos Pró', 'Cantos Contra', 'Total Cantos']], use_container_width=True, hide_index=True)
-            
-    st.markdown("---")
-    
-    # --- HISTÓRICO DE CARTÕES JOGO A JOGO (PRÓ E CONTRA) ---
-    st.subheader(f"🟨 Histórico Detalhado de Cartões por Partida (Últimos 10 Jogos): {time_principal}")
-    st.caption("Quantidade real de cartões amarelos recebidos pelo time (Pró) e pelo adversário (Contra) em cada partida recente.")
-    
-    c_card1, c_card2 = st.columns(2)
-    c_card1.metric("Média de Cartões Pró (Favor)", f"{corners_t1['media_cartoes_pro']:.2f}")
-    c_card2.metric("Média de Cartões Contra (Adversário)", f"{corners_t1['media_cartoes_contra']:.2f}")
-    
-    if not corners_t1['df_historico'].empty:
-        st.dataframe(
-            corners_t1['df_historico'][['Data', 'Adversário', 'Mando', 'Placar', 'Cartões Pró', 'Cartões Contra', 'Total Cartões']], 
-            use_container_width=True, 
-            hide_index=True
-        )
-            
-    st.markdown("---")
-    st.subheader(f"👤 Scout do Plantel (Média Móvel U5): {time_principal}")
-    if not df_elenco_u5.empty:
-        st.dataframe(df_elenco_u5, use_container_width=True, hide_index=True)
-        
-    st.markdown("---")
-    st.subheader("🤖 Simulador de Confronto Direto & H2H")
-    usar_comparacao = st.checkbox("Ativar comparação e simulação contra um adversário")
-    
-    if usar_comparacao:
-        times_disponiveis = sorted(list(TEAM_IDS.keys()))
-        adversario = st.selectbox("Escolha o Time Adversário", [t for t in times_disponiveis if t != time_principal])
-        if adversario:
-            id_time2 = TEAM_IDS[adversario]
-            stats_t2 = buscar_estatisticas_time(id_time2, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-            corners_t2 = buscar_medias_escanteios(id_time2, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-            
-            gols_t1 = (stats_t1['gf_home'] + stats_t2['ga_away']) / 2
-            gols_t2 = (stats_t2['gf_away'] + stats_t1['ga_home']) / 2
-            total_gols = gols_t1 + gols_t2
-            
-            c_proj_t1 = (corners_t1['corners_for_home'] + corners_t2['corners_ag_away']) / 2
-            c_proj_t2 = (corners_t2['corners_for_away'] + corners_t1['corners_ag_home']) / 2
-            escanteios_jogo = c_proj_t1 + c_proj_t2
-            
-            total_cartoes = corners_t1['media_cartoes_pro'] + corners_t2['media_cartoes_pro']
-            
-            sc1, sc2, sc3, sc4 = st.columns(4)
-            sc1.metric(f"Expec. Gols ({time_principal})", f"{gols_t1:.2f}")
-            sc2.metric(f"Expec. Gols ({adversario})", f"{gols_t2:.2f}")
-            sc3.metric("Total de Gols Esperados", f"{total_gols:.2f}")
-            sc4.metric("Média Estimada de Cantos", f"{escanteios_jogo:.1f}")
-            
-            st.markdown("---")
-            st.markdown("### 💡 Smart Tipster: Sugestões de Apostas Automatizadas")
-            tip_c1, tip_c2 = st.columns(2)
-            
-            with tip_c1:
-                with st.container(border=True):
-                    st.markdown("#### ⚽ Mercado de Gols & Projeções")
-                    st.markdown(f"- **Projeção Total:** `{total_gols:.2f}` gols")
-                    st.markdown(f"- **Sugestão Principal:** `Mais de 2.5 Gols` 🔥" if total_gols >= 2.5 else "`Mais de 1.5 Gols` ⚡" if total_gols >= 1.5 else "`Menos de 2.5 Gols` 🛡️")
-                    st.markdown(f"- **Ambas Marcam (BTTS):** `Sim` ✅" if gols_t1 >= 0.95 and gols_t2 >= 0.95 else "`Não` ❌")
-                with st.container(border=True):
-                    st.markdown("#### 🚩 Projeção Fina de Escanteios")
-                    st.markdown(f"- **Total Estimado da Partida:** `{escanteios_jogo:.1f}` cantos")
-                    st.markdown(f"- **Sugestão:** `Mais de 9.5 Escanteios` 🔥" if escanteios_jogo >= 9.8 else "`Mais de 8.5 Escanteios` ⚡" if escanteios_jogo >= 8.8 else "`Menos de 10.5 Escanteios` 🛡️")
-            
-            with tip_c2:
-                with st.container(border=True):
-                    st.markdown("#### 🟨 Mercado de Cartões Real")
-                    st.markdown(f"- **Projeção Total da Partida:** `{total_cartoes:.2f}` cartões")
-                    st.markdown(f"- **Sugestão de Entrada:** `Mais de 4.5 Cartões Amarelos` 🟨" if total_cartoes >= 4.5 else "`Mais de 3.5 Cartões Amarelos` 🟨" if total_cartoes >= 3.5 else "`Menos de 4.5 Cartões Amarelos` 🛡️")
-                with st.container(border=True):
-                    st.markdown("#### 🔥 Bilhete Estruturado (Base Matemática)")
-                    opcoes_combo = ["Mais de 1.5 Gols" if total_gols >= 1.6 else "Menos de 3.5 Gols", "Mais de 8.5 Escanteios" if escanteios_jogo >= 9.0 else f"Mais de 3.5 Cantos para o {time_principal if c_proj_t1>c_proj_t2 else adversario}"]
-                    for idx, opt in enumerate(opcoes_combo, 1): st.markdown(f"{idx}. `{opt}`")
-            
-            st.markdown("---")
-            st.markdown(f"### 📜 Histórico Real de Confronto H2H")
-            df_h2h, _ = buscar_h2h_api(id_time1, id_time2, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-            if df_h2h is not None: st.dataframe(df_h2h, use_container_width=True, hide_index=True)
+        if usar_comparacao:
+            times_disponiveis = sorted(list(TEAM_IDS.keys()))
+            adversario = st.selectbox("Escolha o Time Adversário", [t for t in times_disponiveis if t != time_principal])
+            if adversario:
+                id_time2 = TEAM_IDS[adversario]
+                stats_t2 = buscar_estatisticas_time(id_time2, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+                corners_t2 = buscar_medias_escanteios(id_time2, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+                
+                gols_t1 = (stats_t1['gf_home'] + stats_t2['ga_away']) / 2
+                gols_t2 = (stats_t2['gf_away'] + stats_t1['ga_home']) / 2
+                total_gols = gols_t1 + gols_t2
+                
+                c_proj_t1 = (corners_t1['corners_for_home'] + corners_t2['corners_ag_away']) / 2
+                c_proj_t2 = (corners_t2['corners_for_away'] + corners_t1['corners_ag_home']) / 2
+                escanteios_jogo = c_proj_t1 + c_proj_t2
+                
+                total_cartoes = corners_t1['media_cartoes_pro'] + corners_t2['media_cartoes_pro']
+                
+                sc1, sc2, sc3, sc4 = st.columns(4)
+                sc1.metric(f"Expec. Gols ({time_principal})", f"{gols_t1:.2f}")
+                sc2.metric(f"Expec. Gols ({adversario})", f"{gols_t2:.2f}")
+                sc3.metric("Total de Gols Esperados", f"{total_gols:.2f}")
+                sc4.metric("Média Estimada de Cantos", f"{escanteios_jogo:.1f}")
+                
+                st.markdown("---")
+                st.markdown("### 💡 Smart Tipster: Sugestões de Apostas Automatizadas")
+                tip_c1, tip_c2 = st.columns(2)
+                
+                with tip_c1:
+                    with st.container(border=True):
+                        st.markdown("#### ⚽ Mercado de Gols & Projeções")
+                        st.markdown(f"- **Projeção Total:** `{total_gols:.2f}` gols")
+                        st.markdown(f"- **Sugestão Principal:** `Mais de 2.5 Gols` 🔥" if total_gols >= 2.5 else "`Mais de 1.5 Gols` ⚡" if total_gols >= 1.5 else "`Menos de 2.5 Gols` 🛡️")
+                        st.markdown(f"- **Ambas Marcam (BTTS):** `Sim` ✅" if gols_t1 >= 0.95 and gols_t2 >= 0.95 else "`Não` ❌")
+                    with st.container(border=True):
+                        st.markdown("#### 🚩 Projeção Fina de Escanteios")
+                        st.markdown(f"- **Total Estimado da Partida:** `{escanteios_jogo:.1f}` cantos")
+                        st.markdown(f"- **Sugestão:** `Mais de 9.5 Escanteios` 🔥" if escanteios_jogo >= 9.8 else "`Mais de 8.5 Escanteios` ⚡" if escanteios_jogo >= 8.8 else "`Menos de 10.5 Escanteios` 🛡️")
+                
+                with tip_c2:
+                    with st.container(border=True):
+                        st.markdown("#### 🟨 Mercado de Cartões Real")
+                        st.markdown(f"- **Projeção Total da Partida:** `{total_cartoes:.2f}` cartões")
+                        st.markdown(f"- **Sugestão de Entrada:** `Mais de 4.5 Cartões Amarelos` 🟨" if total_cartoes >= 4.5 else "`Mais de 3.5 Cartões Amarelos` 🟨" if total_cartoes >= 3.5 else "`Menos de 4.5 Cartões Amarelos` 🛡️")
+                    with st.container(border=True):
+                        st.markdown("#### 🔥 Bilhete Estruturado (Base Matemática)")
+                        opcoes_combo = ["Mais de 1.5 Gols" if total_gols >= 1.6 else "Menos de 3.5 Gols", "Mais de 8.5 Escanteios" if escanteios_jogo >= 9.0 else f"Mais de 3.5 Cantos para o {time_principal if c_proj_t1>c_proj_t2 else adversario}"]
+                        for idx, opt in enumerate(opcoes_combo, 1): st.markdown(f"{idx}. `{opt}`")
+                
+                st.markdown("---")
+                st.markdown(f"### 📜 Histórico Real de Confronto H2H")
+                df_h2h, _ = buscar_h2h_api(id_time1, id_time2, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+                if df_h2h is not None: st.dataframe(df_h2h, use_container_width=True, hide_index=True)
 
 # --- DISPARADOR DO TELEGRAM ---
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 📢 Enviar Análise para o Telegram")
 if st.sidebar.button("🚀 Disparar Alerta Pré-Live"):
-    if usar_comparacao and adversario:
+    if id_time1 and usar_comparacao and adversario:
         g_t1 = (stats_t1['gf_home'] + stats_t2['ga_away']) / 2
         g_t2 = (stats_t2['gf_away'] + stats_t1['ga_home']) / 2
         total_gols = g_t1 + g_t2
@@ -668,8 +716,10 @@ if st.sidebar.button("🚀 Disparar Alerta Pré-Live"):
         total_cartoes = corners_t1['media_cartoes_pro'] + corners_t2['media_cartoes_pro']
 
         msg = f"""🚨 <b>RAIO-X PRÉ-LIVE PRO (100% AUTOMATIZADO)</b> 🚨\n\n⚽ <b>{time_principal} (Casa) x {adversario} (Fora)</b>\n🏆 Competição: {opcao_liga} ({SEASON_EFETIVA})\n\n📊 <b>PROJEÇÃO DE GOLS & BTTS:</b>\n• Projeção {time_principal}: {g_t1:.2f} gols\n• Projeção {adversario}: {g_t2:.2f} gols\n• Total Estimado: {total_gols:.2f} gols\n• Ambos Marcam (BTTS): {btts_str}\n\n🚩 <b>PROJEÇÃO DE ESCANTEIOS (CANTOS):</b>\n• Projeção {time_principal}: {c_proj_t1:.2f} cantos\n• Projeção {adversario}: {c_proj_t2:.2f} cantos\n• Total Estimado no Jogo: {escanteios_jogo:.1f} cantos\n\n🟨 <b>PROJEÇÃO DE CARTÕES AMARELOS:</b>\n• Média {time_principal}: {corners_t1['media_cartoes_pro']:.2f} por jogo\n• Média {adversario}: {corners_t2['media_cartoes_pro']:.2f} por jogo\n• Total Estimado no Jogo: {total_cartoes:.2f} cartões\n\n📈 <i>Dica: Acesse o Painel Streamlit para conferir o Raio-X detalhado de Player Props por jogador!</i>"""
-    else:
+    elif id_time1:
         msg = f"""🚨 <b>RAIO-X INDIVIDUAL</b> 🚨\n\n⚽ <b>Time: {time_principal}</b>\n🏆 Competição: {opcao_liga} ({SEASON_EFETIVA})\n\n📊 <b>Média de Gols Feitos:</b> {stats_t1['gols_feitos_media']:.2f}\n📊 <b>Média de Gols Sofridos:</b> {stats_t1['gols_sofridos_media']:.2f}\n🚩 <b>Média de Cantos Pró:</b> {corners_t1['corners_for_geral']:.2f}\n🟨 <b>Média de Cartões Pró:</b> {corners_t1['media_cartoes_pro']:.2f}"""
+    else:
+        msg = f"""🚨 <b>PANORAMA GERAL DA COMPETIÇÃO</b> 🚨\n\n🏆 Competição: {opcao_liga} ({SEASON_EFETIVA})\n📌 Rodada Atual: {rodada_atual_str if rodada_atual_str else 'Em andamento'}\n\n📈 <i>Acesse o Painel Streamlit para acompanhar a tabela e os confrontos da rodada!</i>"""
     
     if enviar_alerta_telegram(msg): 
         st.sidebar.success("🎉 Alerta enviado para o Telegram com o layout completo!")
