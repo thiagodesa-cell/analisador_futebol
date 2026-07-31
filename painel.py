@@ -435,7 +435,16 @@ termo_busca_jogador = st.sidebar.text_input("Pesquisar Jogador no Elenco:", plac
 st.sidebar.markdown("---")
 st.sidebar.header("⚙️ Configurações de Análise")
 times_disponiveis = sorted(list(TEAM_IDS.keys()))
-time_principal = st.sidebar.selectbox("Escolha o Time", times_disponiveis)
+time_principal = st.sidebar.selectbox(
+    "Escolha o Time", 
+    times_disponiveis, 
+    index=None, 
+    placeholder="Selecione um time"
+)
+
+if not time_principal:
+    st.info("👈 Por favor, selecione um time na barra lateral para iniciar a análise.")
+    st.stop()
 
 with st.spinner(f"Extraindo dados reais de {opcao_liga}..."):
     id_time1 = TEAM_IDS[time_principal]
