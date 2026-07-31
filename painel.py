@@ -66,7 +66,25 @@ elif opcao_liga == "Copa Libertadores":
 else:
     LEAGUE_ID = 11
 
-st.sidebar.success(f"✅ Ativo: {opcao_liga} (Temporada {SEASON})!")
+# --- DETECÇÃO INTELIGENTE DE TEMPORADA VÁLIDA ---
+@st.cache_data(persist="disk")
+def descobrir_temporada_valida(league_id, season_atual, key, data_cache):
+    """Testa a temporada atual e a anterior para garantir que os dados existem na API."""
+    for s in [season_atual, season_atual - 1]:
+        url = f"https://v3.football.api-sports.io/teams?league={league_id}&season={s}"
+        headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
+        try:
+            res = requests.get(url, headers=headers)
+            data = res.json()
+            if data.get('results', 0) > 0:
+                return s
+        except:
+            pass
+    return season_atual
+
+SEASON_EFETIVA = descobrir_temporada_valida(LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+
+st.sidebar.success(f"✅ Ativo: {opcao_liga} (Temporada {SEASON_EFETIVA})!")
 st.sidebar.info(f"🔄 Última atualização base: {CHAVE_ATUALIZACAO} às 08:00")
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 👨‍💻 Painel Desenvolvido por:")
@@ -76,7 +94,7 @@ st.sidebar.markdown("📞 `(21) 96485-9482`")
 st.sidebar.markdown("---")
 
 st.title(f"⚽ Painel Analisador Esportivo Pro - {opcao_liga}")
-st.write(f"Dados integrados em tempo real via API-Football para a competição {opcao_liga}.")
+st.write(f"Dados integrados em tempo real via API-Football para a competição {opcao_liga} (Temporada {SEASON_EFETIVA}).")
 
 
 # --- FUNÇÃO DE ENVIO PARA O TELEGRAM ---
@@ -116,16 +134,19 @@ def buscar_tabela_classificacao(league_id, season, key, data_cache):
         res = requests.get(url, headers=headers)
         data = res.json()
         if data.get('results', 0) > 0:
-            standings = data['response'][0]['league']['standings'][0]
-            tabela = []
-            for s in standings:
-                tabela.append({
-                    'Pos': s['rank'], 'Time': s['team']['name'], 'Pts': s['points'],
-                    'J': s['all']['played'], 'V': s['all']['win'], 'E': s['all']['draw'],
-                    'D': s['all']['lose'], 'GP': s['all']['goals']['for'], 'GC': s['all']['goals']['against'],
-                    'SG': s['goalsDiff']
-                })
-            return pd.DataFrame(tabela)
+            # Algumas copas/ligas podem estruturar o standings de formas diferentes
+            response_league = data['response'][0]['league']
+            if 'standings' in response_league:
+                standings = response_league['standings'][0]
+                tabela = []
+                for s in standings:
+                    tabela.append({
+                        'Pos': s['rank'], 'Time': s['team']['name'], 'Pts': s['points'],
+                        'J': s['all']['played'], 'V': s['all']['win'], 'E': s['all']['draw'],
+                        'D': s['all']['lose'], 'GP': s['all']['goals']['for'], 'GC': s['all']['goals']['against'],
+                        'SG': s['goalsDiff']
+                    })
+                return pd.DataFrame(tabela)
     except:
         pass
     return pd.DataFrame()
@@ -400,7 +421,7 @@ def buscar_h2h_api(id1, id2, key, data_cache):
     return None, "Sem confrontos recentes."
 
 # --- CARREGAMENTO INICIAL DINÂMICO ---
-TEAM_IDS = buscar_times_por_liga(LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+TEAM_IDS = buscar_times_por_liga(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
 if not TEAM_IDS:
     st.warning(f"⚠️ Não foi possível carregar os times da competição selecionada.")
@@ -412,15 +433,15 @@ time_principal = st.sidebar.selectbox("Escolha o Time", times_disponiveis)
 
 with st.spinner(f"Extraindo dados reais de {opcao_liga}..."):
     id_time1 = TEAM_IDS[time_principal]
-    stats_t1 = buscar_estatisticas_time(id_time1, LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-    corners_t1 = buscar_medias_escanteios(id_time1, LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-    df_elenco_u5, string_forma_t1 = buscar_scout_elenco_u5(id_time1, LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-    df_tabela = buscar_tabela_classificacao(LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-    df_arbitros = buscar_dados_arbitros(LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-    df_jogos_liga = buscar_jogos_liga(LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-    rodada_atual_str = buscar_rodada_atual(LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    stats_t1 = buscar_estatisticas_time(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    corners_t1 = buscar_medias_escanteios(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    df_elenco_u5, string_forma_t1 = buscar_scout_elenco_u5(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    df_tabela = buscar_tabela_classificacao(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    df_arbitros = buscar_dados_arbitros(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    df_jogos_liga = buscar_jogos_liga(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    rodada_atual_str = buscar_rodada_atual(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     
-    df_min_gols_u4, df_cartoes_u4 = buscar_minutagem_u4(id_time1, LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    df_min_gols_u4, df_cartoes_u4 = buscar_minutagem_u4(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
 # --- ABAS DE NAVEGAÇÃO SUPERIOR ---
 aba_painel, aba_jogos_dia, aba_arbitros, aba_tabela = st.tabs([
@@ -428,14 +449,16 @@ aba_painel, aba_jogos_dia, aba_arbitros, aba_tabela = st.tabs([
 ])
 
 with aba_tabela:
-    st.subheader(f"🏆 Classificação Atual - {opcao_liga} ({SEASON})")
+    st.subheader(f"🏆 Classificação Atual - {opcao_liga} ({SEASON_EFETIVA})")
     if not df_tabela.empty:
         st.dataframe(df_tabela, use_container_width=True, hide_index=True)
+    else:
+        st.info("Classificação não disponível para este formato de mata-mata ou fase atual.")
 
 with aba_jogos_dia:
     st.subheader(f"📅 Calendário e Partidas da Rodada - {opcao_liga}")
     if not df_jogos_liga.empty:
-        filtro_opcao = st.radio("Filtrar visualização:", ["Ver Jogos da Rodada Atual", "Ver Todos los Jogos da Temporada" if 'Ver Todos os Jogos da Temporada' else "Ver Todos os Jogos da Temporada"], horizontal=True) # text fixed
+        filtro_opcao = st.radio("Filtrar visualização:", ["Ver Jogos da Rodada Atual", "Ver Todos os Jogos da Temporada"], horizontal=True)
         df_exibir = df_jogos_liga.copy()
         if filtro_opcao == "Ver Jogos da Rodada Atual":
             if rodada_atual_str:
@@ -516,8 +539,8 @@ with aba_painel:
         adversario = st.selectbox("Escolha o Time Adversário", [t for t in times_disponiveis if t != time_principal])
         if adversario:
             id_time2 = TEAM_IDS[adversario]
-            stats_t2 = buscar_estatisticas_time(id_time2, LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-            corners_t2 = buscar_medias_escanteios(id_time2, LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+            stats_t2 = buscar_estatisticas_time(id_time2, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+            corners_t2 = buscar_medias_escanteios(id_time2, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
             
             gols_t1 = (stats_t1['gf_home'] + stats_t2['ga_away']) / 2
             gols_t2 = (stats_t2['gf_away'] + stats_t1['ga_home']) / 2
@@ -585,9 +608,9 @@ if st.sidebar.button("🚀 Disparar Alerta Pré-Live"):
         cartoes_t2 = 2.10
         total_cartoes = cartoes_t1 + cartoes_t2
 
-        msg = f"""🚨 <b>RAIO-X PRÉ-LIVE PRO (100% AUTOMATIZADO)</b> 🚨\n\n⚽ <b>{time_principal} (Casa) x {adversario} (Fora)</b>\n🏆 Competição: {opcao_liga}\n\n📊 <b>PROJEÇÃO DE GOLS & BTTS:</b>\n• Projeção {time_principal}: {g_t1:.2f} gols\n• Projeção {adversario}: {g_t2:.2f} gols\n• Total Estimado: {total_gols:.2f} gols\n• Ambos Marcam (BTTS): {btts_str}\n\n🚩 <b>PROJEÇÃO DE ESCANTEIOS (CANTOS):</b>\n• Projeção {time_principal}: {c_proj_t1:.2f} cantos\n• Projeção {adversario}: {c_proj_t2:.2f} cantos\n• Total Estimado no Jogo: {escanteios_jogo:.1f} cantos\n\n🟨 <b>PROJEÇÃO DE CARTÕES AMARELOS:</b>\n• Média {time_principal}: {cartoes_t1:.2f} por jogo\n• Média {adversario}: {cartoes_t2:.2f} por jogo\n• Total Estimado no Jogo: {total_cartoes:.2f} cartões\n\n📈 <i>Dica: Acesse o Painel Streamlit para conferir o Raio-X detalhado de Player Props por jogador!</i>"""
+        msg = f"""🚨 <b>RAIO-X PRÉ-LIVE PRO (100% AUTOMATIZADO)</b> 🚨\n\n⚽ <b>{time_principal} (Casa) x {adversario} (Fora)</b>\n🏆 Competição: {opcao_liga} ({SEASON_EFETIVA})\n\n📊 <b>PROJEÇÃO DE GOLS & BTTS:</b>\n• Projeção {time_principal}: {g_t1:.2f} gols\n• Projeção {adversario}: {g_t2:.2f} gols\n• Total Estimado: {total_gols:.2f} gols\n• Ambos Marcam (BTTS): {btts_str}\n\n🚩 <b>PROJEÇÃO DE ESCANTEIOS (CANTOS):</b>\n• Projeção {time_principal}: {c_proj_t1:.2f} cantos\n• Projeção {adversario}: {c_proj_t2:.2f} cantos\n• Total Estimado no Jogo: {escanteios_jogo:.1f} cantos\n\n🟨 <b>PROJEÇÃO DE CARTÕES AMARELOS:</b>\n• Média {time_principal}: {cartoes_t1:.2f} por jogo\n• Média {adversario}: {cartoes_t2:.2f} por jogo\n• Total Estimado no Jogo: {total_cartoes:.2f} cartões\n\n📈 <i>Dica: Acesse o Painel Streamlit para conferir o Raio-X detalhado de Player Props por jogador!</i>"""
     else:
-        msg = f"""🚨 <b>RAIO-X INDIVIDUAL</b> 🚨\n\n⚽ <b>Time: {time_principal}</b>\n🏆 Competição: {opcao_liga}\n\n📊 <b>Média de Gols Feitos:</b> {stats_t1['gols_feitos_media']:.2f}\n📊 <b>Média de Gols Sofridos:</b> {stats_t1['gols_sofridos_media']:.2f}\n🚩 <b>Média de Cantos Pró:</b> {corners_t1['corners_for_geral']:.2f}"""
+        msg = f"""🚨 <b>RAIO-X INDIVIDUAL</b> 🚨\n\n⚽ <b>Time: {time_principal}</b>\n🏆 Competição: {opcao_liga} ({SEASON_EFETIVA})\n\n📊 <b>Média de Gols Feitos:</b> {stats_t1['gols_feitos_media']:.2f}\n📊 <b>Média de Gols Sofridos:</b> {stats_t1['gols_sofridos_media']:.2f}\n🚩 <b>Média de Cantos Pró:</b> {corners_t1['corners_for_geral']:.2f}"""
     
     if enviar_alerta_telegram(msg): 
         st.sidebar.success("🎉 Alerta enviado para o Telegram com o layout completo!")
