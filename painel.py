@@ -37,7 +37,7 @@ def obter_chave_atualizacao():
     else:
         return agora.strftime("%Y-%m-%d")
 
-CHAVE_ATUALIZACAO = obter_chave_atualizacao()
+CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v2"  # Versão atualizada para forçar limpeza de cache
 DATA_HOJE_STR = datetime.now().strftime("%Y-%m-%d")
 
 # --- BOTÃO DE SELEÇÃO DE LIGA NA BARRA LATERAL ---
@@ -258,7 +258,7 @@ def buscar_jogos_liga(league_id, season, key, data_cache):
 
 @st.cache_data(persist="disk")
 def buscar_jogos_monitorados_e_amistosos_por_data(data_str, key, cache_key):
-    """Busca jogos do dia nas ligas monitoradas E também inclui Amistosos (Club / International Friendlies)."""
+    """Busca jogos do dia nas ligas monitoradas E inclui Amistosos (Club / International Friendlies) de forma robusta."""
     url = f"https://v3.football.api-sports.io/fixtures?date={data_str}"
     headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
     try:
@@ -273,8 +273,10 @@ def buscar_jogos_monitorados_e_amistosos_por_data(data_str, key, cache_key):
                 
                 # Critério 1: Pertence às ligas oficiais monitoradas
                 eh_monitorada = league_id in LIGAS_MONITORADAS
-                # Critério 2: É jogo amistoso (Club Friendlies, International Friendlies, etc.)
-                eh_amistoso = 'friendly' in league_type or 'friendly' in league_name_api or 'amistoso' in league_name_api
+                
+                # Critério 2: É jogo amistoso (varredura ampla em inglês e português)
+                termos_amistoso = ['friendly', 'friendlies', 'amistoso', 'amistosos']
+                eh_amistoso = any(termo in league_name_api or termo in league_type for termo in termos_amistoso)
                 
                 if eh_monitorada or eh_amistoso:
                     date_str_f = f['fixture']['date']
@@ -750,7 +752,7 @@ if st.sidebar.button("🚀 Disparar Análise Pré-Live"):
     else: 
         st.sidebar.error("❌ Falha ao enviar.")
 
-# BOTÃO ATUALIZADO: VARREDURA NAS LIGAS MONITORADAS + AMISTOSOS DO DIA
+# BOTÃO: VARREDURA NAS LIGAS MONITORADAS + AMISTOSOS DO DIA
 if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (Ligas & Amistosos)"):
     with st.spinner("Varrendo partidas de hoje nas ligas oficiais e amistosos..."):
         jogos_monitorados_hoje = buscar_jogos_monitorados_e_amistosos_por_data(DATA_HOJE_STR, API_KEY_FIXA, CHAVE_ATUALIZACAO)
