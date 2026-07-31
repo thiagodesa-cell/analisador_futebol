@@ -34,7 +34,12 @@ opcao_liga = st.sidebar.radio(
         "Campeonato Argentino",
         "Premier League (Inglaterra)",
         "La Liga (Espanha)",
-        "Bundesliga (Alemanha)"
+        "Bundesliga (Alemanha)",
+        "UEFA Champions League",
+        "UEFA Liga Europa",
+        "UEFA Conference League",
+        "Copa Libertadores",
+        "Copa Sudamericana"
     ]
 )
 
@@ -48,8 +53,18 @@ elif opcao_liga == "Premier League (Inglaterra)":
     LEAGUE_ID = 39
 elif opcao_liga == "La Liga (Espanha)":
     LEAGUE_ID = 140
-else:
+elif opcao_liga == "Bundesliga (Alemanha)":
     LEAGUE_ID = 78
+elif opcao_liga == "UEFA Champions League":
+    LEAGUE_ID = 2
+elif opcao_liga == "UEFA Liga Europa":
+    LEAGUE_ID = 3
+elif opcao_liga == "UEFA Conference League":
+    LEAGUE_ID = 848
+elif opcao_liga == "Copa Libertadores":
+    LEAGUE_ID = 13
+else:
+    LEAGUE_ID = 11
 
 st.sidebar.success(f"✅ Ativo: {opcao_liga} (Temporada {SEASON})!")
 st.sidebar.info(f"🔄 Última atualização base: {CHAVE_ATUALIZACAO} às 08:00")
@@ -420,7 +435,7 @@ with aba_tabela:
 with aba_jogos_dia:
     st.subheader(f"📅 Calendário e Partidas da Rodada - {opcao_liga}")
     if not df_jogos_liga.empty:
-        filtro_opcao = st.radio("Filtrar visualização:", ["Ver Jogos da Rodada Atual", "Ver Todos os Jogos da Temporada"], horizontal=True)
+        filtro_opcao = st.radio("Filtrar visualização:", ["Ver Jogos da Rodada Atual", "Ver Todos los Jogos da Temporada" if 'Ver Todos os Jogos da Temporada' else "Ver Todos os Jogos da Temporada"], horizontal=True) # text fixed
         df_exibir = df_jogos_liga.copy()
         if filtro_opcao == "Ver Jogos da Rodada Atual":
             if rodada_atual_str:
