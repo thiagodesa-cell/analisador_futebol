@@ -454,7 +454,7 @@ if termo_busca:
     # Busca em Clubes
     clubes_encontrados = [c for c in times_disponiveis if termo_busca.lower() in c.lower()]
     if clubes_encontrados:
-        st.markdown(### 🏟️ Clubes Encontrados)
+        st.markdown("### 🏟️ Clubes Encontrados")
         for cl in clubes_encontrados:
             st.write(f"- **{cl}** (ID: `{TEAM_IDS[cl]}`)")
             
