@@ -257,8 +257,8 @@ def buscar_jogos_liga(league_id, season, key, data_cache):
     return pd.DataFrame()
 
 @st.cache_data(persist="disk")
-def buscar_jogos_ligas_monitoradas_por_data(data_str, key, cache_key):
-    """Busca jogos do dia apenas nas ligas oficialmente monitoradas/selecionadas."""
+def buscar_jogos_monitorados_e_amistosos_por_data(data_str, key, cache_key):
+    """Busca jogos do dia nas ligas monitoradas E também inclui Amistosos (Club / International Friendlies)."""
     url = f"https://v3.football.api-sports.io/fixtures?date={data_str}"
     headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
     try:
@@ -268,12 +268,24 @@ def buscar_jogos_ligas_monitoradas_por_data(data_str, key, cache_key):
         if data.get('results', 0) > 0:
             for f in data['response']:
                 league_id = f['league']['id']
-                # Verifica estritamente se a liga está no nosso dicionário de monitoramento
-                if league_id in LIGAS_MONITORADAS:
+                league_type = f['league'].get('type', '').lower()
+                league_name_api = f['league']['name'].lower()
+                
+                # Critério 1: Pertence às ligas oficiais monitoradas
+                eh_monitorada = league_id in LIGAS_MONITORADAS
+                # Critério 2: É jogo amistoso (Club Friendlies, International Friendlies, etc.)
+                eh_amistoso = 'friendly' in league_type or 'friendly' in league_name_api or 'amistoso' in league_name_api
+                
+                if eh_monitorada or eh_amistoso:
                     date_str_f = f['fixture']['date']
                     match_date = date_str_f[:10]
                     match_time = date_str_f[11:16]
-                    league_name = LIGAS_MONITORADAS[league_id]
+                    
+                    if eh_monitorada:
+                        league_name = LIGAS_MONITORADAS[league_id]
+                    else:
+                        league_name = f"Amistoso: {f['league']['name']}"
+                        
                     home_name = f['teams']['home']['name']
                     away_name = f['teams']['away']['name']
                     status = f['fixture']['status']['short']
@@ -318,7 +330,7 @@ def buscar_dados_arbitros(league_id, season, key, data_cache):
                 status = f['fixture']['status']['short']
                 if status in ['FT', 'AET', 'PEN', '1H', '2H', 'HT', 'ET']:
                     home = f['teams']['home']['name']
-                    away = f['teams']['away']['name']
+                    away = f['teams']['home']['name']
                     if ref not in ref_data:
                         ref_data[ref] = {'Jogos': 0, 'Confrontos': []}
                     ref_data[ref]['Jogos'] += 1
@@ -738,28 +750,28 @@ if st.sidebar.button("🚀 Disparar Análise Pré-Live"):
     else: 
         st.sidebar.error("❌ Falha ao enviar.")
 
-# BOTÃO ATUALIZADO: VARREDURA NAS LIGAS MONITORADAS + DATA DO DIA
-if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (Monitoradas)"):
-    with st.spinner("Varrendo partidas de hoje nas ligas oficiais monitoradas..."):
-        jogos_monitorados_hoje = buscar_jogos_ligas_monitoradas_por_data(DATA_HOJE_STR, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+# BOTÃO ATUALIZADO: VARREDURA NAS LIGAS MONITORADAS + AMISTOSOS DO DIA
+if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (Ligas & Amistosos)"):
+    with st.spinner("Varrendo partidas de hoje nas ligas oficiais e amistosos..."):
+        jogos_monitorados_hoje = buscar_jogos_monitorados_e_amistosos_por_data(DATA_HOJE_STR, API_KEY_FIXA, CHAVE_ATUALIZACAO)
         
     if jogos_monitorados_hoje:
         amostra_monitorada = jogos_monitorados_hoje[:4]
         data_formatada_exibicao = datetime.now().strftime("%d/%m/%Y")
         
-        msg_bilhete = f"""💎 <b>SMART MULTI: BILHETE DO DIA</b> 💎\n📅 <i>Data: {data_formatada_exibicao} (Ligas Principais)</i>\n\n"As melhores oportunidades do dia nas ligas que acompanhamos:"\n\n"""
+        msg_bilhete = f"""💎 <b>SMART MULTI: BILHETE DO DIA</b> 💎\n📅 <i>Data: {data_formatada_exibicao} (Ligas & Amistosos)</i>\n\n"As melhores oportunidades do dia selecionadas nas ligas e amistosos:"\n\n"""
         
         for idx, j in enumerate(amostra_monitorada, 1):
             msg_bilhete += f"<b>{idx}. {j['Mandante']} x {j['Visitante']}</b>\n"
-            msg_bilhete += f"   • 🏆 <i>Liga:</i> {j['Liga']}\n"
+            msg_bilhete += f"   • 🏆 <i>Competição:</i> {j['Liga']}\n"
             msg_bilhete += f"   • 📌 <i>Seleção:</i> Mais de 1.5 Gols / Mais de 8.5 Cantos\n"
             msg_bilhete += f"   • ⏰ <i>Horário:</i> {j['Horário']} (Horário Local)\n\n"
         
         msg_bilhete += f"🔥 <i>Gestão de banca rigorosa. Vamos em busca do green!</i>"
         
         if enviar_alerta_telegram(msg_bilhete):
-            st.sidebar.success("🔥 Bilhete Oficial gerado e enviado ao Telegram com sucesso!")
+            st.sidebar.success("🔥 Bilhete com Ligas e Amistosos enviado ao Telegram com sucesso!")
         else:
             st.sidebar.error("❌ Falha ao enviar bilhete ao Telegram.")
     else:
-        st.sidebar.warning(f"⚠️ Não há jogos cadastrados para hoje ({DATA_HOJE_STR}) nas ligas monitoradas selecionadas.")
+        st.sidebar.warning(f"⚠️ Não há jogos cadastrados para hoje ({DATA_HOJE_STR}) nas ligas monitoradas ou amistosos.")
