@@ -4,7 +4,7 @@ import requests
 import time
 from datetime import datetime, timedelta
 
-st.set_page_config(page_title="Painel Pro - Global Trading & Futebol", layout="wide")
+st.set_page_config(page_title="Smart Tipster Pro - Global Trading & Futebol", layout="wide")
 
 # --- CONFIGURAÇÃO DA API E TELEGRAM ---
 API_KEY_FIXA = "E89cc081ecbaaf1a7074e878c1cae0ff"
@@ -12,6 +12,15 @@ SEASON = datetime.now().year
 
 TELEGRAM_TOKEN = "8281259090:AAEggXJKpCMxRbhhrcCZymcmNUKWNoOPFfY"
 TELEGRAM_CHAT_ID = "-1004464226419"
+
+def enviar_telegram(mensagem):
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": mensagem, "parse_mode": "Markdown"}
+    try:
+        response = requests.post(url, json=payload)
+        return response.json().get("ok", False)
+    except:
+        return False
 
 # --- LÓGICA DE ATUALIZAÇÃO ÀS 8H DA MANHÃ ---
 def obter_chave_atualizacao():
@@ -23,15 +32,8 @@ def obter_chave_atualizacao():
 
 CHAVE_ATUALIZACAO = obter_chave_atualizacao()
 
-# --- BARRA LATERAL: SELEÇÃO DE MODO E LIGA ---
-st.sidebar.header("🏆 Navegação Global")
-modo_app = st.sidebar.radio(
-    "Selecione o modo de uso:",
-    ["Análise de Competição", "Pesquisa de Clube Específico", "Pesquisa de Jogador (Temporada)"]
-)
-
-st.sidebar.markdown("---")
-st.sidebar.header("⚙️ Competição")
+# --- BARRA LATERAL: CONFIGURAÇÕES E TELEGRAM ---
+st.sidebar.header("⚙️ Configurações & Competição")
 opcao_liga = st.sidebar.selectbox(
     "Escolha o campeonato:",
     [
@@ -89,9 +91,23 @@ def descobrir_temporada_valida(league_id, season_atual, key, data_cache):
 
 SEASON_EFETIVA = descobrir_temporada_valida(LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
-st.sidebar.success(f"✅ {opcao_liga} ({SEASON_EFETIVA})")
+st.sidebar.success(f"✅ Temporada Ativa: {SEASON_EFETIVA}")
 
-# --- FUNÇÕES DE BUSCA NA API (COM CACHE EM DISCO PERSISTENTE) ---
+# Seção do Telegram (Smart Tipster) na Barra Lateral
+st.sidebar.markdown("---")
+st.sidebar.header("📤 Smart Tipster (Telegram)")
+msg_personalizada = st.sidebar.text_area("Escreva sua análise/palpite para enviar:", placeholder="Ex: Análise forte para o jogo...")
+if st.sidebar.button("🚀 Enviar para o Telegram"):
+    if msg_personalizada.strip():
+        sucesso = enviar_telegram(msg_personalizada)
+        if sucesso:
+            st.sidebar.success("Mensagem enviada com sucesso!")
+        else:
+            st.sidebar.error("Erro ao enviar mensagem.")
+    else:
+        st.sidebar.warning("Digite uma mensagem antes de enviar.")
+
+# --- FUNÇÕES DE BUSCA NA API (COM CACHE EM DISCO) ---
 
 @st.cache_data(persist="disk")
 def buscar_times_por_liga(league_id, season, key, data_cache):
@@ -280,7 +296,6 @@ def buscar_estatisticas_time(team_id, league_id, season, key, data_cache):
 
 @st.cache_data(persist="disk")
 def buscar_estatisticas_jogadores_temporada(team_id, season, key, data_cache):
-    """Busca todas as estatísticas dos jogadores do clube selecionado para a temporada inteira."""
     url = f"https://v3.football.api-sports.io/players?team={team_id}&season={season}"
     headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
     try:
@@ -328,176 +343,140 @@ if not TEAM_IDS:
     st.warning(f"⚠️ Não foi possível carregar os times da competição selecionada.")
     st.stop()
 
-# --- ROTEAMENTO DOS MODOS DE VISUALIZAÇÃO ---
+# --- TELA PRINCIPAL COM ABAS DE PESQUISA POR DIGITAÇÃO E PAINEL ---
+st.title(f"⚽ Smart Tipster Pro - {opcao_liga}")
+st.write(f"Painel global integrado em tempo real (Temporada {SEASON_EFETIVA}).")
 
-if modo_app == "Pesquisa de Clube Específico":
-    st.title("🔍 Pesquisa de Clube na Temporada")
-    st.markdown("Digite ou selecione um clube para visualizar seus dados consolidados na temporada atual (sem confrontos diretos/H2H).")
+aba_painel, aba_busca_clube, aba_busca_jogador, aba_jogos_dia, aba_arbitros, aba_tabela = st.tabs([
+    "📊 Painel Principal & H2H", 
+    "🔍 Pesquisa de Clube", 
+    "👤 Pesquisa de Jogador", 
+    "📅 Jogos & Rodada", 
+    "⚖️ Árbitros", 
+    f"🏆 Tabela ({opcao_liga})"
+])
+
+# 1. ABA DE PESQUISA DE CLUBE (COM CAIXINHA DE DIGITAÇÃO)
+with aba_busca_clube:
+    st.subheader("🔍 Consulta Individual de Clube na Temporada")
+    st.markdown("Digite abaixo o nome do clube que deseja pesquisar:")
     
-    clube_pesquisado = st.selectbox("Selecione o Clube:", sorted(list(TEAM_IDS.keys())))
+    termo_clube = st.text_input("Digite o nome do clube:", placeholder="Ex: Flamengo, Arsenal, Boca Juniors...")
     
-    if clube_pesquisado:
-        id_clube = TEAM_IDS[clube_pesquisado]
-        with st.spinner(f"Carregando dados de {clube_pesquisado}..."):
-            stats_clube = buscar_estatisticas_time(id_clube, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-            corners_clube = buscar_medias_escanteios(id_clube, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-            df_elenco_temp = buscar_estatisticas_jogadores_temporada(id_clube, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-        
-        st.subheader(f"📊 Relatório do Clube: {clube_pesquisado} ({opcao_liga} - {SEASON_EFETIVA})")
-        
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Jogos Disputados", stats_clube['jogos'])
-        c2.metric("Clean Sheets (Jogos sem sofrer gol)", stats_clube['clean_sheets'])
-        c3.metric("Média Gols Feitos", f"{stats_clube['gols_feitos_media']:.2f}")
-        c4.metric("Média Gols Sofridos", f"{stats_clube['gols_sofridos_media']:.2f}")
-        
-        st.markdown("---")
-        col_gc1, col_gc2 = st.columns(2)
-        with col_gc1:
-            st.markdown("#### ⚽ Desempenho por Mando (Gols)")
-            st.markdown(f"- **Em Casa (Pró / Contra):** `{stats_clube['gf_home']:.2f}` / `{stats_clube['ga_home']:.2f}`")
-            st.markdown(f"- **Fora de Casa (Pró / Contra):** `{stats_clube['gf_away']:.2f}` / `{stats_clube['ga_away']:.2f}`")
-        with col_gc2:
-            st.markdown("#### 🚩 Desempenho por Mando (Escanteios)")
-            st.markdown(f"- **Cantos Pró (Geral):** `{corners_clube['corners_for_geral']:.2f}`")
-            st.markdown(f"- **Cantos Contra (Geral):** `{corners_clube['corners_ag_geral']:.2f}`")
+    if termo_clube:
+        times_encontrados = {k: v for k, v in TEAM_IDS.items() if termo_clube.lower() in k.lower()}
+        if times_encontrados:
+            clube_escolhido = st.selectbox("Selecione o clube correspondente:", list(times_encontrados.keys()))
+            id_clube_pesq = times_encontrados[clube_escolhido]
             
-        st.markdown("---")
-        st.subheader("👥 Elenco e Estatísticas Individuais na Temporada")
-        if not df_elenco_temp.empty:
-            st.dataframe(df_elenco_temp, use_container_width=True, hide_index=True)
+            with st.spinner(f"Carregando dados de {clube_escolhido}..."):
+                stats_clube = buscar_estatisticas_time(id_clube_pesq, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+                corners_clube = buscar_medias_escanteios(id_clube_pesq, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+                df_elenco_temp = buscar_estatisticas_jogadores_temporada(id_clube_pesq, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+            
+            st.markdown(f"### 📊 Relatório: {clube_escolhido} ({SEASON_EFETIVA})")
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Jogos Disputados", stats_clube['jogos'])
+            c2.metric("Clean Sheets", stats_clube['clean_sheets'])
+            c3.metric("Média Gols Feitos", f"{stats_clube['gols_feitos_media']:.2f}")
+            c4.metric("Média Gols Sofridos", f"{stats_clube['gols_sofridos_media']:.2f}")
+            
+            st.markdown("---")
+            st.subheader("👥 Elenco e Estatísticas na Temporada")
+            if not df_elenco_temp.empty:
+                st.dataframe(df_elenco_temp, use_container_width=True, hide_index=True)
+            else:
+                st.info("Estatísticas de elenco detalhadas indisponíveis para este clube.")
         else:
-            st.info("Estatísticas de elenco detalhadas indisponíveis para este clube no momento.")
+            st.warning("Nenhum clube encontrado com esse termo na competição atual.")
 
-elif modo_app == "Pesquisa de Jogador (Temporada)":
-    st.title("👤 Pesquisa de Jogador Individual")
-    st.markdown("Selecione o clube e busque pelo nome do atleta para analisar suas estatísticas completas na temporada.")
+# 2. ABA DE PESQUISA DE JOGADOR (COM CAIXINHA DE DIGITAÇÃO)
+with aba_busca_jogador:
+    st.subheader("👤 Consulta Individual de Jogador na Temporada")
+    st.markdown("Digite o nome do jogador para buscar estatísticas de finalizações, cartões, desarmes e faltas:")
     
-    col_p1, col_p2 = st.columns(2)
-    with col_p1:
-        clube_jogador = st.selectbox("Filtrar por Clube:", sorted(list(TEAM_IDS.keys())), key="select_clube_jogador")
+    termo_jogador = st.text_input("Digite o nome do jogador:", placeholder="Ex: Haaland, Pedro, Messi...")
     
-    if clube_jogador:
-        id_c_jog = TEAM_IDS[clube_jogador]
-        with st.spinner("Buscando atletas do clube..."):
-            df_jogadores = buscar_estatisticas_jogadores_temporada(id_c_jog, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    if termo_jogador:
+        with st.spinner("Buscando jogadores na competição..."):
+            # Varre os principais times para encontrar o jogador digitado
+            resultados_jogadores = []
+            for nome_t, id_t in list(TEAM_IDS.items())[:15]: # Busca otimizada nos primeiros times ou geral
+                df_j = buscar_estatisticas_jogadores_temporada(id_t, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+                if not df_j.empty:
+                    match_j = df_j[df_j['Nome'].str.contains(termo_jogador, case=False, na=False)]
+                    for _, row in match_j.iterrows():
+                        row_dict = row.to_dict()
+                        row_dict['Clube'] = nome_t
+                        resultados_jogadores.append(row_dict)
             
-        if not df_jogadores.empty:
-            with col_p2:
-                lista_nomes = sorted(df_jogadores['Nome'].unique().tolist())
-                jogador_escolhido = st.selectbox("Selecione ou Digite o Jogador:", lista_nomes)
-                
-            if jogador_escolhido:
-                dados_atleta = df_jogadores[df_jogadores['Nome'] == jogador_escolhido].iloc[0]
-                
-                st.markdown("---")
-                st.subheader(f"⚡ Ficha Técnica: {dados_atleta['Nome']} ({clube_jogador})")
+            df_resultado_busca = pd.DataFrame(resultados_jogadores)
+            
+        if not df_resultado_busca.empty:
+            st.success(f"Encontrado(s) {len(df_resultado_busca)} atleta(s)correspondente(s):")
+            for _, atleta in df_resultado_busca.iterrows():
+                st.markdown(f"---")
+                st.markdown(f"### ⚡ {atleta['Nome']} ({atleta['Clube']})")
                 
                 inf1, inf2, inf3, inf4 = st.columns(4)
-                inf1.metric("Posição", dados_atleta['Posição'])
-                inf2.metric("Idade / Nação", f"{dados_atleta['Idade']} | {dados_atleta['Nacionalidade']}")
-                inf3.metric("Partidas Jogadas", dados_atleta['Jogos'])
-                inf4.metric("Minutos em Campo", dados_atleta['Minutos'])
+                inf1.metric("Posição", atleta['Posição'])
+                inf2.metric("Idade / Nação", f"{atleta['Idade']} | {atleta['Nacionalidade']}")
+                inf3.metric("Partidas Jogadas", atleta['Jogos'])
+                inf4.metric("Minutos em Campo", atleta['Minutos'])
                 
                 st.markdown("#### 🎯 Estatísticas Principais na Temporada")
                 st1, st2, st3, st4 = st.columns(4)
-                st1.metric("Gols Marcados", dados_atleta['Gols'])
-                st1.metric("Assistências", dados_atleta['Assistências'])
-                st2.metric("Finalizações Totais", dados_atleta['Finalizações'])
-                st2.metric("Chutes no Alvo", dados_atleta['Chutes no Alvo'])
-                st3.metric("Faltas Cometidas", dados_atleta['Faltas Cometidas'])
-                st3.metric("Faltas Sofridas", dados_atleta['Faltas Sofridas'])
-                st4.metric("Desarmes", dados_atleta['Desarmes'])
-                st4.metric("Cartões (Amarelo / Vermelho)", f"{dados_atleta['Cartões Amarelos']} / {dados_atleta['Cartões Vermelhos']}")
+                st1.metric("Gols / Assistências", f"{atleta['Gols']} / {atleta['Assistências']}")
+                st2.metric("Finalizações / Alvo", f"{atleta['Finalizações']} / {atleta['Chutes no Alvo']}")
+                st3.metric("Faltas (Cometidas/Sofridas)", f"{atleta['Faltas Cometidas']} / {atleta['Faltas Sofridas']}")
+                st4.metric("Desarmes / Cartões (Am/Ver)", f"{atleta['Desarmes']} | {atleta['Cartões Amarelos']}/{atleta['Cartões Vermelhos']}")
         else:
-            st.warning("Não foi possível carregar os dados dos jogadores para este clube.")
+            st.warning("Nenhum jogador encontrado com esse nome.")
 
-else:
-    # MODO PADRÃO: PAINEL DA COMPETIÇÃO COMPLETO
-    time_principal = st.sidebar.selectbox("Escolha o Time Principal", sorted(list(TEAM_IDS.keys())))
+# 3. ABA PAINEL PRINCIPAL & H2H
+with aba_painel:
+    time_principal = st.selectbox("Escolha o Time Principal para Análise:", sorted(list(TEAM_IDS.keys())))
 
-    with st.spinner(f"Extraindo dados reais de {opcao_liga}..."):
+    if time_principal:
         id_time1 = TEAM_IDS[time_principal]
-        stats_t1 = buscar_estatisticas_time(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-        corners_t1 = buscar_medias_escanteios(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-        df_tabela = buscar_tabela_classificacao(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-        df_arbitros = buscar_dados_arbitros(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-        df_jogos_liga = buscar_jogos_liga(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-        rodada_atual_str = buscar_rodada_atual(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+        with st.spinner(f"Extraindo dados de {time_principal}..."):
+            stats_t1 = buscar_estatisticas_time(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+            corners_t1 = buscar_medias_escanteios(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
-    st.title(f"⚽ Painel Analisador Esportivo Pro - {opcao_liga}")
-    st.write(f"Dados integrados em tempo real via API-Football para a competição {opcao_liga} (Temporada {SEASON_EFETIVA}).")
-
-    aba_painel, aba_jogos_dia, aba_arbitros, aba_tabela = st.tabs([
-        "📊 Painel de Análise & Simulador H2H", "📅 Jogos & Rodada", "⚖️ Árbitros", f"🏆 Tabela ({opcao_liga})"
-    ])
-
-    with aba_tabela:
-        st.subheader(f"🏆 Classificação Atual - {opcao_liga} ({SEASON_EFETIVA})")
-        if not df_tabela.empty:
-            st.dataframe(df_tabela, use_container_width=True, hide_index=True)
-        else:
-            st.info("Classificação não disponível para este formato de mata-mata ou fase atual.")
-
-    with aba_jogos_dia:
-        st.subheader(f"📅 Calendário e Partidas da Rodada - {opcao_liga}")
-        if not df_jogos_liga.empty:
-            filtro_opcao = st.radio("Filtrar visualização:", ["Ver Jogos da Rodada Atual", "Ver Todos os Jogos da Temporada"], horizontal=True)
-            df_exibir = df_jogos_liga.copy()
-            if filtro_opcao == "Ver Jogos da Rodada Atual" and rodada_atual_str:
-                df_exibir = df_exibir[df_exibir['Rodada'] == rodada_atual_str]
-                st.success(f"📌 Exibindo jogos da **{rodada_atual_str}**")
-            if not df_exibir.empty:
-                st.dataframe(df_exibir[['Data', 'Horário', 'Rodada', 'Mandante', 'Placar', 'Visitante', 'Status']], use_container_width=True, hide_index=True)
-
-    with aba_arbitros:
-        st.subheader(f"⚖️ Perfil dos Árbitros - {opcao_liga}")
-        if not df_arbitros.empty:
-            st.dataframe(df_arbitros, use_container_width=True, hide_index=True)
-
-    with aba_painel:
-        st.subheader(f"📊 Análise Estruturada de Rendimento: {time_principal}")
-        
         rg1, rg2, rg3 = st.columns(3)
-        rg1.metric("Jogos Disputados na Temporada", stats_t1['jogos'])
-        rg2.metric("Jogos sem Sofrer Gols (Clean Sheets)", stats_t1['clean_sheets'])
-        rg3.markdown("💡 *Simule abaixo o confronto direto contra qualquer adversário.*")
+        rg1.metric("Jogos Disputados", stats_t1['jogos'])
+        rg2.metric("Clean Sheets", stats_t1['clean_sheets'])
+        rg3.markdown("💡 *Simule abaixo o confronto direto.*")
         
         st.markdown("---")
         col_esquerda_gols, col_direita_cantos = st.columns(2)
         
         with col_esquerda_gols:
-            st.markdown("### ⚽ Estatísticas e Histórico de Gols")
+            st.markdown("### ⚽ Gols")
             g_col1, g_col2 = st.columns(2)
-            g_col1.metric("Média Gols Feitos (Geral)", f"{stats_t1['gols_feitos_media']:.2f}")
-            g_col2.metric("Média Gols Sofridos (Geral)", f"{stats_t1['gols_sofridos_media']:.2f}")
-            g_col3, g_col4 = st.columns(2)
-            g_col3.metric("Mando Casa (Pró / Contra)", f"{stats_t1['gf_home']:.2f} / {stats_t1['ga_home']:.2f}")
-            g_col4.metric("Mando Fora (Pró / Contra)", f"{stats_t1['gf_away']:.2f} / {stats_t1['ga_away']:.2f}")
+            g_col1.metric("Média Gols Feitos", f"{stats_t1['gols_feitos_media']:.2f}")
+            g_col2.metric("Média Gols Sofridos", f"{stats_t1['gols_sofridos_media']:.2f}")
             
             if not corners_t1['df_historico'].empty:
-                st.markdown("**Últimas 10 Partidas (Histórico de Placares & Gols):**")
-                st.dataframe(corners_t1['df_historico'][['Data', 'Adversário', 'Mando', 'Placar', 'Gols Marcados', 'Gols Sofridos']], use_container_width=True, hide_index=True)
+                st.markdown("**Últimas Partidas (Gols):**")
+                st.dataframe(corners_t1['df_historico'][['Data', 'Adversário', 'Mando', 'Placar']], use_container_width=True, hide_index=True)
 
         with col_direita_cantos:
-            st.markdown("### 🚩 Estatísticas e Histórico de Escanteios")
+            st.markdown("### 🚩 Escanteios")
             e_col1, e_col2 = st.columns(2)
-            e_col1.metric("Cantos Pró (Média Geral)", f"{corners_t1['corners_for_geral']:.2f}")
-            e_col2.metric("Cantos Contra (Média Geral)", f"{corners_t1['corners_ag_geral']:.2f}")
-            e_col3, e_col4 = st.columns(2)
-            e_col3.metric("Mando Casa (Pró / Contra)", f"{corners_t1['corners_for_home']:.2f} / {corners_t1['corners_ag_home']:.2f}")
-            e_col4.metric("Mando Fora (Pró / Contra)", f"{corners_t1['corners_for_away']:.2f} / {corners_t1['corners_ag_away']:.2f}")
+            e_col1.metric("Cantos Pró (Média)", f"{corners_t1['corners_for_geral']:.2f}")
+            e_col2.metric("Cantos Contra (Média)", f"{corners_t1['corners_ag_geral']:.2f}")
             
             if not corners_t1['df_historico'].empty:
-                st.markdown("**Últimas 10 Partidas (Histórico de Tiros de Canto):**")
-                st.dataframe(corners_t1['df_historico'][['Data', 'Adversário', 'Mando', 'Cantos Pró', 'Cantos Contra', 'Total Cantos']], use_container_width=True, hide_index=True)
+                st.markdown("**Últimas Partidas (Cantos):**")
+                st.dataframe(corners_t1['df_historico'][['Data', 'Adversário', 'Cantos Pró', 'Cantos Contra', 'Total Cantos']], use_container_width=True, hide_index=True)
                 
         st.markdown("---")
         st.subheader("🤖 Simulador de Confronto Direto & H2H")
-        usar_comparacao = st.checkbox("Ativar comparação e simulação contra um adversário")
+        usar_comparacao = st.checkbox("Ativar simulação contra adversário")
         
         if usar_comparacao:
-            adversario = st.selectbox("Escolha o Time Adversário", [t for t in sorted(list(TEAM_IDS.keys())) if t != time_principal])
+            adversario = st.selectbox("Escolha o Adversário", [t for t in sorted(list(TEAM_IDS.keys())) if t != time_principal])
             if adversario:
                 id_time2 = TEAM_IDS[adversario]
                 stats_t2 = buscar_estatisticas_time(id_time2, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
@@ -507,12 +486,33 @@ else:
                 gols_t2 = (stats_t2['gf_away'] + stats_t1['ga_home']) / 2
                 total_gols = gols_t1 + gols_t2
                 
-                c_proj_t1 = (corners_t1['corners_for_home'] + corners_t2['corners_ag_away']) / 2
-                c_proj_t2 = (corners_t2['corners_for_away'] + corners_t1['corners_ag_home']) / 2
-                escanteios_jogo = c_proj_t1 + c_proj_t2
-                
-                sc1, sc2, sc3, sc4 = st.columns(4)
-                sc1.metric(f"Expec. Gols ({time_principal})", f"{gols_t1:.2f}")
-                sc2.metric(f"Expec. Gols ({adversario})", f"{gols_t2:.2f}")
-                sc3.metric("Total de Gols Esperados", f"{total_gols:.2f}")
-                sc4.metric("Média Estimada de Cantos", f"{escanteios_jogo:.1f}")
+                sc1, sc2, sc3 = st.columns(3)
+                sc1.metric(f"Exp. Gols ({time_principal})", f"{gols_t1:.2f}")
+                sc2.metric(f"Exp. Gols ({adversario})", f"{gols_t2:.2f}")
+                sc3.metric("Total Gols Esperados", f"{total_gols:.2f}")
+
+# 4. ABA DE JOGOS DA RODADA
+with aba_jogos_dia:
+    st.subheader("📅 Calendário de Partidas")
+    df_jogos_liga = buscar_jogos_liga(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    rodada_atual_str = buscar_rodada_atual(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    if not df_jogos_liga.empty:
+        filtro_opcao = st.radio("Filtrar:", ["Jogos da Rodada Atual", "Todos os Jogos"], horizontal=True)
+        df_exibir = df_jogos_liga.copy()
+        if filtro_opcao == "Jogos da Rodada Atual" and rodada_atual_str:
+            df_exibir = df_exibir[df_exibir['Rodada'] == rodada_atual_str]
+        st.dataframe(df_exibir, use_container_width=True, hide_index=True)
+
+# 5. ABA DE ÁRBITROS
+with aba_arbitros:
+    st.subheader("⚖️ Perfil dos Árbitros")
+    df_arbitros = buscar_dados_arbitros(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    if not df_arbitros.empty:
+        st.dataframe(df_arbitros, use_container_width=True, hide_index=True)
+
+# 6. ABA DE TABELA
+with aba_tabela:
+    st.subheader("🏆 Tabela de Classificação")
+    df_tabela = buscar_tabela_classificacao(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    if not df_tabela.empty:
+        st.dataframe(df_tabela, use_container_width=True, hide_index=True)
