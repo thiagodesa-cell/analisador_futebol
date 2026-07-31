@@ -84,6 +84,114 @@ def descobrir_temporada_valida(league_id, season_atual, key, data_cache):
 
 SEASON_EFETIVA = descobrir_temporada_valida(LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
+# --- FUNÇÕES DE BUSCA NA API (COM CACHE EM DISCO PERSISTENTE) ---
+
+@st.cache_data(persist="disk")
+def buscar_times_por_liga(league_id, season, key, data_cache):
+    url = f"https://v3.football.api-sports.io/teams?league={league_id}&season={season}"
+    headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
+    try:
+        res = requests.get(url, headers=headers)
+        data = res.json()
+        times_dict = {}
+        if data.get('results', 0) > 0:
+            for item in data['response']:
+                times_dict[item['team']['name']] = item['team']['id']
+            return times_dict
+    except:
+        pass
+    return {}
+
+@st.cache_data(persist="disk")
+def buscar_times_global(termo, season, key, data_cache):
+    url = f"https://v3.football.api-sports.io/teams?search={termo}"
+    headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
+    try:
+        res = requests.get(url, headers=headers)
+        data = res.json()
+        times_dict = {}
+        if data.get('results', 0) > 0:
+            for item in data['response']:
+                t_name = item['team']['name']
+                t_id = item['team']['id']
+                country = item['venue'].get('country') or item['team'].get('country', 'Mundo')
+                label = f"{t_name} ({country})"
+                times_dict[label] = {'id': t_id, 'name': t_name}
+            return times_dict
+    except:
+        pass
+    return {}
+
+@st.cache_data(persist="disk")
+def buscar_liga_por_time(team_id, season, key, data_cache):
+    url = f"https://v3.football.api-sports.io/leagues?team={team_id}&season={season}"
+    headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
+    try:
+        res = requests.get(url, headers=headers)
+        data = res.json()
+        if data.get('results', 0) > 0:
+            league_info = data['response'][0]['league']
+            return league_info['id'], league_info['name']
+    except:
+        pass
+    return None, None
+
+TEAM_IDS = buscar_times_por_liga(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+
+# --- NOVO: BUSCA GLOBAL DE CLUBES (MUNDO) ---
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 🌍 Busca Global de Clubes")
+termo_busca_global = st.sidebar.text_input("Pesquisar qualquer clube no mundo:", placeholder="Ex: Real Madrid, Flamengo...")
+
+clube_global_selecionado = None
+id_time_global = None
+
+if termo_busca_global and len(termo_busca_global) >= 2:
+    dict_globais = buscar_times_global(termo_busca_global, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    if dict_globais:
+        escolha_g = st.sidebar.selectbox(
+            "Resultados da Busca Global:", 
+            list(dict_globais.keys()), 
+            index=None, 
+            placeholder="Selecione o clube..."
+        )
+        if escolha_g:
+            clube_global_selecionado = dict_globais[escolha_g]['name']
+            id_time_global = dict_globais[escolha_g]['id']
+            l_id, l_name = buscar_liga_por_time(id_time_global, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+            if l_id:
+                LEAGUE_ID = l_id
+                opcao_liga = l_name
+                TEAM_IDS = buscar_times_por_liga(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    else:
+        st.sidebar.warning("Nenhum clube encontrado com esse nome.")
+
+# --- QUADRINHO DE BUSCA EXCLUSIVA DE JOGADORES NO TOPO DA BARRA LATERAL ---
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 🔍 Busca de Jogador")
+termo_busca_jogador = st.sidebar.text_input("Pesquisar Jogador no Elenco:", placeholder="Digite o nome do jogador...")
+
+# --- CONFIGURAÇÕES DE ANÁLISE ---
+st.sidebar.markdown("---")
+st.sidebar.header("⚙️ Configurações de Análise")
+
+if clube_global_selecionado:
+    time_principal = clube_global_selecionado
+    id_time1 = id_time_global
+    st.sidebar.success(f"🌐 Ativo via Busca Global: **{time_principal}**")
+else:
+    times_disponiveis = sorted(list(TEAM_IDS.keys())) if TEAM_IDS else []
+    time_principal = st.sidebar.selectbox(
+        "Escolha o Time", 
+        times_disponiveis, 
+        index=None, 
+        placeholder="Selecione um time"
+    )
+    if not time_principal:
+        st.info("👈 Por favor, selecione um time na barra lateral ou utilize a Busca Global de Clubes para iniciar a análise.")
+        st.stop()
+    id_time1 = TEAM_IDS[time_principal]
+
 st.sidebar.success(f"✅ Ativo: {opcao_liga} (Temporada {SEASON_EFETIVA})!")
 st.sidebar.info(f"🔄 Última atualização base: {CHAVE_ATUALIZACAO} às 08:00")
 st.sidebar.markdown("---")
@@ -108,23 +216,7 @@ def enviar_alerta_telegram(mensagem):
         return False
 
 
-# --- FUNÇÕES DE BUSCA NA API (COM CACHE EM DISCO PERSISTENTE) ---
-
-@st.cache_data(persist="disk")
-def buscar_times_por_liga(league_id, season, key, data_cache):
-    url = f"https://v3.football.api-sports.io/teams?league={league_id}&season={season}"
-    headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
-    try:
-        res = requests.get(url, headers=headers)
-        data = res.json()
-        times_dict = {}
-        if data.get('results', 0) > 0:
-            for item in data['response']:
-                times_dict[item['team']['name']] = item['team']['id']
-            return times_dict
-    except:
-        pass
-    return {}
+# --- OUTRAS FUNÇÕES DE BUSCA NA API ---
 
 @st.cache_data(persist="disk")
 def buscar_tabela_classificacao(league_id, season, key, data_cache):
@@ -419,35 +511,7 @@ def buscar_h2h_api(id1, id2, key, data_cache):
         pass
     return None, "Sem confrontos recentes."
 
-# --- CARREGAMENTO INICIAL DINÂMICO ---
-TEAM_IDS = buscar_times_por_liga(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-
-if not TEAM_IDS:
-    st.warning(f"⚠️ Não foi possível carregar os times da competição selecionada.")
-    st.stop()
-
-# --- QUADRINHO DE BUSCA EXCLUSIVA DE JOGADORES NO TOPO DA BARRA LATERAL ---
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 🔍 Busca de Jogador")
-termo_busca_jogador = st.sidebar.text_input("Pesquisar Jogador no Elenco:", placeholder="Digite o nome do jogador...")
-
-# --- CONFIGURAÇÕES DE ANÁLISE (SELEÇÃO DO CLUBE MAIS ABAIXO) ---
-st.sidebar.markdown("---")
-st.sidebar.header("⚙️ Configurações de Análise")
-times_disponiveis = sorted(list(TEAM_IDS.keys()))
-time_principal = st.sidebar.selectbox(
-    "Escolha o Time", 
-    times_disponiveis, 
-    index=None, 
-    placeholder="Selecione um time"
-)
-
-if not time_principal:
-    st.info("👈 Por favor, selecione um time na barra lateral para iniciar a análise.")
-    st.stop()
-
 with st.spinner(f"Extraindo dados reais de {opcao_liga}..."):
-    id_time1 = TEAM_IDS[time_principal]
     stats_t1 = buscar_estatisticas_time(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     corners_t1 = buscar_medias_escanteios(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     df_elenco_u5, string_forma_t1 = buscar_scout_elenco_u5(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
@@ -455,10 +519,9 @@ with st.spinner(f"Extraindo dados reais de {opcao_liga}..."):
     df_arbitros = buscar_dados_arbitros(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     df_jogos_liga = buscar_jogos_liga(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     rodada_atual_str = buscar_rodada_atual(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-    
     df_min_gols_u4, df_cartoes_u4 = buscar_minutagem_u4(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
-# --- PROCESSAMENTO DA BUSCA POR JOGADOR (EXCLUSIVO NO ELENCO SELECIONADO) ---
+# --- PROCESSAMENTO DA BUSCA POR JOGADOR ---
 if termo_busca_jogador:
     st.info(f"🔍 Filtrando jogador(es) para o termo: **{termo_busca_jogador}** em **{time_principal}**")
     if not df_elenco_u5.empty:
@@ -563,6 +626,7 @@ with aba_painel:
     usar_comparacao = st.checkbox("Ativar comparação e simulação contra um adversário")
     
     if usar_comparacao:
+        times_disponiveis = sorted(list(TEAM_IDS.keys()))
         adversario = st.selectbox("Escolha o Time Adversário", [t for t in times_disponiveis if t != time_principal])
         if adversario:
             id_time2 = TEAM_IDS[adversario]
