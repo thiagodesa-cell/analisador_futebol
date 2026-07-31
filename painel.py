@@ -15,7 +15,6 @@ TELEGRAM_CHAT_ID = "-1004464226419"
 
 # --- LÓGICA DE ATUALIZAÇÃO ÀS 8H DA MANHÃ ---
 def obter_chave_atualizacao():
-    """Gera uma string que só muda às 8:00 da manhã de cada dia."""
     agora = datetime.now()
     if agora.hour < 8:
         return (agora - timedelta(days=1)).strftime("%Y-%m-%d")
@@ -23,6 +22,7 @@ def obter_chave_atualizacao():
         return agora.strftime("%Y-%m-%d")
 
 CHAVE_ATUALIZACAO = obter_chave_atualizacao()
+DATA_HOJE_STR = datetime.now().strftime("%Y-%m-%d")
 
 # --- BOTÃO DE SELEÇÃO DE LIGA NA BARRA LATERAL ---
 st.sidebar.header("🏆 Seleção da Competição Global")
@@ -72,7 +72,6 @@ else:
 # --- DETECÇÃO INTELIGENTE DE TEMPORADA VÁLIDA ---
 @st.cache_data(persist="disk")
 def descobrir_temporada_valida(league_id, season_atual, key, data_cache):
-    """Testa a temporada atual e a anterior para garantir que os dados existem na API."""
     for s in [season_atual, season_atual - 1]:
         url = f"https://v3.football.api-sports.io/teams?league={league_id}&season={s}"
         headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
@@ -263,6 +262,7 @@ def buscar_jogos_liga(league_id, season, key, data_cache):
                 
                 jogos_lista.append({
                     'Data': f"{match_date[8:10]}/{match_date[5:7]}/{match_date[0:4]}",
+                    'DataISO': match_date,
                     'Horário': match_time,
                     'Rodada': round_name,
                     'Mandante': home_name,
@@ -274,6 +274,40 @@ def buscar_jogos_liga(league_id, season, key, data_cache):
     except:
         pass
     return pd.DataFrame()
+
+@st.cache_data(persist="disk")
+def buscar_jogos_globais_por_data(data_str, key, cache_key):
+    """Busca todos os jogos do mundo inteiro em uma data específica (ex: hoje)."""
+    url = f"https://v3.football.api-sports.io/fixtures?date={data_str}"
+    headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
+    try:
+        res = requests.get(url, headers=headers)
+        data = res.json()
+        jogos_global = []
+        if data.get('results', 0) > 0:
+            for f in data['response']:
+                date_str_f = f['fixture']['date']
+                match_date = date_str_f[:10]
+                match_time = date_str_f[11:16]
+                league_name = f['league']['name']
+                country = f['league'].get('country', 'Mundo')
+                home_name = f['teams']['home']['name']
+                away_name = f['teams']['away']['name']
+                status = f['fixture']['status']['short']
+                
+                # Apenas jogos que ainda não terminaram ou do dia
+                if status in ['NS', 'TBD', '1H', 'HT', '2H']:
+                    jogos_global.append({
+                        'Liga': f"{league_name} ({country})",
+                        'Mandante': home_name,
+                        'Visitante': away_name,
+                        'Data': f"{match_date[8:10]}/{match_date[5:7]}/{match_date[0:4]}",
+                        'Horário': match_time
+                    })
+            return jogos_global
+    except:
+        pass
+    return []
 
 @st.cache_data(persist="disk")
 def buscar_rodada_atual(league_id, season, key, data_cache):
@@ -722,25 +756,29 @@ if st.sidebar.button("🚀 Disparar Análise Pré-Live"):
     else: 
         st.sidebar.error("❌ Falha ao enviar.")
 
-# NOVO BOTÃO: BILHETE DO DIA / SMART MULTI AUTOMATIZADO
-if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia'"):
-    # Monta uma seleção inteligente baseada na rodada atual
-    msg_bilhete = f"""💎 <b>SMART MULTI: BILHETE DO DIA</b> 💎\n🏆 <i>{opcao_liga} ({SEASON_EFETIVA})</i>\n\n"As melhores oportunidades selecionadas por inteligência estatística:"\n\n"""
-    
-    if not df_jogos_liga.empty:
-        # Pega até 3 jogos da rodada atual como exemplo de bilhete pronto
-        jogos_amostra = df_jogos_liga.head(3)
-        for idx, row in enumerate(jogos_amostra.iterrows(), 1):
-            j = row[1]
+# BOTÃO ATUALIZADO: VARREDURA GLOBAL + DATA CORRIGIDA DO DIA
+if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (Global)"):
+    with st.spinner("Varrendo partidas do mundo todo para hoje..."):
+        jogos_hoje_mundo = buscar_jogos_globais_por_data(DATA_HOJE_STR, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+        
+    if jogos_hoje_mundo:
+        # Pega até 4 jogos globais de destaque de hoje
+        amostra_global = jogos_hoje_mundo[:4]
+        data_formatada_exibicao = datetime.now().strftime("%d/%m/%Y")
+        
+        msg_bilhete = f"""💎 <b>SMART MULTI: BILHETE DO DIA</b> 💎\n📅 <i>Data: {data_formatada_exibicao} (Varredura Global)</i>\n\n"As melhores oportunidades do dia selecionadas por inteligência estatística:"\n\n"""
+        
+        for idx, j in enumerate(amostra_global, 1):
             msg_bilhete += f"<b>{idx}. {j['Mandante']} x {j['Visitante']}</b>\n"
+            msg_bilhete += f"   • 🏆 <i>Liga:</i> {j['Liga']}\n"
             msg_bilhete += f"   • 📌 <i>Seleção:</i> Mais de 1.5 Gols / Mais de 8.5 Cantos\n"
-            msg_bilhete += f"   • ⏰ <i>Horário:</i> {j['Data']} às {j['Horário']}\n\n"
+            msg_bilhete += f"   • ⏰ <i>Horário:</i> {j['Horário']} (Horário Local)\n\n"
         
         msg_bilhete += f"🔥 <i>Gestão de banca rigorosa. Vamos em busca do green!</i>"
         
         if enviar_alerta_telegram(msg_bilhete):
-            st.sidebar.success("🔥 Bilhete do Dia gerado e enviado ao Telegram!")
+            st.sidebar.success("🔥 Bilhete Global do Dia gerado e enviado ao Telegram com sucesso!")
         else:
-            st.sidebar.error("❌ Falha ao enviar bilhete.")
+            st.sidebar.error("❌ Falha ao enviar bilhete ao Telegram.")
     else:
-        st.sidebar.warning("⚠️ Não há jogos suficientes carregados para gerar o bilhete.")
+        st.sidebar.warning(f"⚠️ Não foram encontrados jogos futuros/em andamento cadastrados para hoje ({DATA_HOJE_STR}) na varredura global.")
