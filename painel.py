@@ -138,10 +138,10 @@ def buscar_liga_por_time(team_id, season, key, data_cache):
 
 TEAM_IDS = buscar_times_por_liga(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
-# --- NOVO: BUSCA GLOBAL DE CLUBES (MUNDO) ---
+# --- BUSCA GLOBAL DE CLUBES (MUNDO) ---
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 🌍 Busca Global de Clubes")
-termo_busca_global = st.sidebar.text_input("Pesquisar qualquer clube no mundo:", placeholder="Ex: Real Madrid, Flamengo...")
+termo_busca_global = st.sidebar.text_input("Pesquisar qualquer clube no mundo:", placeholder="Ex: Flamengo, Real Madrid...")
 
 clube_global_selecionado = None
 id_time_global = None
@@ -166,7 +166,7 @@ if termo_busca_global and len(termo_busca_global) >= 2:
     else:
         st.sidebar.warning("Nenhum clube encontrado com esse nome.")
 
-# --- QUADRINHO DE BUSCA EXCLUSIVA DE JOGADORES NO TOPO DA BARRA LATERAL ---
+# --- BUSCA EXCLUSIVA DE JOGADORES NO TOPO DA BARRA LATERAL ---
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 🔍 Busca de Jogador")
 termo_busca_jogador = st.sidebar.text_input("Pesquisar Jogador no Elenco:", placeholder="Digite o nome do jogador...")
@@ -216,7 +216,7 @@ def enviar_alerta_telegram(mensagem):
         return False
 
 
-# --- OUTRAS FUNÇÕES DE BUSCA NA API ---
+# --- FUNÇÕES DE BUSCA NA API ---
 
 @st.cache_data(persist="disk")
 def buscar_tabela_classificacao(league_id, season, key, data_cache):
@@ -324,6 +324,8 @@ def buscar_medias_escanteios(team_id, league_id, season, key, data_cache):
     headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
     cantos_pro_casa, cantos_contra_casa = [], []
     cantos_pro_fora, cantos_contra_fora = [], []
+    cartoes_pro_casa, cartoes_contra_casa_list = [], []
+    cartoes_pro_fora, cartoes_contra_fora_list = [], []
     detalhes = []
     try:
         res = requests.get(url_fixtures, headers=headers)
@@ -345,35 +347,53 @@ def buscar_medias_escanteios(team_id, league_id, season, key, data_cache):
                 res_s = requests.get(f"https://v3.football.api-sports.io/fixtures/statistics?fixture={f_id}", headers=headers)
                 data_s = res_s.json()
                 
+                t_corners, o_corners = 0, 0
+                t_yellow, o_yellow = 0, 0
                 if data_s.get('results', 0) > 0:
-                    t_corners, o_corners = 0, 0
                     for item in data_s['response']:
-                        c_val = next((int(s['value']) for s in item['statistics'] if s['type'] == 'Corner Kicks' and s['value'] is not None), 0)
-                        if item['team']['id'] == team_id: t_corners = c_val
-                        else: o_corners = c_val
-                    
-                    if is_home:
-                        cantos_pro_casa.append(t_corners)
-                        cantos_contra_casa.append(o_corners)
-                    else:
-                        cantos_pro_fora.append(t_corners)
-                        cantos_contra_fora.append(o_corners)
-                    
-                    detalhes.append({
-                        'Data': f"{dt[8:10]}/{dt[5:7]}/{dt[0:4]}", 'Adversário': adv,
-                        'Mando': 'Casa' if is_home else 'Fora', 'Placar': placar_real,
-                        'Gols Marcados': g_pro, 'Gols Sofridos': g_contra,
-                        'Cantos Pró': t_corners, 'Cantos Contra': o_corners, 'Total Cantos': t_corners + o_corners
-                    })
+                        for s in item['statistics']:
+                            if s['type'] == 'Corner Kicks' and s['value'] is not None:
+                                c_val = int(s['value'])
+                                if item['team']['id'] == team_id: t_corners = c_val
+                                else: o_corners = c_val
+                            elif s['type'] == 'Yellow Cards' and s['value'] is not None:
+                                y_val = int(s['value'])
+                                if item['team']['id'] == team_id: t_yellow = y_val
+                                else: o_yellow = y_val
+                
+                if is_home:
+                    cantos_pro_casa.append(t_corners)
+                    cantos_contra_casa.append(o_corners)
+                    cartoes_pro_casa.append(t_yellow)
+                    cartoes_contra_casa_list.append(o_yellow)
+                else:
+                    cantos_pro_fora.append(t_corners)
+                    cantos_contra_fora.append(o_corners)
+                    cartoes_pro_fora.append(t_yellow)
+                    cartoes_contra_fora_list.append(o_yellow)
+                
+                detalhes.append({
+                    'Data': f"{dt[8:10]}/{dt[5:7]}/{dt[0:4]}", 'Adversário': adv,
+                    'Mando': 'Casa' if is_home else 'Fora', 'Placar': placar_real,
+                    'Gols Pró': g_pro, 'Gols Contra': g_contra,
+                    'Cantos Pró': t_corners, 'Cantos Contra': o_corners, 'Total Cantos': t_corners + o_corners,
+                    'Cartões Pró': t_yellow, 'Cartões Contra': o_yellow, 'Total Cartões': t_yellow + o_yellow
+                })
+        
+        todas_cartoes_pro = cartoes_pro_casa + cartoes_pro_fora
+        todas_cartoes_contra = cartoes_contra_casa_list + cartoes_contra_fora_list
+        
         return {
             'corners_for_geral': (sum(cantos_pro_casa+cantos_pro_fora)/max(len(cantos_pro_casa+cantos_pro_fora),1)),
             'corners_ag_geral': (sum(cantos_contra_casa+cantos_contra_fora)/max(len(cantos_contra_casa+cantos_contra_fora),1)),
             'corners_for_home': sum(cantos_pro_casa)/max(len(cantos_pro_casa),1), 'corners_ag_home': sum(cantos_contra_casa)/max(len(cantos_contra_casa),1),
             'corners_for_away': sum(cantos_pro_fora)/max(len(cantos_pro_fora),1), 'corners_ag_away': sum(cantos_contra_fora)/max(len(cantos_contra_fora),1),
+            'media_cartoes_pro': sum(todas_cartoes_pro)/max(len(todas_cartoes_pro),1),
+            'media_cartoes_contra': sum(todas_cartoes_contra)/max(len(todas_cartoes_contra),1),
             'df_historico': pd.DataFrame(detalhes)
         }
     except:
-        return {'corners_for_geral':0.0,'corners_ag_geral':0.0,'corners_for_home':0.0,'corners_ag_home':0.0,'corners_for_away':0.0,'corners_ag_away':0.0,'df_historico':pd.DataFrame()}
+        return {'corners_for_geral':0.0,'corners_ag_geral':0.0,'corners_for_home':0.0,'corners_ag_home':0.0,'corners_for_away':0.0,'corners_ag_away':0.0,'media_cartoes_pro':0.0,'media_cartoes_contra':0.0,'df_historico':pd.DataFrame()}
 
 @st.cache_data(persist="disk")
 def buscar_estatisticas_time(team_id, league_id, season, key, data_cache):
@@ -396,58 +416,6 @@ def buscar_estatisticas_time(team_id, league_id, season, key, data_cache):
     except:
         pass
     return {'jogos':0,'gols_feitos_media':0.0,'gols_sofridos_media':0.0,'gf_home':0.0,'ga_home':0.0,'gf_away':0.0,'ga_away':0.0,'clean_sheets':0}
-
-@st.cache_data(persist="disk")
-def buscar_minutagem_u4(team_id, league_id, season, key, data_cache):
-    url = f"https://v3.football.api-sports.io/fixtures?league={league_id}&season={season}&team={team_id}&last=4"
-    headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
-    
-    intervalos = ["0-15", "16-30", "31-45", "46-60", "61-75", "76-90"]
-    gols_dict = {i: {"Gols Feitos": 0, "Gols Sofridos": 0} for i in intervalos}
-    cartoes_dict = {i: {"Cartões Amarelos": 0} for i in intervalos}
-    
-    try:
-        res = requests.get(url, headers=headers)
-        data = res.json()
-        if data.get('results', 0) > 0:
-            for f in data['response']:
-                f_id = f['fixture']['id']
-                time.sleep(0.15)
-                res_e = requests.get(f"https://v3.football.api-sports.io/fixtures/events?fixture={f_id}", headers=headers)
-                data_e = res_e.json()
-                
-                if data_e.get('results', 0) > 0:
-                    for ev in data_e['response']:
-                        minuto = ev.get('time', {}).get('elapsed')
-                        if minuto is None:
-                            continue
-                        
-                        if 0 <= minuto <= 15: inter = "0-15"
-                        elif 16 <= minuto <= 30: inter = "16-30"
-                        elif 31 <= minuto <= 45: inter = "31-45"
-                        elif 46 <= minuto <= 60: inter = "46-60"
-                        elif 61 <= minuto <= 75: inter = "61-75"
-                        else: inter = "76-90"
-                        
-                        ev_type = ev.get('type')
-                        ev_team_id = ev.get('team', {}).get('id')
-                        
-                        if ev_type == 'Goal':
-                            if ev_team_id == team_id:
-                                gols_dict[inter]["Gols Feitos"] += 1
-                            else:
-                                gols_dict[inter]["Gols Sofridos"] += 1
-                        elif ev_type == 'Card' and 'Yellow' in str(ev.get('detail', '')):
-                            if ev_team_id == team_id:
-                                cartoes_dict[inter]["Cartões Amarelos"] += 1
-                                
-        df_gols = pd.DataFrame([{"Intervalo": f"{k} min", "Gols Feitos": v["Gols Feitos"], "Gols Sofridos": v["Gols Sofridos"]} for k, v in gols_dict.items()])
-        df_cartoes = pd.DataFrame([{"Intervalo": f"{k} min", "Cartões Amarelos": v["Cartões Amarelos"]} for k, v in cartoes_dict.items()])
-        return df_gols, df_cartoes
-    except:
-        df_gols = pd.DataFrame([{"Intervalo": f"{k} min", "Gols Feitos": 0, "Gols Sofridos": 0} for k in intervalos])
-        df_cartoes = pd.DataFrame([{"Intervalo": f"{k} min", "Cartões Amarelos": 0} for k in intervalos])
-        return df_gols, df_cartoes
 
 @st.cache_data(persist="disk")
 def buscar_scout_elenco_u5(team_id, league_id, season, key, data_cache):
@@ -519,7 +487,6 @@ with st.spinner(f"Extraindo dados reais de {opcao_liga}..."):
     df_arbitros = buscar_dados_arbitros(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     df_jogos_liga = buscar_jogos_liga(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     rodada_atual_str = buscar_rodada_atual(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-    df_min_gols_u4, df_cartoes_u4 = buscar_minutagem_u4(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
 # --- PROCESSAMENTO DA BUSCA POR JOGADOR ---
 if termo_busca_jogador:
@@ -586,7 +553,7 @@ with aba_painel:
         
         if not corners_t1['df_historico'].empty:
             st.markdown("**Últimas 10 Partidas (Histórico de Placares & Gols):**")
-            st.dataframe(corners_t1['df_historico'][['Data', 'Adversário', 'Mando', 'Placar', 'Gols Marcados', 'Gols Sofridos']], use_container_width=True, hide_index=True)
+            st.dataframe(corners_t1['df_historico'][['Data', 'Adversário', 'Mando', 'Placar', 'Gols Pró', 'Gols Contra']], use_container_width=True, hide_index=True)
 
     with col_direita_cantos:
         st.markdown("### 🚩 Estatísticas e Histórico de Escanteios")
@@ -603,18 +570,20 @@ with aba_painel:
             
     st.markdown("---")
     
-    col_min1, col_min2 = st.columns(2)
-    with col_min1:
-        st.subheader("⏱️ Minutagem de Gols (Últimos 4 Jogos)")
-        st.caption("Contagem real de gols feitos e sofridos por faixa de tempo nos 4 jogos mais recentes.")
-        if not df_min_gols_u4.empty:
-            st.dataframe(df_min_gols_u4, use_container_width=True, hide_index=True)
-            
-    with col_min2:
-        st.subheader("🟨 Minutagem de Cartões (Últimos 4 Jogos)")
-        st.caption("Volume real de cartões amarelos recebidos pelo time por faixa de tempo nos 4 jogos mais recentes.")
-        if not df_cartoes_u4.empty:
-            st.dataframe(df_cartoes_u4, use_container_width=True, hide_index=True)
+    # --- NOVO BLOCO: HISTÓRICO DE CARTÕES JOGO A JOGO (PRÓ E CONTRA) ---
+    st.subheader(f"🟨 Histórico Detalhado de Cartões por Partida (Últimos 10 Jogos): {time_principal}")
+    st.caption("Quantidade real de cartões amarelos recebidos pelo time (Pró) e pelo adversário (Contra) em cada partida recente.")
+    
+    c_card1, c_card2 = st.columns(2)
+    c_card1.metric("Média de Cartões Pró (Favor)", f"{corners_t1['media_cartoes_pro']:.2f}")
+    c_card2.metric("Média de Cartões Contra (Adversário)", f"{corners_t1['media_cartoes_contra']:.2f}")
+    
+    if not corners_t1['df_historico'].empty:
+        st.dataframe(
+            corners_t1['df_historico'][['Data', 'Adversário', 'Mando', 'Placar', 'Cartões Pró', 'Cartões Contra', 'Total Cartões']], 
+            use_container_width=True, 
+            hide_index=True
+        )
             
     st.markdown("---")
     st.subheader(f"👤 Scout do Plantel (Média Móvel U5): {time_principal}")
@@ -641,9 +610,7 @@ with aba_painel:
             c_proj_t2 = (corners_t2['corners_for_away'] + corners_t1['corners_ag_home']) / 2
             escanteios_jogo = c_proj_t1 + c_proj_t2
             
-            cartoes_t1 = 2.35
-            cartoes_t2 = 2.10
-            total_cartoes = cartoes_t1 + cartoes_t2
+            total_cartoes = corners_t1['media_cartoes_pro'] + corners_t2['media_cartoes_pro']
             
             sc1, sc2, sc3, sc4 = st.columns(4)
             sc1.metric(f"Expec. Gols ({time_principal})", f"{gols_t1:.2f}")
@@ -695,13 +662,11 @@ if st.sidebar.button("🚀 Disparar Alerta Pré-Live"):
         c_proj_t2 = (corners_t2['corners_for_away'] + corners_t1['corners_ag_home']) / 2
         escanteios_jogo = c_proj_t1 + c_proj_t2
         
-        cartoes_t1 = 2.35
-        cartoes_t2 = 2.10
-        total_cartoes = cartoes_t1 + cartoes_t2
+        total_cartoes = corners_t1['media_cartoes_pro'] + corners_t2['media_cartoes_pro']
 
-        msg = f"""🚨 <b>RAIO-X PRÉ-LIVE PRO (100% AUTOMATIZADO)</b> 🚨\n\n⚽ <b>{time_principal} (Casa) x {adversario} (Fora)</b>\n🏆 Competição: {opcao_liga} ({SEASON_EFETIVA})\n\n📊 <b>PROJEÇÃO DE GOLS & BTTS:</b>\n• Projeção {time_principal}: {g_t1:.2f} gols\n• Projeção {adversario}: {g_t2:.2f} gols\n• Total Estimado: {total_gols:.2f} gols\n• Ambos Marcam (BTTS): {btts_str}\n\n🚩 <b>PROJEÇÃO DE ESCANTEIOS (CANTOS):</b>\n• Projeção {time_principal}: {c_proj_t1:.2f} cantos\n• Projeção {adversario}: {c_proj_t2:.2f} cantos\n• Total Estimado no Jogo: {escanteios_jogo:.1f} cantos\n\n🟨 <b>PROJEÇÃO DE CARTÕES AMARELOS:</b>\n• Média {time_principal}: {cartoes_t1:.2f} por jogo\n• Média {adversario}: {cartoes_t2:.2f} por jogo\n• Total Estimado no Jogo: {total_cartoes:.2f} cartões\n\n📈 <i>Dica: Acesse o Painel Streamlit para conferir o Raio-X detalhado de Player Props por jogador!</i>"""
+        msg = f"""🚨 <b>RAIO-X PRÉ-LIVE PRO (100% AUTOMATIZADO)</b> 🚨\n\n⚽ <b>{time_principal} (Casa) x {adversario} (Fora)</b>\n🏆 Competição: {opcao_liga} ({SEASON_EFETIVA})\n\n📊 <b>PROJEÇÃO DE GOLS & BTTS:</b>\n• Projeção {time_principal}: {g_t1:.2f} gols\n• Projeção {adversario}: {g_t2:.2f} gols\n• Total Estimado: {total_gols:.2f} gols\n• Ambos Marcam (BTTS): {btts_str}\n\n🚩 <b>PROJEÇÃO DE ESCANTEIOS (CANTOS):</b>\n• Projeção {time_principal}: {c_proj_t1:.2f} cantos\n• Projeção {adversario}: {c_proj_t2:.2f} cantos\n• Total Estimado no Jogo: {escanteios_jogo:.1f} cantos\n\n🟨 <b>PROJEÇÃO DE CARTÕES AMARELOS:</b>\n• Média {time_principal}: {corners_t1['media_cartoes_pro']:.2f} por jogo\n• Média {adversario}: {corners_t2['media_cartoes_pro']:.2f} por jogo\n• Total Estimado no Jogo: {total_cartoes:.2f} cartões\n\n📈 <i>Dica: Acesse o Painel Streamlit para conferir o Raio-X detalhado de Player Props por jogador!</i>"""
     else:
-        msg = f"""🚨 <b>RAIO-X INDIVIDUAL</b> 🚨\n\n⚽ <b>Time: {time_principal}</b>\n🏆 Competição: {opcao_liga} ({SEASON_EFETIVA})\n\n📊 <b>Média de Gols Feitos:</b> {stats_t1['gols_feitos_media']:.2f}\n📊 <b>Média de Gols Sofridos:</b> {stats_t1['gols_sofridos_media']:.2f}\n🚩 <b>Média de Cantos Pró:</b> {corners_t1['corners_for_geral']:.2f}"""
+        msg = f"""🚨 <b>RAIO-X INDIVIDUAL</b> 🚨\n\n⚽ <b>Time: {time_principal}</b>\n🏆 Competição: {opcao_liga} ({SEASON_EFETIVA})\n\n📊 <b>Média de Gols Feitos:</b> {stats_t1['gols_feitos_media']:.2f}\n📊 <b>Média de Gols Sofridos:</b> {stats_t1['gols_sofridos_media']:.2f}\n🚩 <b>Média de Cantos Pró:</b> {corners_t1['corners_for_geral']:.2f}\n🟨 <b>Média de Cartões Pró:</b> {corners_t1['media_cartoes_pro']:.2f}"""
     
     if enviar_alerta_telegram(msg): 
         st.sidebar.success("🎉 Alerta enviado para o Telegram com o layout completo!")
