@@ -43,11 +43,6 @@ opcao_liga = st.sidebar.radio(
     ]
 )
 
-# --- QUADRINHO DE BUSCA NA BARRA LATERAL ---
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 🔍 Busca Inteligente")
-termo_busca = st.sidebar.text_input("Pesquisar Jogador ou Clube:", placeholder="Digite o nome...")
-
 if opcao_liga == "Brasileirão Série A":
     LEAGUE_ID = 71
 elif opcao_liga == "Brasileirão Série B":
@@ -431,6 +426,13 @@ if not TEAM_IDS:
     st.warning(f"⚠️ Não foi possível carregar os times da competição selecionada.")
     st.stop()
 
+# --- QUADRINHO DE BUSCA EXCLUSIVA DE JOGADORES NO TOPO DA BARRA LATERAL ---
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 🔍 Busca de Jogador")
+termo_busca_jogador = st.sidebar.text_input("Pesquisar Jogador no Elenco:", placeholder="Digite o nome do jogador...")
+
+# --- CONFIGURAÇÕES DE ANÁLISE (SELEÇÃO DO CLUBE MAIS ABAIXO) ---
+st.sidebar.markdown("---")
 st.sidebar.header("⚙️ Configurações de Análise")
 times_disponiveis = sorted(list(TEAM_IDS.keys()))
 time_principal = st.sidebar.selectbox("Escolha o Time", times_disponiveis)
@@ -447,26 +449,16 @@ with st.spinner(f"Extraindo dados reais de {opcao_liga}..."):
     
     df_min_gols_u4, df_cartoes_u4 = buscar_minutagem_u4(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
-# --- PROCESSAMENTO DA BUSCA POR JOGADOR OU CLUBE ---
-if termo_busca:
-    st.info(f"🔍 Exibindo resultados da busca para: **{termo_busca}**")
-    
-    # Busca em Clubes
-    clubes_encontrados = [c for c in times_disponiveis if termo_busca.lower() in c.lower()]
-    if clubes_encontrados:
-        st.markdown("### 🏟️ Clubes Encontrados")
-        for cl in clubes_encontrados:
-            st.write(f"- **{cl}** (ID: `{TEAM_IDS[cl]}`)")
-            
-    # Busca em Jogadores do Elenco Atual
+# --- PROCESSAMENTO DA BUSCA POR JOGADOR (EXCLUSIVO NO ELENCO SELECIONADO) ---
+if termo_busca_jogador:
+    st.info(f"🔍 Filtrando jogador(es) para o termo: **{termo_busca_jogador}** em **{time_principal}**")
     if not df_elenco_u5.empty:
-        jogadores_encontrados = df_elenco_u5[df_elenco_u5['Jogador'].str.contains(termo_busca, case=False, na=False)]
+        jogadores_encontrados = df_elenco_u5[df_elenco_u5['Jogador'].str.contains(termo_busca_jogador, case=False, na=False)]
         if not jogadores_encontrados.empty:
-            st.markdown(f"### 👤 Jogador(es) Encontrado(s) em `{time_principal}`")
+            st.markdown(f"### 👤 Resultado da Busca de Jogador(es) em `{time_principal}`")
             st.dataframe(jogadores_encontrados, use_container_width=True, hide_index=True)
-            
-    if not clubes_encontrados and (df_elenco_u5.empty or df_elenco_u5[df_elenco_u5['Jogador'].str.contains(termo_busca, case=False, na=False)].empty):
-        st.warning("Nenhum clube ou jogador correspondente encontrado com esse termo na competição/elenco selecionado.")
+        else:
+            st.warning(f"Nenhum jogador encontrado com o nome '{termo_busca_jogador}' no elenco atual do {time_principal}.")
     st.markdown("---")
 
 # --- ABAS DE NAVEGAÇÃO SUPERIOR ---
