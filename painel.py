@@ -190,6 +190,9 @@ else:
     else:
         id_time1 = None
 
+# CAMPO DE BUSCA DE JOGADOR REINSERIDO AQUI PARA EVITAR O NameError
+termo_busca_jogador = st.sidebar.text_input("🔍 Pesquisar Jogador", placeholder="Ex: Cano, Arrascaeta...")
+
 st.sidebar.success(f"✅ Ativo: {opcao_liga} (Temporada {SEASON_EFETIVA})!")
 st.sidebar.info(f"🔄 Última atualização base: {CHAVE_ATUALIZACAO} às 08:00")
 st.sidebar.markdown("---")
@@ -549,7 +552,7 @@ if not id_time1:
 # CENÁRIO 2: TIME SELECIONADO -> EXIBIR PAINEL DE ANÁLISE DETALHADA E ELENCO
 # =========================================================================
 else:
-    st.setTitle = f"⚽ Painel Analisador Esportivo Pro - {opcao_liga}"
+    st.title(f"⚽ Painel Analisador Esportivo Pro - {opcao_liga}")
     
     # --- ABAS DE NAVEGAÇÃO SUPERIOR ---
     aba_painel, aba_jogos_dia, aba_arbitros, aba_tabela = st.tabs([
