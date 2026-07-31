@@ -13,6 +13,22 @@ SEASON = datetime.now().year
 TELEGRAM_TOKEN = "8281259090:AAEggXJKpCMxRbhhrcCZymcmNUKWNoOPFfY"
 TELEGRAM_CHAT_ID = "-1004464226419"
 
+# --- DICIONÁRIO DE LIGAS MONITORADAS (PRINCIPAIS) ---
+LIGAS_MONITORADAS = {
+    71: "Brasileirão Série A",
+    72: "Brasileirão Série B",
+    73: "Copa do Brasil",
+    128: "Campeonato Argentino",
+    39: "Premier League (Inglaterra)",
+    140: "La Liga (Espanha)",
+    78: "Bundesliga (Alemanha)",
+    2: "UEFA Champions League",
+    3: "UEFA Liga Europa",
+    848: "UEFA Conference League",
+    13: "Copa Libertadores",
+    11: "Copa Sudamericana"
+}
+
 # --- LÓGICA DE ATUALIZAÇÃO ÀS 8H DA MANHÃ ---
 def obter_chave_atualizacao():
     agora = datetime.now()
@@ -28,46 +44,11 @@ DATA_HOJE_STR = datetime.now().strftime("%Y-%m-%d")
 st.sidebar.header("🏆 Seleção da Competição Global")
 opcao_liga = st.sidebar.radio(
     "Escolha qual campeonato deseja analisar:",
-    [
-        "Brasileirão Série A", 
-        "Brasileirão Série B", 
-        "Copa do Brasil",
-        "Campeonato Argentino",
-        "Premier League (Inglaterra)",
-        "La Liga (Espanha)",
-        "Bundesliga (Alemanha)",
-        "UEFA Champions League",
-        "UEFA Liga Europa",
-        "UEFA Conference League",
-        "Copa Libertadores",
-        "Copa Sudamericana"
-    ]
+    list(LIGAS_MONITORADAS.values())
 )
 
-if opcao_liga == "Brasileirão Série A":
-    LEAGUE_ID = 71
-elif opcao_liga == "Brasileirão Série B":
-    LEAGUE_ID = 72
-elif opcao_liga == "Copa do Brasil":
-    LEAGUE_ID = 73
-elif opcao_liga == "Campeonato Argentino":
-    LEAGUE_ID = 128
-elif opcao_liga == "Premier League (Inglaterra)":
-    LEAGUE_ID = 39
-elif opcao_liga == "La Liga (Espanha)":
-    LEAGUE_ID = 140
-elif opcao_liga == "Bundesliga (Alemanha)":
-    LEAGUE_ID = 78
-elif opcao_liga == "UEFA Champions League":
-    LEAGUE_ID = 2
-elif opcao_liga == "UEFA Liga Europa":
-    LEAGUE_ID = 3
-elif opcao_liga == "UEFA Conference League":
-    LEAGUE_ID = 848
-elif opcao_liga == "Copa Libertadores":
-    LEAGUE_ID = 13
-else:
-    LEAGUE_ID = 11
+# Mapeia de volta o ID da liga selecionada
+LEAGUE_ID = [k for k, v in LIGAS_MONITORADAS.items() if v == opcao_liga][0]
 
 # --- DETECÇÃO INTELIGENTE DE TEMPORADA VÁLIDA ---
 @st.cache_data(persist="disk")
@@ -161,7 +142,7 @@ if termo_busca_global and len(termo_busca_global) >= 2:
             clube_global_selecionado = dict_globais[escolha_g]['name']
             id_time_global = dict_globais[escolha_g]['id']
             l_id, l_name = buscar_liga_por_time(id_time_global, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-            if l_id:
+            if l_id and l_id in LIGAS_MONITORADAS:
                 LEAGUE_ID = l_id
                 opcao_liga = l_name
                 TEAM_IDS = buscar_times_por_liga(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
@@ -276,35 +257,36 @@ def buscar_jogos_liga(league_id, season, key, data_cache):
     return pd.DataFrame()
 
 @st.cache_data(persist="disk")
-def buscar_jogos_globais_por_data(data_str, key, cache_key):
-    """Busca todos os jogos do mundo inteiro em uma data específica (ex: hoje)."""
+def buscar_jogos_ligas_monitoradas_por_data(data_str, key, cache_key):
+    """Busca jogos do dia apenas nas ligas oficialmente monitoradas/selecionadas."""
     url = f"https://v3.football.api-sports.io/fixtures?date={data_str}"
     headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
     try:
         res = requests.get(url, headers=headers)
         data = res.json()
-        jogos_global = []
+        jogos_filtrados = []
         if data.get('results', 0) > 0:
             for f in data['response']:
-                date_str_f = f['fixture']['date']
-                match_date = date_str_f[:10]
-                match_time = date_str_f[11:16]
-                league_name = f['league']['name']
-                country = f['league'].get('country', 'Mundo')
-                home_name = f['teams']['home']['name']
-                away_name = f['teams']['away']['name']
-                status = f['fixture']['status']['short']
-                
-                # Apenas jogos que ainda não terminaram ou do dia
-                if status in ['NS', 'TBD', '1H', 'HT', '2H']:
-                    jogos_global.append({
-                        'Liga': f"{league_name} ({country})",
-                        'Mandante': home_name,
-                        'Visitante': away_name,
-                        'Data': f"{match_date[8:10]}/{match_date[5:7]}/{match_date[0:4]}",
-                        'Horário': match_time
-                    })
-            return jogos_global
+                league_id = f['league']['id']
+                # Verifica estritamente se a liga está no nosso dicionário de monitoramento
+                if league_id in LIGAS_MONITORADAS:
+                    date_str_f = f['fixture']['date']
+                    match_date = date_str_f[:10]
+                    match_time = date_str_f[11:16]
+                    league_name = LIGAS_MONITORADAS[league_id]
+                    home_name = f['teams']['home']['name']
+                    away_name = f['teams']['away']['name']
+                    status = f['fixture']['status']['short']
+                    
+                    if status in ['NS', 'TBD', '1H', 'HT', '2H']:
+                        jogos_filtrados.append({
+                            'Liga': league_name,
+                            'Mandante': home_name,
+                            'Visitante': away_name,
+                            'Data': f"{match_date[8:10]}/{match_date[5:7]}/{match_date[0:4]}",
+                            'Horário': match_time
+                        })
+            return jogos_filtrados
     except:
         pass
     return []
@@ -756,19 +738,18 @@ if st.sidebar.button("🚀 Disparar Análise Pré-Live"):
     else: 
         st.sidebar.error("❌ Falha ao enviar.")
 
-# BOTÃO ATUALIZADO: VARREDURA GLOBAL + DATA CORRIGIDA DO DIA
-if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (Global)"):
-    with st.spinner("Varrendo partidas do mundo todo para hoje..."):
-        jogos_hoje_mundo = buscar_jogos_globais_por_data(DATA_HOJE_STR, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+# BOTÃO ATUALIZADO: VARREDURA NAS LIGAS MONITORADAS + DATA DO DIA
+if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (Monitoradas)"):
+    with st.spinner("Varrendo partidas de hoje nas ligas oficiais monitoradas..."):
+        jogos_monitorados_hoje = buscar_jogos_ligas_monitoradas_por_data(DATA_HOJE_STR, API_KEY_FIXA, CHAVE_ATUALIZACAO)
         
-    if jogos_hoje_mundo:
-        # Pega até 4 jogos globais de destaque de hoje
-        amostra_global = jogos_hoje_mundo[:4]
+    if jogos_monitorados_hoje:
+        amostra_monitorada = jogos_monitorados_hoje[:4]
         data_formatada_exibicao = datetime.now().strftime("%d/%m/%Y")
         
-        msg_bilhete = f"""💎 <b>SMART MULTI: BILHETE DO DIA</b> 💎\n📅 <i>Data: {data_formatada_exibicao} (Varredura Global)</i>\n\n"As melhores oportunidades do dia selecionadas por inteligência estatística:"\n\n"""
+        msg_bilhete = f"""💎 <b>SMART MULTI: BILHETE DO DIA</b> 💎\n📅 <i>Data: {data_formatada_exibicao} (Ligas Principais)</i>\n\n"As melhores oportunidades do dia nas ligas que acompanhamos:"\n\n"""
         
-        for idx, j in enumerate(amostra_global, 1):
+        for idx, j in enumerate(amostra_monitorada, 1):
             msg_bilhete += f"<b>{idx}. {j['Mandante']} x {j['Visitante']}</b>\n"
             msg_bilhete += f"   • 🏆 <i>Liga:</i> {j['Liga']}\n"
             msg_bilhete += f"   • 📌 <i>Seleção:</i> Mais de 1.5 Gols / Mais de 8.5 Cantos\n"
@@ -777,8 +758,8 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (Global)"):
         msg_bilhete += f"🔥 <i>Gestão de banca rigorosa. Vamos em busca do green!</i>"
         
         if enviar_alerta_telegram(msg_bilhete):
-            st.sidebar.success("🔥 Bilhete Global do Dia gerado e enviado ao Telegram com sucesso!")
+            st.sidebar.success("🔥 Bilhete Oficial gerado e enviado ao Telegram com sucesso!")
         else:
             st.sidebar.error("❌ Falha ao enviar bilhete ao Telegram.")
     else:
-        st.sidebar.warning(f"⚠️ Não foram encontrados jogos futuros/em andamento cadastrados para hoje ({DATA_HOJE_STR}) na varredura global.")
+        st.sidebar.warning(f"⚠️ Não há jogos cadastrados para hoje ({DATA_HOJE_STR}) nas ligas monitoradas selecionadas.")
