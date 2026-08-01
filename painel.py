@@ -46,7 +46,8 @@ opcao_liga = st.sidebar.radio(
     "Escolha qual campeonato deseja analisar:",
     list(LIGAS_MONITORADAS.values()),
     index=None,
-
+    
+)
 
 LEAGUE_ID = [k for k, v in LIGAS_MONITORADAS.items() if v == opcao_liga][0] if opcao_liga else None
 
