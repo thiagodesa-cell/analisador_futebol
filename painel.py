@@ -197,7 +197,7 @@ if termo_busca_global and len(termo_busca_global) >= 2:
 # --- BUSCA GLOBAL DE JOGADORES (INDEPENDENTE) ---
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 🔍 Busca Global de Jogadores")
-termo_busca_jogador = st.sidebar.text_input("Pesquisar qualquer jogador:", placeholder="Ex: Arrascaeta, Cano...")
+termo_busca_jogador = st.sidebar.text_input("Pesquisar qualquer jogador:", placeholder="Ex: Jogador...")
 
 jogador_global_selecionado = None
 id_time_global_jogador = None
