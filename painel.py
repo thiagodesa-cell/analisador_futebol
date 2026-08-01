@@ -37,7 +37,7 @@ def obter_chave_atualizacao():
     else:
         return agora.strftime("%Y-%m-%d")
 
-CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v11"  
+CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v12"  
 DATA_HOJE_STR = datetime.now().strftime("%Y-%m-%d")
 
 # --- BOTÃO DE SELEÇÃO DE LIGA NA BARRA LATERAL (SEM SELEÇÃO INICIAL) ---
@@ -107,37 +107,54 @@ def buscar_times_global(termo, season, key, data_cache):
 
 @st.cache_data(persist="disk")
 def buscar_jogador_global(termo, season, key, data_cache):
-    url = f"https://v3.football.api-sports.io/players?search={termo}&season={season}"
     headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
-    try:
-        res = requests.get(url, headers=headers)
-        data = res.json()
-        jogadores_dict = {}
-        if data.get('results', 0) > 0:
-            for item in data['response']:
-                p_info = item['player']
-                p_id = p_info['id']
-                p_name = p_info['name']
-                for stat in item.get('statistics', []):
-                    team_info = stat['team']
-                    league_info = stat['league']
-                    t_id = team_info['id']
-                    t_name = team_info['name']
-                    l_id = league_info['id']
-                    l_name = league_info['name']
-                    
-                    label = f"{p_name} ({t_name} - {l_name})"
-                    jogadores_dict[label] = {
-                        'player_id': p_id,
-                        'player_name': p_name,
-                        'team_id': t_id,
-                        'team_name': t_name,
-                        'league_id': l_id,
-                        'league_name': l_name
-                    }
-            return jogadores_dict
-    except:
-        pass
+    jogadores_dict = {}
+    # Testa a temporada atual e a anterior para evitar falhas de indexação global
+    for s in [season, season - 1]:
+        url = f"https://v3.football.api-sports.io/players?search={termo}&season={s}"
+        try:
+            res = requests.get(url, headers=headers)
+            data = res.json()
+            if data.get('results', 0) > 0:
+                for item in data['response']:
+                    p_info = item['player']
+                    p_id = p_info['id']
+                    p_name = p_info['name']
+                    stats_list = item.get('statistics', [])
+                    if stats_list:
+                        for stat in stats_list:
+                            team_info = stat['team']
+                            league_info = stat['league']
+                            t_id = team_info['id']
+                            t_name = team_info['name']
+                            l_id = league_info['id']
+                            l_name = league_info['name']
+                            
+                            label = f"{p_name} ({t_name} - {l_name}) [{s}]"
+                            jogadores_dict[label] = {
+                                'player_id': p_id,
+                                'player_name': p_name,
+                                'team_id': t_id,
+                                'team_name': t_name,
+                                'league_id': l_id,
+                                'league_name': l_name,
+                                'season': s
+                            }
+                    else:
+                        label = f"{p_name} (Temporada {s})"
+                        jogadores_dict[label] = {
+                            'player_id': p_id,
+                            'player_name': p_name,
+                            'team_id': None,
+                            'team_name': "Time não especificado",
+                            'league_id': 71,
+                            'league_name': "Brasileirão Série A",
+                            'season': s
+                        }
+                if jogadores_dict:
+                    return jogadores_dict
+        except:
+            pass
     return {}
 
 @st.cache_data(persist="disk")
@@ -150,10 +167,8 @@ def buscar_liga_por_time(team_id, season, key, data_cache):
         if data.get('results', 0) > 0:
             for resp in data['response']:
                 league_info = resp['league']
-                # Prioriza ligas principais monitoradas se houver correspondência
                 if league_info['id'] in LIGAS_MONITORADAS:
                     return league_info['id'], league_info['name']
-            # Se não achar nas monitoradas, pega a primeira disponível
             league_info = data['response'][0]['league']
             return league_info['id'], league_info['name']
     except:
@@ -187,7 +202,6 @@ if termo_busca_global and len(termo_busca_global) >= 2:
                 LEAGUE_ID = l_id
                 opcao_liga = l_name
             else:
-                # Fallback seguro para evitar valores nulos
                 LEAGUE_ID = 71
                 opcao_liga = LIGAS_MONITORADAS[LEAGUE_ID]
             
@@ -197,13 +211,13 @@ if termo_busca_global and len(termo_busca_global) >= 2:
 # --- BUSCA GLOBAL DE JOGADORES (INDEPENDENTE) ---
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 🔍 Busca Global de Jogadores")
-termo_busca_jogador = st.sidebar.text_input("Pesquisar qualquer jogador:", placeholder="Ex: Jogador...")
+termo_busca_jogador = st.sidebar.text_input("Pesquisar qualquer jogador:", placeholder="Ex: Jorginho, Arrascaeta...")
 
 jogador_global_selecionado = None
 id_time_global_jogador = None
 
 if termo_busca_jogador and len(termo_busca_jogador) >= 3:
-    dict_jogadores_globais = buscar_jogador_global(termo_busca_jogador, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    dict_jogadores_globais = buscar_jogador_global(termo_busca_jogador, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     if dict_jogadores_globais:
         escolha_j = st.sidebar.selectbox(
             "Resultados da Busca de Jogadores:",
@@ -218,7 +232,7 @@ if termo_busca_jogador and len(termo_busca_jogador) >= 3:
             id_time_global_jogador = j_info['team_id']
             clube_global_selecionado = j_info['team_name']
             jogador_global_selecionado = j_info['player_name']
-            SEASON_EFETIVA = descobrir_temporada_valida(LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+            SEASON_EFETIVA = j_info.get('season', SEASON)
             TEAM_IDS = buscar_times_por_liga(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     else:
         st.sidebar.warning("Nenhum jogador encontrado com esse nome.")
@@ -933,4 +947,4 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (Gols + Cantos + Cart
         else:
             st.sidebar.error("❌ Falha ao enviar bilhete ao Telegram.")
     else:
-        st.sidebar.warning(f"⚠️ Não há jogos cadastrados para hoje ({DATA_HOJE_STR}) nas ligas monitoradas.")
+        st.sidebar.warning(f"⚠️ Não hay jogos cadastrados para hoje ({DATA_HOJE_STR}) nas ligas monitoradas.")
