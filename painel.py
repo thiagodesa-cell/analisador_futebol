@@ -29,7 +29,7 @@ LIGAS_MONITORADAS = {
     11: "Copa Sudamericana"
 }
 
-# --- LÓGICA DE ATUALIZAÇÃO Às 8H DA MANHÃ ---
+# --- LÓGICA DE ATUALIZAÇÃO Às 8H DA MANHÃ (VERSÃO 13 PARA LIMPAR CACHE ANTIGO) ---
 def obter_chave_atualizacao():
     agora = datetime.now()
     if agora.hour < 8:
@@ -37,7 +37,7 @@ def obter_chave_atualizacao():
     else:
         return agora.strftime("%Y-%m-%d")
 
-CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v12"  
+CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v13"  
 DATA_HOJE_STR = datetime.now().strftime("%Y-%m-%d")
 
 # --- BOTÃO DE SELEÇÃO DE LIGA NA BARRA LATERAL (SEM SELEÇÃO INICIAL) ---
@@ -53,7 +53,7 @@ LEAGUE_ID = [k for k, v in LIGAS_MONITORADAS.items() if v == opcao_liga][0] if o
 # --- DETECÇÃO INTELIGENTE DE TEMPORADA VÁLIDA ---
 @st.cache_data(persist="disk")
 def descobrir_temporada_valida(league_id, season_atual, key, data_cache):
-    for s in [season_atual, season_atual - 1]:
+    for s in [season_atual, season_atual - 1, season_atual - 2]:
         url = f"https://v3.football.api-sports.io/teams?league={league_id}&season={s}"
         headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
         try:
@@ -109,8 +109,8 @@ def buscar_times_global(termo, season, key, data_cache):
 def buscar_jogador_global(termo, season, key, data_cache):
     headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
     jogadores_dict = {}
-    # Testa a temporada atual e a anterior para evitar falhas de indexação global
-    for s in [season, season - 1]:
+    # Testa múltiplos anos para garantir cobertura completa de indexação global
+    for s in [season, season - 1, season - 2]:
         url = f"https://v3.football.api-sports.io/players?search={termo}&season={s}"
         try:
             res = requests.get(url, headers=headers)
@@ -641,7 +641,7 @@ if not LEAGUE_ID and not clube_global_selecionado and not id_time1:
     * **Raio-X de Clubes & Elenco:** Métricas detalhadas de gols, escanteios, cartões e o scout individual dos atletas (Média Móvel U5).
     * **Busca Global de Jogadores:** Encontre qualquer atleta instantaneamente sem precisar selecionar a liga manualmente.
     * **Simulador H2H (Confronto Direto):** Cruzamento estatístico avançado entre dois clubes com sugestões automáticas (**Mercados Over e Under**).
-    * **Bilhete do Dia Pro:** Varredura automática nas principais ligas monitoradas do dia.
+    * **Bilhete do Dia Pro:** Varredura automática nas principales ligas monitoradas do dia.
     """)
 
 # =========================================================================
