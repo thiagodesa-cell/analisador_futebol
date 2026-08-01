@@ -29,7 +29,7 @@ LIGAS_MONITORADAS = {
     11: "Copa Sudamericana"
 }
 
-# --- LÓGICA DE ATUALIZAÇÃO Às 8H DA MANHÃ (VERSÃO 13 PARA LIMPAR CACHE ANTIGO) ---
+# --- LÓGICA DE ATUALIZAÇÃO Às 8H DA MANHÃ (VERSÃO 14 PARA LIMPAR CACHE ANTIGO) ---
 def obter_chave_atualizacao():
     agora = datetime.now()
     if agora.hour < 8:
@@ -37,7 +37,7 @@ def obter_chave_atualizacao():
     else:
         return agora.strftime("%Y-%m-%d")
 
-CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v13"  
+CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v14"  
 DATA_HOJE_STR = datetime.now().strftime("%Y-%m-%d")
 
 # --- BOTÃO DE SELEÇÃO DE LIGA NA BARRA LATERAL (SEM SELEÇÃO INICIAL) ---
@@ -53,7 +53,7 @@ LEAGUE_ID = [k for k, v in LIGAS_MONITORADAS.items() if v == opcao_liga][0] if o
 # --- DETECÇÃO INTELIGENTE DE TEMPORADA VÁLIDA ---
 @st.cache_data(persist="disk")
 def descobrir_temporada_valida(league_id, season_atual, key, data_cache):
-    for s in [season_atual, season_atual - 1, season_atual - 2]:
+    for s in [season_atual - 1, season_atual, season_atual - 2, season_atual - 3]:
         url = f"https://v3.football.api-sports.io/teams?league={league_id}&season={s}"
         headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
         try:
@@ -65,7 +65,7 @@ def descobrir_temporada_valida(league_id, season_atual, key, data_cache):
             pass
     return season_atual
 
-SEASON_EFETIVA = descobrir_temporada_valida(LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO) if LEAGUE_ID else SEASON
+SEASON_EFETIVA = descobrir_temporada_valida(LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO) if LEAGUE_ID else (SEASON - 1)
 
 # --- FUNÇÕES DE BUSCA NA API (COM CACHE EM DISCO PERSISTENTE) ---
 
@@ -109,53 +109,59 @@ def buscar_times_global(termo, season, key, data_cache):
 def buscar_jogador_global(termo, season, key, data_cache):
     headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
     jogadores_dict = {}
-    # Testa múltiplos anos para garantir cobertura completa de indexação global
-    for s in [season, season - 1, season - 2]:
+    # Prioriza o ano anterior (ex: 2025 para a temporada 2025/2026) e expande a varredura
+    anos_para_testar = [season - 1, season - 2, season, season - 3, season - 4]
+    
+    for s in anos_para_testar:
         url = f"https://v3.football.api-sports.io/players?search={termo}&season={s}"
         try:
             res = requests.get(url, headers=headers)
-            data = res.json()
-            if data.get('results', 0) > 0:
-                for item in data['response']:
-                    p_info = item['player']
-                    p_id = p_info['id']
-                    p_name = p_info['name']
-                    stats_list = item.get('statistics', [])
-                    if stats_list:
-                        for stat in stats_list:
-                            team_info = stat['team']
-                            league_info = stat['league']
-                            t_id = team_info['id']
-                            t_name = team_info['name']
-                            l_id = league_info['id']
-                            l_name = league_info['name']
-                            
-                            label = f"{p_name} ({t_name} - {l_name}) [{s}]"
+            if res.status_code == 429:
+                return {"__rate_limit__": True}
+            
+            if res.status_code == 200:
+                data = res.json()
+                if data.get('results', 0) > 0:
+                    for item in data['response']:
+                        p_info = item['player']
+                        p_id = p_info['id']
+                        p_name = p_info['name']
+                        stats_list = item.get('statistics', [])
+                        if stats_list:
+                            for stat in stats_list:
+                                team_info = stat['team']
+                                league_info = stat['league']
+                                t_id = team_info['id']
+                                t_name = team_info['name']
+                                l_id = league_info['id']
+                                l_name = league_info['name']
+                                
+                                label = f"{p_name} ({t_name} - {l_name}) [{s}]"
+                                jogadores_dict[label] = {
+                                    'player_id': p_id,
+                                    'player_name': p_name,
+                                    'team_id': t_id,
+                                    'team_name': t_name,
+                                    'league_id': l_id,
+                                    'league_name': l_name,
+                                    'season': s
+                                }
+                        else:
+                            label = f"{p_name} (Temporada {s})"
                             jogadores_dict[label] = {
                                 'player_id': p_id,
                                 'player_name': p_name,
-                                'team_id': t_id,
-                                'team_name': t_name,
-                                'league_id': l_id,
-                                'league_name': l_name,
+                                'team_id': None,
+                                'team_name': "Time não especificado",
+                                'league_id': 71,
+                                'league_name': "Brasileirão Série A",
                                 'season': s
                             }
-                    else:
-                        label = f"{p_name} (Temporada {s})"
-                        jogadores_dict[label] = {
-                            'player_id': p_id,
-                            'player_name': p_name,
-                            'team_id': None,
-                            'team_name': "Time não especificado",
-                            'league_id': 71,
-                            'league_name': "Brasileirão Série A",
-                            'season': s
-                        }
-                if jogadores_dict:
-                    return jogadores_dict
+                    if jogadores_dict:
+                        return jogadores_dict
         except:
             pass
-    return {}
+    return jogadores_dict
 
 @st.cache_data(persist="disk")
 def buscar_liga_por_time(team_id, season, key, data_cache):
@@ -218,7 +224,10 @@ id_time_global_jogador = None
 
 if termo_busca_jogador and len(termo_busca_jogador) >= 3:
     dict_jogadores_globais = buscar_jogador_global(termo_busca_jogador, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-    if dict_jogadores_globais:
+    
+    if "__rate_limit__" in dict_jogadores_globais:
+        st.sidebar.error("⚠️ Limite diário de requisições da API atingido. Aguarde alguns minutos.")
+    elif dict_jogadores_globais:
         escolha_j = st.sidebar.selectbox(
             "Resultados da Busca de Jogadores:",
             list(dict_jogadores_globais.keys()),
@@ -232,7 +241,7 @@ if termo_busca_jogador and len(termo_busca_jogador) >= 3:
             id_time_global_jogador = j_info['team_id']
             clube_global_selecionado = j_info['team_name']
             jogador_global_selecionado = j_info['player_name']
-            SEASON_EFETIVA = j_info.get('season', SEASON)
+            SEASON_EFETIVA = j_info.get('season', SEASON - 1)
             TEAM_IDS = buscar_times_por_liga(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     else:
         st.sidebar.warning("Nenhum jogador encontrado com esse nome.")
@@ -495,7 +504,7 @@ def buscar_medias_escanteios(team_id, league_id, season, key, data_cache):
                 })
         
         todas_cartoes_pro = cartoes_pro_casa + cartoes_pro_fora
-        todas_cartoes_contra = cartoes_contra_casa_list + cartoes_contra_fora_list
+        todas_cartoes_contra = cartoes_contra_casa_list + cartoes_contra_fora
         
         return {
             'corners_for_geral': (sum(cantos_pro_casa+cantos_pro_fora)/max(len(cantos_pro_casa+cantos_pro_fora),1)),
