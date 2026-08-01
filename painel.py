@@ -38,7 +38,7 @@ def obter_chave_atualizacao():
     else:
         return agora.strftime("%Y-%m-%d")
 
-CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v6"  # Versão atualizada para forçar limpeza de cache
+CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v7"  # Versão atualizada para forçar limpeza de cache
 DATA_HOJE_STR = datetime.now().strftime("%Y-%m-%d")
 
 # --- BOTÃO DE SELEÇÃO DE LIGA NA BARRA LATERAL ---
@@ -745,9 +745,9 @@ if st.sidebar.button("🚀 Disparar Análise Pré-Live"):
     else: 
         st.sidebar.error("❌ Falha ao enviar.")
 
-# BOTÃO: VARREDURA NAS LIGAS MONITORADAS DO DIA (COM ANÁLISE DINÂMICA INDIVIDUAL DE GOLS E ESCANTEIOS)
-if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (Dinâmico: Gols + Cantos)"):
-    with st.spinner("Varrendo partidas de hoje nas ligas monitoradas e calculando análises individuais de gols e escanteios..."):
+# BOTÃO: VARREDURA NAS LIGAS MONITORADAS DO DIA (COM ANÁLISE DINÂMICA DE GOLS, ESCANTEIOS E CARTÕES)
+if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (Gols + Cantos + Cartões)"):
+    with st.spinner("Varrendo partidas de hoje nas ligas monitoradas e calculando análises individuais (Gols, Cantos e Cartões)..."):
         jogos_monitorados_hoje = buscar_jogos_ligas_monitoradas_por_data(DATA_HOJE_STR, API_KEY_FIXA, CHAVE_ATUALIZACAO)
         
     if jogos_monitorados_hoje:
@@ -780,6 +780,11 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (Dinâmico: Gols + Ca
             if tot_c_calc < 4.0:
                 hash_val = int(hashlib.md5(f"{h_id}-{a_id}".encode()).hexdigest(), 16)
                 tot_c_calc = 8.0 + (hash_val % 28) / 10.0
+
+            # Cálculo de Cartões
+            tot_cartoes_calc = c_h_data['media_cartoes_pro'] + c_a_data['media_cartoes_pro']
+            if tot_cartoes_calc < 1.0:
+                tot_cartoes_calc = 4.2  # Média padrão de segurança caso a API retorne vazio
             
             # Seleção Dinâmica de Gols
             if tot_g_calc >= 3.4:
@@ -798,17 +803,25 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (Dinâmico: Gols + Ca
                 sel_cantos = "Mais de 8.5 Escanteios 🚩"
             else:
                 sel_cantos = "Mais de 7.5 Escanteios 🚩"
+
+            # Seleção Dinâmica de Cartões
+            if tot_cartoes_calc >= 4.5:
+                sel_cartoes = "Mais de 4.5 Cartões 🟨"
+            elif tot_cartoes_calc >= 3.5:
+                sel_cartoes = "Mais de 3.5 Cartões 🟨"
+            else:
+                sel_cartoes = "Menos de 4.5 Cartões 🛡️"
                 
             msg_bilhete += f"<b>{idx}. {j['Mandante']} x {j['Visitante']}</b>\n"
             msg_bilhete += f"   • 🏆 <i>Competição:</i> {j['Liga']}\n"
-            msg_bilhete += f"   • 📌 <i>Seleção Analisada:</i> {sel_gols} / {sel_cantos}\n"
+            msg_bilhete += f"   • 📌 <i>Seleções:</i> {sel_gols} | {sel_cantos} | {sel_cartoes}\n"
             msg_bilhete += f"   • ⏰ <i>Horário:</i> {j['Horário']} (Horário Local)\n\n"
         
         msg_bilhete += f"🔥 <i>Gestão de banca rigorosa. Vamos em busca do green!</i>"
         
         if enviar_alerta_telegram(msg_bilhete):
-            st.sidebar.success("🔥 Bilhete das ligas monitoradas enviado ao Telegram com sucesso!")
+            st.sidebar.success("🔥 Bilhete completo (Gols, Cantos e Cartões) enviado ao Telegram com sucesso!")
         else:
             st.sidebar.error("❌ Falha ao enviar bilhete ao Telegram.")
     else:
-        st.sidebar.warning(f"⚠️ Não há jogos cadastrados para hoje ({DATA_HOJE_STR}) nas ligas monitoradas (Campeonato Argentino, Brasileirão, Premier League, etc.).")
+        st.sidebar.warning(f"⚠️ Não há jogos cadastrados para hoje ({DATA_HOJE_STR}) nas ligas monitoradas.")
