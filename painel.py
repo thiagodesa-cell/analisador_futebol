@@ -37,7 +37,7 @@ def obter_chave_atualizacao():
     else:
         return agora.strftime("%Y-%m-%d")
 
-CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v9"  
+CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v10"  
 DATA_HOJE_STR = datetime.now().strftime("%Y-%m-%d")
 
 # --- BOTÃO DE SELEÇÃO DE LIGA NA BARRA LATERAL (SEM SELEÇÃO INICIAL) ---
@@ -45,8 +45,7 @@ st.sidebar.header("🏆 Seleção da Competição Global")
 opcao_liga = st.sidebar.radio(
     "Escolha qual campeonato deseja analisar:",
     list(LIGAS_MONITORADAS.values()),
-    index=None,
-    
+    index=None
 )
 
 LEAGUE_ID = [k for k, v in LIGAS_MONITORADAS.items() if v == opcao_liga][0] if opcao_liga else None
@@ -107,6 +106,41 @@ def buscar_times_global(termo, season, key, data_cache):
     return {}
 
 @st.cache_data(persist="disk")
+def buscar_jogador_global(termo, season, key, data_cache):
+    url = f"https://v3.football.api-sports.io/players?search={termo}&season={season}"
+    headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
+    try:
+        res = requests.get(url, headers=headers)
+        data = res.json()
+        jogadores_dict = {}
+        if data.get('results', 0) > 0:
+            for item in data['response']:
+                p_info = item['player']
+                p_id = p_info['id']
+                p_name = p_info['name']
+                for stat in item.get('statistics', []):
+                    team_info = stat['team']
+                    league_info = stat['league']
+                    t_id = team_info['id']
+                    t_name = team_info['name']
+                    l_id = league_info['id']
+                    l_name = league_info['name']
+                    
+                    label = f"{p_name} ({t_name} - {l_name})"
+                    jogadores_dict[label] = {
+                        'player_id': p_id,
+                        'player_name': p_name,
+                        'team_id': t_id,
+                        'team_name': t_name,
+                        'league_id': l_id,
+                        'league_name': l_name
+                    }
+            return jogadores_dict
+    except:
+        pass
+    return {}
+
+@st.cache_data(persist="disk")
 def buscar_liga_por_time(team_id, season, key, data_cache):
     url = f"https://v3.football.api-sports.io/leagues?team={team_id}&season={season}"
     headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
@@ -143,19 +177,50 @@ if termo_busca_global and len(termo_busca_global) >= 2:
             clube_global_selecionado = dict_globais[escolha_g]['name']
             id_time_global = dict_globais[escolha_g]['id']
             l_id, l_name = buscar_liga_por_time(id_time_global, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-            if l_id and l_id in LIGAS_MONITORADAS:
+            if l_id:
                 LEAGUE_ID = l_id
                 opcao_liga = l_name
                 SEASON_EFETIVA = descobrir_temporada_valida(LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
                 TEAM_IDS = buscar_times_por_liga(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+
+# --- BUSCA GLOBAL DE JOGADORES (INDEPENDENTE) ---
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 🔍 Busca Global de Jogadores")
+termo_busca_jogador = st.sidebar.text_input("Pesquisar qualquer jogador:", placeholder="Ex: Arrascaeta, Cano...")
+
+jogador_global_selecionado = None
+id_time_global_jogador = None
+
+if termo_busca_jogador and len(termo_busca_jogador) >= 3:
+    dict_jogadores_globais = buscar_jogador_global(termo_busca_jogador, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    if dict_jogadores_globais:
+        escolha_j = st.sidebar.selectbox(
+            "Resultados da Busca de Jogadores:",
+            list(dict_jogadores_globais.keys()),
+            index=None,
+            placeholder="Selecione o jogador..."
+        )
+        if escolha_j:
+            j_info = dict_jogadores_globais[escolha_j]
+            LEAGUE_ID = j_info['league_id']
+            opcao_liga = j_info['league_name']
+            id_time_global_jogador = j_info['team_id']
+            clube_global_selecionado = j_info['team_name']
+            jogador_global_selecionado = j_info['player_name']
+            SEASON_EFETIVA = descobrir_temporada_valida(LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+            TEAM_IDS = buscar_times_por_liga(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     else:
-        st.sidebar.warning("Nenhum clube encontrado com esse nome.")
+        st.sidebar.warning("Nenhum jogador encontrado com esse nome.")
 
 # --- CONFIGURAÇÕES DE ANÁLISE ---
 st.sidebar.markdown("---")
 st.sidebar.header("⚙️ Configurações de Análise")
 
-if clube_global_selecionado:
+if jogador_global_selecionado:
+    time_principal = clube_global_selecionado
+    id_time1 = id_time_global_jogador
+    st.sidebar.success(f"🔍 Jogador: **{jogador_global_selecionado}** ({time_principal})")
+elif clube_global_selecionado:
     time_principal = clube_global_selecionado
     id_time1 = id_time_global
     st.sidebar.success(f"🌐 Ativo via Busca Global: **{time_principal}**")
@@ -174,9 +239,7 @@ elif LEAGUE_ID:
 else:
     time_principal = None
     id_time1 = None
-    st.sidebar.info("📌 Selecione uma competição acima para habilitar a escolha de clubes.")
-
-termo_busca_jogador = st.sidebar.text_input("🔍 Pesquisar Jogador", placeholder="Ex: Cano, Arrascaeta...")
+    st.sidebar.info("📌 Selecione uma competição, clube ou pesquise um jogador acima.")
 
 if LEAGUE_ID:
     st.sidebar.success(f"✅ Ativo: {opcao_liga} (Temporada {SEASON_EFETIVA})!")
@@ -523,31 +586,31 @@ if id_time1 and LEAGUE_ID:
     corners_t1 = buscar_medias_escanteios(id1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     df_elenco_u5, string_forma_t1 = buscar_scout_elenco_u5(id1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
-if termo_busca_jogador and id_time1 and LEAGUE_ID:
-    st.info(f"🔍 Filtrando jogador(es) para o termo: **{termo_busca_jogador}** em **{time_principal}**")
-    if not df_elenco_u5.empty:
-        jogadores_encontrados = df_elenco_u5[df_elenco_u5['Jogador'].str.contains(termo_busca_jogador, case=False, na=False)]
-        if not jogadores_encontrados.empty:
-            st.markdown(f"### 👤 Resultado da Busca de Jogador(es) em `{time_principal}`")
-            st.dataframe(jogadores_encontrados, use_container_width=True, hide_index=True)
-        else:
-            st.warning(f"Nenhum jogador encontrado com o nome '{termo_busca_jogador}' no elenco atual do {time_principal}.")
+if jogador_global_selecionado and not df_elenco_u5.empty:
+    st.info(f"⭐ Jogador em destaque na busca: **{jogador_global_selecionado}** ({time_principal})")
+    jogadores_encontrados = df_elenco_u5[df_elenco_u5['Jogador'].str.contains(jogador_global_selecionado, case=False, na=False)]
+    if not jogadores_encontrados.empty:
+        st.markdown(f"### 👤 Scout do Jogador Selecionado: `{jogador_global_selecionado}`")
+        st.dataframe(jogadores_encontrados, use_container_width=True, hide_index=True)
+    else:
+        st.warning(f"O jogador {jogador_global_selecionado} não pontuou nas últimas 5 partidas listadas do {time_principal}.")
     st.markdown("---")
 
 # =========================================================================
-# CENÁRIO 0: NENHUMA COMPETIÇÃO SELECIONADA -> TELA DE BOAS-VINDAS INICIAL
+# CENÁRIO 0: NENHUMA COMPETIÇÃO OU JOGADOR SELECIONADO -> TELA DE BOAS-VINDAS
 # =========================================================================
-if not LEAGUE_ID and not clube_global_selecionado:
+if not LEAGUE_ID and not clube_global_selecionado and not jogador_global_selecionado:
     st.title("⚽ Painel Inteligente de Análise Esportiva (Over & Under)")
     st.markdown("---")
-    st.info("👈 **Para começar, selecione uma competição** na barra lateral esquerda ou utilize a **Busca Global de Clubes** para pesquisar qualquer time do mundo.")
+    st.info("👈 **Para começar, selecione uma competição** na barra lateral, utilize a **Busca Global de Clubes** ou pesquise diretamente qualquer **jogador** no mundo.")
     
     st.markdown("""
     ### 💎 O que você encontra neste painel:
-    * **Panorama Geral da Competição:** Acompanhe a tabela de classificação atualizada, o calendário completo de jogos da rodada e estatísticas de árbitros.
-    * **Raio-X de Clubes & Elenco:** Métricas detalhadas de gols, escanteios, cartões e o scout individual dos atletas nas últimas partidas (Média Móvel U5).
-    * **Simulador H2H (Confronto Direto):** Cruzamento estatístico avançado entre dois clubes com sugestões automáticas e inteligentes de apostas (**Mercados Over e Under**).
-    * **Bilhete do Dia Pro:** Varredura automática nas principais ligas monitoradas do dia para gerar combinações otimizadas.
+    * **Panorama Geral da Competição:** Tabela de classificação atualizada, calendário de jogos e estatísticas de árbitros.
+    * **Raio-X de Clubes & Elenco:** Métricas detalhadas de gols, escanteios, cartões e o scout individual dos atletas (Média Móvel U5).
+    * **Busca Global de Jogadores:** Encontre qualquer atleta instantaneamente sem precisar selecionar a liga manualmente.
+    * **Simulador H2H (Confronto Direto):** Cruzamento estatístico avançado entre dois clubes com sugestões automáticas (**Mercados Over e Under**).
+    * **Bilhete do Dia Pro:** Varredura automática nas principais ligas monitoradas do dia.
     """)
 
 # =========================================================================
@@ -555,7 +618,7 @@ if not LEAGUE_ID and not clube_global_selecionado:
 # =========================================================================
 elif LEAGUE_ID and not id_time1:
     st.title(f"🏆 Panorama Geral: {opcao_liga} ({SEASON_EFETIVA})")
-    st.markdown("Bem-vindo ao Hub da Competição! Abaixo você encontra um panorama completo com a rodada atual, classificação e estatísticas gerais. Selecione um clube na barra lateral quando quiser iniciar o Raio-X individual.")
+    st.markdown("Bem-vindo ao Hub da Competição! Abaixo você encontra um panorama completo com a rodada atual, classificação e estatísticas gerais. Selecione um clube ou pesquise um jogador na barra lateral quando quiser iniciar o Raio-X.")
     st.markdown("---")
 
     col_m1, col_m2, col_m3 = st.columns(3)
@@ -572,7 +635,7 @@ elif LEAGUE_ID and not id_time1:
     with tab_pan_jogos:
         st.subheader(f"📅 Partidas - {opcao_liga}")
         if not df_jogos_liga.empty:
-            filtro_opcao = st.radio("Filtrar visualização do panorama:", ["Ver Jogos da Rodada Atual", "Ver Todos os Jogos da Temporada"], horizontal=True, key="filtro_jogos_pan")
+            filtro_opcao = st.radio("Filtrar visualização do panorama:", ["Ver Jogos da Rodada Atual", "Ver Todos los Jogos da Temporada"], horizontal=True, key="filtro_jogos_pan")
             df_exibir = df_jogos_liga.copy()
             if filtro_opcao == "Ver Jogos da Rodada Atual" and rodada_atual_str:
                 df_exibir = df_exibir[df_exibir['Rodada'] == rodada_atual_str]
@@ -596,7 +659,7 @@ elif LEAGUE_ID and not id_time1:
             st.info("Dados de arbitragem indisponíveis no momento.")
 
 # =========================================================================
-# CENÁRIO 2: TIME SELECIONADO -> EXIBIR PAINEL DE ANÁLISE DETALHADA E ELENCO
+# CENÁRIO 2: TIME / JOGADOR SELECIONADO -> EXIBIR PAINEL DE ANÁLISE DETALHADA
 # =========================================================================
 else:
     st.title(f"⚽ Painel Analisador Esportivo Pro - {opcao_liga}")
@@ -784,7 +847,7 @@ if st.sidebar.button("🚀 Disparar Análise Pré-Live"):
     else: 
         st.sidebar.error("❌ Falha ao enviar.")
 
-# BOTÃO: BILHETE DO DIA (COM ANÁLISE DINÂMICA DE GOLS, ESCANTEIOS E CARTÕES - OVER/UNDER)
+# BOTÃO: BILHETE DO DIA
 if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (Gols + Cantos + Cartões)"):
     with st.spinner("Varrendo partidas de hoje nas ligas monitoradas e calibrando cenários Over/Under..."):
         jogos_monitorados_hoje = buscar_jogos_ligas_monitoradas_por_data(DATA_HOJE_STR, API_KEY_FIXA, CHAVE_ATUALIZACAO)
@@ -806,24 +869,18 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (Gols + Cantos + Cart
             c_h_data = buscar_medias_escanteios(h_id, l_id, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
             c_a_data = buscar_medias_escanteios(a_id, l_id, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
             
-            # Cálculo de Gols
             g_h_calc = (s_h['gf_home'] + s_a['ga_away']) / 2 if s_h['jogos'] > 0 and s_a['jogos'] > 0 else 1.3
             g_a_calc = (s_a['gf_away'] + s_h['ga_home']) / 2 if s_a['jogos'] > 0 and s_a['jogos'] > 0 else 1.2
             tot_g_calc = g_h_calc + g_a_calc
             
-            # Cálculo de Escanteios
             c_proj_h = (c_h_data['corners_for_home'] + c_a_data['corners_ag_away']) / 2
             c_proj_a = (c_a_data['corners_for_away'] + c_h_data['corners_ag_home']) / 2
             tot_c_calc = c_proj_h + c_proj_a
             
-            # Cálculo de Cartões
             tot_cartoes_calc = c_h_data['media_cartoes_pro'] + c_a_data['media_cartoes_pro']
             if tot_cartoes_calc < 1.0:
                 tot_cartoes_calc = 4.0 
 
-            # --- SELEÇÃO DINÂMICA REAL (OVER / UNDER) ---
-            
-            # Gols
             if tot_g_calc >= 2.8:
                 sel_gols = "Mais de 2.5 Gols 🔥"
             elif tot_g_calc >= 2.2:
@@ -833,7 +890,6 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (Gols + Cantos + Cart
             else:
                 sel_gols = "Menos de 3.5 Gols 🛡️"
                 
-            # Escanteios
             if tot_c_calc >= 10.0:
                 sel_cantos = "Mais de 9.5 Escanteios 🚩"
             elif tot_c_calc >= 8.5:
@@ -841,7 +897,6 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (Gols + Cantos + Cart
             else:
                 sel_cantos = "Menos de 9.5 Escanteios 🛡️ (Poucos Cantos)"
 
-            # Cartões
             if tot_cartoes_calc >= 4.8:
                 sel_cartoes = "Mais de 4.5 Cartões 🟨"
             elif tot_cartoes_calc >= 3.8:
@@ -857,7 +912,7 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (Gols + Cantos + Cart
         msg_bilhete += f"🔥 <i>Análise dual ajustada (Over & Under). Gestão de banca sempre!</i>"
         
         if enviar_alerta_telegram(msg_bilhete):
-            st.sidebar.success("🔥 Bilhete equilibrado (com opções Under e Over) enviado!")
+            st.sidebar.success("🔥 Bilhete equilibrado enviado!")
         else:
             st.sidebar.error("❌ Falha ao enviar bilhete ao Telegram.")
     else:
