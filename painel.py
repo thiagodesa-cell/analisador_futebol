@@ -37,7 +37,7 @@ def obter_chave_atualizacao():
     else:
         return agora.strftime("%Y-%m-%d")
 
-CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v10"  
+CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v11"  
 DATA_HOJE_STR = datetime.now().strftime("%Y-%m-%d")
 
 # --- BOTÃO DE SELEÇÃO DE LIGA NA BARRA LATERAL (SEM SELEÇÃO INICIAL) ---
@@ -148,6 +148,12 @@ def buscar_liga_por_time(team_id, season, key, data_cache):
         res = requests.get(url, headers=headers)
         data = res.json()
         if data.get('results', 0) > 0:
+            for resp in data['response']:
+                league_info = resp['league']
+                # Prioriza ligas principais monitoradas se houver correspondência
+                if league_info['id'] in LIGAS_MONITORADAS:
+                    return league_info['id'], league_info['name']
+            # Se não achar nas monitoradas, pega a primeira disponível
             league_info = data['response'][0]['league']
             return league_info['id'], league_info['name']
     except:
@@ -180,8 +186,13 @@ if termo_busca_global and len(termo_busca_global) >= 2:
             if l_id:
                 LEAGUE_ID = l_id
                 opcao_liga = l_name
-                SEASON_EFETIVA = descobrir_temporada_valida(LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-                TEAM_IDS = buscar_times_por_liga(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+            else:
+                # Fallback seguro para evitar valores nulos
+                LEAGUE_ID = 71
+                opcao_liga = LIGAS_MONITORADAS[LEAGUE_ID]
+            
+            SEASON_EFETIVA = descobrir_temporada_valida(LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+            TEAM_IDS = buscar_times_por_liga(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
 # --- BUSCA GLOBAL DE JOGADORES (INDEPENDENTE) ---
 st.sidebar.markdown("---")
@@ -202,8 +213,8 @@ if termo_busca_jogador and len(termo_busca_jogador) >= 3:
         )
         if escolha_j:
             j_info = dict_jogadores_globais[escolha_j]
-            LEAGUE_ID = j_info['league_id']
-            opcao_liga = j_info['league_name']
+            LEAGUE_ID = j_info['league_id'] if j_info['league_id'] in LIGAS_MONITORADAS else 71
+            opcao_liga = j_info['league_name'] if j_info['league_id'] in LIGAS_MONITORADAS else LIGAS_MONITORADAS[71]
             id_time_global_jogador = j_info['team_id']
             clube_global_selecionado = j_info['team_name']
             jogador_global_selecionado = j_info['player_name']
@@ -581,10 +592,16 @@ else:
     df_jogos_liga = pd.DataFrame()
     rodada_atual_str = None
 
+# --- INICIALIZAÇÃO SEGURA DE VARIÁVEIS PARA EVITAR NAMEERROR ---
+stats_t1 = {'jogos':0,'gols_feitos_media':0.0,'gols_sofridos_media':0.0,'gf_home':0.0,'ga_home':0.0,'gf_away':0.0,'ga_away':0.0,'clean_sheets':0}
+corners_t1 = {'corners_for_geral':0.0,'corners_ag_geral':0.0,'corners_for_home':0.0,'corners_ag_home':0.0,'corners_for_away':0.0,'corners_ag_away':0.0,'media_cartoes_pro':0.0,'media_cartoes_contra':0.0,'df_historico':pd.DataFrame()}
+df_elenco_u5 = pd.DataFrame()
+string_forma_t1 = "Sem dados"
+
 if id_time1 and LEAGUE_ID:
-    stats_t1 = buscar_estatisticas_time(id1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-    corners_t1 = buscar_medias_escanteios(id1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-    df_elenco_u5, string_forma_t1 = buscar_scout_elenco_u5(id1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    stats_t1 = buscar_estatisticas_time(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    corners_t1 = buscar_medias_escanteios(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    df_elenco_u5, string_forma_t1 = buscar_scout_elenco_u5(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
 if jogador_global_selecionado and not df_elenco_u5.empty:
     st.info(f"⭐ Jogador em destaque na busca: **{jogador_global_selecionado}** ({time_principal})")
@@ -599,7 +616,7 @@ if jogador_global_selecionado and not df_elenco_u5.empty:
 # =========================================================================
 # CENÁRIO 0: NENHUMA COMPETIÇÃO OU JOGADOR SELECIONADO -> TELA DE BOAS-VINDAS
 # =========================================================================
-if not LEAGUE_ID and not clube_global_selecionado and not jogador_global_selecionado:
+if not LEAGUE_ID and not clube_global_selecionado and not id_time1:
     st.title("⚽ Painel Inteligente de Análise Esportiva (Over & Under)")
     st.markdown("---")
     st.info("👈 **Para começar, selecione uma competição** na barra lateral, utilize a **Busca Global de Clubes** ou pesquise diretamente qualquer **jogador** no mundo.")
