@@ -29,7 +29,7 @@ LIGAS_MONITORADAS = {
     11: "Copa Sudamericana"
 }
 
-# --- LÓGICA DE ATUALIZAÇÃO Às 8H DA MANHÃ (VERSÃO 14 PARA LIMPAR CACHE ANTIGO) ---
+# --- LÓGICA DE ATUALIZAÇÃO Às 8H DA MANHÃ (VERSÃO 15 PARA LIMPAR CACHE ANTIGO) ---
 def obter_chave_atualizacao():
     agora = datetime.now()
     if agora.hour < 8:
@@ -37,7 +37,7 @@ def obter_chave_atualizacao():
     else:
         return agora.strftime("%Y-%m-%d")
 
-CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v14"  
+CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v15"  
 DATA_HOJE_STR = datetime.now().strftime("%Y-%m-%d")
 
 # --- BOTÃO DE SELEÇÃO DE LIGA NA BARRA LATERAL (SEM SELEÇÃO INICIAL) ---
@@ -50,10 +50,10 @@ opcao_liga = st.sidebar.radio(
 
 LEAGUE_ID = [k for k, v in LIGAS_MONITORADAS.items() if v == opcao_liga][0] if opcao_liga else None
 
-# --- DETECÇÃO INTELIGENTE DE TEMPORADA VÁLIDA ---
+# --- DETECÇÃO INTELIGENTE DE TEMPORADA VÁLIDA (PRIORIZANDO O ANO ATUAL) ---
 @st.cache_data(persist="disk")
 def descobrir_temporada_valida(league_id, season_atual, key, data_cache):
-    for s in [season_atual - 1, season_atual, season_atual - 2, season_atual - 3]:
+    for s in [season_atual, season_atual - 1, season_atual - 2, season_atual - 3]:
         url = f"https://v3.football.api-sports.io/teams?league={league_id}&season={s}"
         headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
         try:
@@ -109,7 +109,6 @@ def buscar_times_global(termo, season, key, data_cache):
 def buscar_jogador_global(termo, season, key, data_cache):
     headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
     jogadores_dict = {}
-    # Prioriza o ano anterior (ex: 2025 para a temporada 2025/2026) e expande a varredura
     anos_para_testar = [season - 1, season - 2, season, season - 3, season - 4]
     
     for s in anos_para_testar:
