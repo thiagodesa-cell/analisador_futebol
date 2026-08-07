@@ -21,10 +21,10 @@ SEASON = datetime.now().year
 TELEGRAM_TOKEN = "8281259090:AAEggXJKpCMxRbhhrcCZymcmNUKWNoOPFfY"
 TELEGRAM_CHAT_ID = "-1004464226419"
 
-# 🔑 INSIRA SUA CHAVE REAL DO GEMINI AQUI ABAIXO:
-GEMINI_API_KEY = "gen-lang-client-0304545979" 
+# 🔑 CHAVE DO GEMINI ATUALIZADA
+GEMINI_API_KEY = "AQ.Ab8RN6INM2pNk6tmT30KE7YnGHXp9KyQ0TeOrM1RUIOVMT7mDA" 
 
-if GEMINI_DISPONIVEL and GEMINI_API_KEY != "gen-lang-client-0304545979":
+if GEMINI_DISPONIVEL and GEMINI_API_KEY != "SUA_CHAVE_GEMINI_AQUI":
     try:
         genai.configure(api_key=GEMINI_API_KEY)
         chat_ativo = True
@@ -56,7 +56,7 @@ def obter_chave_atualizacao():
     else:
         return agora.strftime("%Y-%m-%d")
 
-CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v21_classico"  
+CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v23_classico"  
 DATA_HOJE_STR = datetime.now().strftime("%Y-%m-%d")
 
 # --- BARRA LATERAL (FORMATO CLÁSSICO) ---
@@ -130,7 +130,6 @@ stats_t1 = buscar_estatisticas_time(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY
 # --- TELA PRINCIPAL ---
 st.title(f"⚽ Smart Tipster Pro - {opcao_liga}")
 
-# Abas organizadas no estilo clássico
 aba_painel, aba_ia = st.tabs(["📊 Painel Estatístico & Poisson", "💬 Chat Analista IA (Gemini)"])
 
 with aba_painel:
@@ -148,7 +147,7 @@ with aba_ia:
     st.markdown("Faça perguntas diretas ao assistente baseadas nas estatísticas atuais da competição e do time selecionado.")
     
     if not chat_ativo:
-        st.error("⚠️ A IA do Gemini está inativa. Verifique se substituiu 'SUA_CHAVE_GEMINI_AQUI' pela sua chave correta e se adicionou 'google-generativeai' no requirements.txt.")
+        st.error("⚠️ A IA do Gemini está inativa. Verifique se adicionou 'google-generativeai' no requirements.txt.")
     else:
         pergunta_usuario = st.text_input("Digite sua dúvida ou comando para a IA:", placeholder="Ex: Qual a projeção de gols para o próximo jogo deste time?")
         
