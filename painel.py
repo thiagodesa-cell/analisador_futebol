@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import requests
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 st.set_page_config(page_title="Painel Pro - Global Trading & Futebol", layout="wide")
 
@@ -29,7 +29,7 @@ LIGAS_MONITORADAS = {
     11: "Copa Sudamericana"
 }
 
-# --- LÓGICA DE ATUALIZAÇÃO Às 8H DA MANHÃ (VERSÃO 16 PARA LIMPAR CACHE ANTIGO) ---
+# --- LÓGICA DE ATUALIZAÇÃO Às 8H DA MANHÃ (VERSÃO 17 PARA CORREÇÃO DE FUSO HORÁRIO) ---
 def obter_chave_atualizacao():
     agora = datetime.now()
     if agora.hour < 8:
@@ -37,8 +37,18 @@ def obter_chave_atualizacao():
     else:
         return agora.strftime("%Y-%m-%d")
 
-CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v16"  
+CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v17"  
 DATA_HOJE_STR = datetime.now().strftime("%Y-%m-%d")
+
+# --- CONVERSOR INTELIGENTE DE FUSO HORÁRIO (UTC -> HORÁRIO DE BRASÍLIA UTC-3) ---
+def converter_para_horario_brasilia(iso_string):
+    try:
+        dt_utc = datetime.fromisoformat(iso_string.replace('Z', '+00:00'))
+        fuso_br = timezone(timedelta(hours=-3))
+        dt_local = dt_utc.astimezone(fuso_br)
+        return dt_local.strftime("%Y-%m-%d"), dt_local.strftime("%d/%m/%Y"), dt_local.strftime("%H:%M")
+    except:
+        return iso_string[:10], f"{iso_string[8:10]}/{iso_string[5:7]}/{iso_string[0:4]}", iso_string[11:16]
 
 # --- BOTÃO DE SELEÇÃO DE LIGA NA BARRA LATERAL ---
 st.sidebar.header("🏆 Seleção da Competição Global")
@@ -333,8 +343,8 @@ def buscar_jogos_liga(league_id, season, key, data_cache):
             jogos_lista = []
             for f in fixtures:
                 date_str = f['fixture']['date']
-                match_date = date_str[:10]
-                match_time = date_str[11:16]
+                _, match_date_fmt, match_time = converter_para_horario_brasilia(date_str)
+                
                 status = f['fixture']['status']['short']
                 home_name = f['teams']['home']['name']
                 away_name = f['teams']['away']['name']
@@ -345,8 +355,7 @@ def buscar_jogos_liga(league_id, season, key, data_cache):
                 round_name = f['league'].get('round', 'Rodada')
                 
                 jogos_lista.append({
-                    'Data': f"{match_date[8:10]}/{match_date[5:7]}/{match_date[0:4]}",
-                    'DataISO': match_date,
+                    'Data': match_date_fmt,
                     'Horário': match_time,
                     'Rodada': round_name,
                     'Mandante': home_name,
@@ -372,8 +381,7 @@ def buscar_jogos_ligas_monitoradas_por_data(data_str, key, cache_key):
                 league_id = f['league']['id']
                 if league_id in LIGAS_MONITORADAS:
                     date_str_f = f['fixture']['date']
-                    match_date = date_str_f[:10]
-                    match_time = date_str_f[11:16]
+                    _, match_date_fmt, match_time = converter_para_horario_brasilia(date_str_f)
                     league_name = LIGAS_MONITORADAS[league_id]
                         
                     home_name = f['teams']['home']['name']
@@ -390,7 +398,7 @@ def buscar_jogos_ligas_monitoradas_por_data(data_str, key, cache_key):
                             'Visitante': away_name,
                             'HomeID': home_id,
                             'AwayID': away_id,
-                            'Data': f"{match_date[8:10]}/{match_date[5:7]}/{match_date[0:4]}",
+                            'Data': match_date_fmt,
                             'Horário': match_time
                         })
             return jogos_filtrados
@@ -454,7 +462,7 @@ def buscar_medias_escanteios(team_id, league_id, season, key, data_cache):
                 f_id = f['fixture']['id']
                 is_home = (f['teams']['home']['id'] == team_id)
                 adv = f['teams']['away']['name'] if is_home else f['teams']['home']['name']
-                dt = f['fixture']['date'][:10]
+                _, dt_fmt, _ = converter_para_horario_brasilia(f['fixture']['date'])
                 
                 g_home = f['goals']['home'] if f['goals']['home'] is not None else 0
                 g_away = f['goals']['away'] if f['goals']['away'] is not None else 0
@@ -492,7 +500,7 @@ def buscar_medias_escanteios(team_id, league_id, season, key, data_cache):
                     cartoes_contra_fora_list.append(o_yellow)
                 
                 detalhes.append({
-                    'Data': f"{dt[8:10]}/{dt[5:7]}/{dt[0:4]}", 'Adversário': adv,
+                    'Data': dt_fmt, 'Adversário': adv,
                     'Mando': 'Casa' if is_home else 'Fora', 'Placar': placar_real,
                     'Gols Pró': g_pro, 'Gols Contra': g_contra,
                     'Cantos Pró': t_corners, 'Cantos Contra': o_corners, 'Total Cantos': t_corners + o_corners,
@@ -588,11 +596,14 @@ def buscar_h2h_api(id1, id2, key, data_cache):
         res = requests.get(url, headers=headers)
         data = res.json()
         if data.get('results', 0) > 0:
-            rows = [{
-                'Data': f"{m['fixture']['date'][8:10]}/{m['fixture']['date'][5:7]}/{m['fixture']['date'][0:4]}",
-                'Competição': m['league']['name'], 'Mandante': m['teams']['home']['name'],
-                'Placar': f"{m['goals']['home']} x {m['goals']['away']}", 'Visitante': m['teams']['away']['name']
-            } for m in sorted(data['response'], key=lambda x: x['fixture']['date'], reverse=True)[:6]]
+            rows = []
+            for m in sorted(data['response'], key=lambda x: x['fixture']['date'], reverse=True)[:6]:
+                _, dt_fmt, _ = converter_para_horario_brasilia(m['fixture']['date'])
+                rows.append({
+                    'Data': dt_fmt,
+                    'Competição': m['league']['name'], 'Mandante': m['teams']['home']['name'],
+                    'Placar': f"{m['goals']['home']} x {m['goals']['away']}", 'Visitante': m['teams']['away']['name']
+                })
             return pd.DataFrame(rows), None
     except:
         pass
@@ -642,11 +653,11 @@ if not LEAGUE_ID and not clube_global_selecionado and not id_time1:
     
     st.markdown("""
     ### 💎 O que você encontra neste painel:
-    * **Panorama Geral da Competição:** Tabela de classificação atualizada, calendário de jogos e estatísticas de árbitros.
+    * **Panorama Geral da Competição:** Tabela de classificação atualizada, calendário de jogos com horários locais do Brasil e estatísticas de árbitros.
     * **Raio-X de Clubes & Elenco:** Métricas detalhadas de gols, escanteios, cartões e o scout individual dos atletas (Média Móvel U5).
     * **Busca Global de Jogadores:** Encontre qualquer atleta instantaneamente sem precisar selecionar a liga manualmente.
     * **Simulador H2H (Confronto Direto):** Cruzamento estatístico avançado entre dois clubes com sugestões automáticas (**Mercados Over, Under, Chance Dupla e Empate Anula**).
-    * **Bilhete do Dia Pro (Smart Tipster Inteligente):** Varredura ampliada e calibrada nas principais ligas monitoradas do dia, com foco em alta assertividade de cantos e mercados de segurança.
+    * **Bilhete do Dia Pro (Smart Tipster Inteligente):** Varredura ampliada e calibrada nas principais ligas monitoradas do dia, com horários ajustados em tempo real para o Brasil, foco em cantos e mercados de segurança.
     """)
 
 # =========================================================================
@@ -924,11 +935,10 @@ if st.sidebar.button("🚀 Disparar Análise Pré-Live"):
 
 # BOTÃO: BILHETE DO DIA (SMART TIPSTER REFORMULADO)
 if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (Smart Tipster Pro)"):
-    with st.spinner("Varrendo partidas do dia nas ligas principais e calibrando inteligência de cantos e DNB..."):
+    with st.spinner("Varrendo partidas do dia nas ligas principais e calibrando horários (Brasília), cantos e DNB..."):
         jogos_monitorados_hoje = buscar_jogos_ligas_monitoradas_por_data(DATA_HOJE_STR, API_KEY_FIXA, CHAVE_ATUALIZACAO)
         
     if jogos_monitorados_hoje:
-        # Aumentado para 6 jogos para dar maior volume de opções dentro das principais ligas
         amostra_monitorada = jogos_monitorados_hoje[:6]
         data_formatada_exibicao = datetime.now().strftime("%d/%m/%Y")
         
@@ -946,20 +956,16 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (Smart Tipster Pro)")
             c_a_data = buscar_medias_escanteios(a_id, l_id, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
             
             g_h_calc = (s_h['gf_home'] + s_a['ga_away']) / 2 if s_h['jogos'] > 0 and s_a['jogos'] > 0 else 1.3
-            g_a_calc = (s_a['gf_away'] + s_h['ga_home']) / 2 if s_h['jogos'] > 0 and s_a['jogos'] > 0 else 1.2
+            g_a_calc = (s_a['gf_away'] + s_h['ga_home']) / 2 if s_a['jogos'] > 0 and s_h['jogos'] > 0 else 1.2
             tot_g_calc = g_h_calc + g_a_calc
             
             c_proj_h = (c_h_data['corners_for_home'] + c_a_data['corners_ag_away']) / 2
             c_proj_a = (c_a_data['corners_for_away'] + c_h_data['corners_ag_home']) / 2
             tot_c_calc = c_proj_h + c_proj_a
             
-            # Calibragem inteligente para ligas de alto volume de cantos (ex: Argentino e Brasileirão)
+            # Calibragem inteligente para ligas de alto volume de cantos
             if l_id in [128, 71, 39]:
                 tot_c_calc += 1.3
-            
-            tot_cartoes_calc = c_h_data['media_cartoes_pro'] + c_a_data['media_cartoes_pro']
-            if tot_cartoes_calc < 1.0:
-                tot_cartoes_calc = 4.0 
 
             # Lógica de Gols
             if tot_g_calc >= 2.6:
@@ -971,7 +977,7 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (Smart Tipster Pro)")
             else:
                 sel_gols = "Menos de 3.5 Gols 🛡️"
                 
-            # Lógica de Cantos calibrada (agora muito mais assertiva para ligas fortes)
+            # Lógica de Cantos calibrada
             if tot_c_calc >= 9.2:
                 sel_cantos = "Mais de 9.5 Escanteios 🚩"
             elif tot_c_calc >= 8.0:
@@ -991,9 +997,9 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (Smart Tipster Pro)")
             msg_bilhete += f"   • 🏆 <i>Competição:</i> {j['Liga']}\n"
             msg_bilhete += f"   • 🎯 <i>Sugestões:</i> {sel_gols} | {sel_cantos}\n"
             msg_bilhete += f"   • 🛡️ <i>Segurança:</i> {sel_dnb}\n"
-            msg_bilhete += f"   • ⏰ <i>Horário:</i> {j['Horário']}\n\n"
+            msg_bilhete += f"   • ⏰ <i>Horário (BR):</i> {j['Horário']}\n\n"
         
-        msg_bilhete += f"🔥 <i>Smart Tipster Pro: Gestão de banca rigorosa e análises calibradas.</i>"
+        msg_bilhete += f"🔥 <i>Smart Tipster Pro: Gestão de banca rigorosa e horários ajustados.</i>"
         
         if enviar_alerta_telegram(msg_bilhete):
             st.sidebar.success("🔥 Bilhete Pro enviado com sucesso!")
