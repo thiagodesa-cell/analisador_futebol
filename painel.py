@@ -4,6 +4,7 @@ import requests
 import time
 import math
 from datetime import datetime, timedelta, timezone
+import google.generativeai as genai
 
 st.set_page_config(page_title="Painel Pro - Global Trading & IA Preditiva", layout="wide")
 
@@ -13,6 +14,15 @@ SEASON = datetime.now().year
 
 TELEGRAM_TOKEN = "8281259090:AAEggXJKpCMxRbhhrcCZymcmNUKWNoOPFfY"
 TELEGRAM_CHAT_ID = "-1004464226419"
+
+# --- CONFIGURAÇÃO DO GEMINI IA ---
+# Insira sua chave da API do Google Gemini abaixo (ou deixe configurada no ambiente)
+GEMINI_API_KEY = "SUA_CHAVE_GEMINI_AQUI" 
+try:
+    genai.configure(api_key=GEMINI_API_KEY)
+    modelo_gemini = genai.GenerativeModel('gemini-1.5-flash')
+except:
+    modelo_gemini = None
 
 # --- DICIONÁRIO DE LIGAS MONITORADAS ---
 LIGAS_MONITORADAS = {
@@ -53,7 +63,6 @@ def converter_para_horario_brasilia(iso_string):
 
 # --- MOTOR DE INTELIGÊNCIA ARTIFICIAL: DISTRIBUIÇÃO DE POISSON & PROBABILIDADES ---
 def calcular_probabilidades_poisson(lambda_home, lambda_away, max_gols=6):
-    """Calcula a matriz de probabilidades de placares usando a Distribuição de Poisson."""
     def poisson_prob(lmbda, k):
         return (math.exp(-lmbda) * (lmbda ** k)) / math.factorial(k)
     
@@ -656,14 +665,6 @@ if not LEAGUE_ID and not clube_global_selecionado and not id_time1:
     st.title("⚽ Smart Tipster Pro - Motor de IA Preditiva & Trading Esportivo")
     st.markdown("---")
     st.info("👈 **Para começar, selecione uma competição** na barra lateral, utilize a **Busca Global de Clubes** ou pesquise diretamente qualquer **jogador** no mundo.")
-    
-    st.markdown("""
-    ### 💎 O que há de novo na Versão Premium (v18):
-    * **Distribuição de Poisson (Machine Learning):** Modelagem estatística avançada para calcular probabilidades reais de gols e mercados.
-    * **Índice de Confiança de IA (Score):** Pontuação algorítmica para validar o risco de cada entrada.
-    * **Horários Automáticos em Brasília:** Conversão precisa de fuso horário UTC para evitar confusões de agenda.
-    * **Bilhete do Dia Automatizado:** Varredura inteligente nas ligas de maior volume de cantos e gols com foco em gestão de banca e segurança (DNB).
-    """)
 
 # =========================================================================
 # CENÁRIO 1: PANORAMA DA LIGA
@@ -693,8 +694,6 @@ elif LEAGUE_ID and not id_time1:
                 df_exibir = df_exibir[df_exibir['Rodada'] == rodada_atual_str]
                 st.success(f"📌 Exibindo jogos da **{rodada_atual_str}**")
             st.dataframe(df_exibir[['Data', 'Horário', 'Rodada', 'Mandante', 'Placar', 'Visitante', 'Status']], use_container_width=True, hide_index=True)
-        else:
-            st.info("Nenhum jogo encontrado para esta competição.")
 
     with tab_pan_tabela:
         st.subheader(f"🏆 Classificação Atual - {opcao_liga}")
@@ -800,11 +799,9 @@ else:
                 stats_t2 = buscar_estatisticas_time(id_time2, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
                 corners_t2 = buscar_medias_escanteios(id_time2, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
                 
-                # Expectativa de gols com Poisson
                 gols_t1 = (stats_t1['gf_home'] + stats_t2['ga_away']) / 2
                 gols_t2 = (stats_t2['gf_away'] + stats_t1['ga_home']) / 2
                 
-                # Cálculo via Poisson
                 probs_poisson = calcular_probabilidades_poisson(gols_t1, gols_t2)
                 total_gols = gols_t1 + gols_t2
                 
@@ -812,12 +809,10 @@ else:
                 c_proj_t2 = (corners_t2['corners_for_away'] + corners_t1['corners_ag_home']) / 2
                 escanteios_jogo = c_proj_t1 + c_proj_t2
                 
-                if LEAGUE_ID in [128, 71, 39]: # Ajuste calibrado para ligas intensas
+                if LEAGUE_ID in [128, 71, 39]:
                     escanteios_jogo += 1.2
                 
                 total_cartoes = corners_t1['media_cartoes_pro'] + corners_t2['media_cartoes_pro']
-                
-                # Índice de Confiança da IA (0 a 100%) baseado na força do modelo
                 confianca_ia = min(92, max(60, int(50 + abs(probs_poisson['vitoria_home'] - probs_poisson['vitoria_away']) * 0.6)))
 
                 sc1, sc2, sc3, sc4 = st.columns(4)
@@ -827,63 +822,17 @@ else:
                 sc4.metric("Índice de Confiança IA", f"{confianca_ia}% 🧠")
                 
                 st.markdown("---")
-                st.markdown("### 💡 Smart Tipster Pro: Recomendações Baseadas em IA")
-                tip_c1, tip_c2 = st.columns(2)
-                
-                with tip_c1:
-                    with st.container(border=True):
-                        st.markdown("#### ⚽ Mercado de Gols (Poisson)")
-                        st.markdown(f"- **Expectativa Modelada:** `{total_gols:.2f}` gols")
-                        st.markdown(f"- **Probabilidade BTTS (Ambas Marcam):** `{probs_poisson['btts']:.1f}%`")
-                        
-                        if probs_poisson['over_2_5'] >= 60:
-                            sel_gols_sim = "Mais de 2.5 Gols 🔥"
-                        elif probs_poisson['over_2_5'] >= 45:
-                            sel_gols_sim = "Mais de 1.5 Gols ⚡"
-                        else:
-                            sel_gols_sim = "Menos de 2.5 Gols 🛡️"
-                        st.markdown(f"- **Sugestão Otimizada:** `{sel_gols_sim}`")
-                    
-                    with st.container(border=True):
-                        st.markdown("#### 🛡️ Mercado de Segurança & DNB")
-                        if probs_poisson['vitoria_home'] > probs_poisson['vitoria_away'] + 15:
-                            dnb_sug = f"Empate Anula: {time_principal} 🟢"
-                            dupla_sug = f"Chance Dupla: {time_principal} ou Empate (1X)"
-                        elif probs_poisson['vitoria_away'] > probs_poisson['vitoria_home'] + 15:
-                            dnb_sug = f"Empate Anula: {adversario} 🟢"
-                            dupla_sug = f"Chance Dupla: {adversario} ou Empate (X2)"
-                        else:
-                            dnb_sug = "Empate Anula: Jogo de Alta Paridade ⚖️"
-                            dupla_sug = "Chance Dupla: Jogo Aberto / Equilibrado"
-                        st.markdown(f"- **Sugestão Principal:** `{dnb_sug}`")
-                        st.markdown(f"- **Alternativa Segura:** `{dupla_sug}`")
-
-                with tip_c2:
-                    with st.container(border=True):
-                        st.markdown("#### 🚩 Escanteios Calibrados")
-                        st.markdown(f"- **Total Estimado:** `{escanteios_jogo:.1f}` cantos")
-                        sel_cantos_sim = "Mais de 9.5 Escanteios 🔥" if escanteios_jogo >= 9.5 else "Mais de 8.5 Escanteios 🚩" if escanteios_jogo >= 8.2 else "Menos de 9.5 Escanteios 🛡️"
-                        st.markdown(f"- **Sugestão de Cantos:** `{sel_cantos_sim}`")
-
-                    with st.container(border=True):
-                        st.markdown("#### 🟨 Cartões & Bilhete Pro")
-                        st.markdown(f"- **Total Estimado Cartões:** `{total_cartoes:.2f}`")
-                        sel_cart_sim = "Mais de 4.5 Cartões 🟨" if total_cartoes >= 4.2 else "Mais de 3.5 Cartões 🟨" if total_cartoes >= 3.2 else "Menos de 4.5 Cartões 🛡️"
-                        st.markdown(f"- **Sugestão de Cartões:** `{sel_cart_sim}`")
-                        st.markdown(f"- **Combo IA Recomendado:** `{sel_gols_sim} + {sel_cart_sim}`")
-                
-                st.markdown("---")
                 st.markdown(f"### 📜 Histórico Real H2H")
                 df_h2h, _ = buscar_h2h_api(id_time1, id_time2, API_KEY_FIXA, CHAVE_ATUALIZACAO)
                 if df_h2h is not None: st.dataframe(df_h2h, use_container_width=True, hide_index=True)
 
     with aba_chat:
-        st.subheader("🤖 Chat com a Inteligência Artificial Preditiva")
-        st.markdown("Tire dúvidas sobre as estatísticas do time selecionado, projeções de gols via Poisson, escanteios e estratégias de trading com o assistente inteligente.")
+        st.subheader("🤖 Chat com a Inteligência Artificial Preditiva (Powered by Gemini)")
+        st.markdown("Converse livremente com a IA sobre o time selecionado, estatísticas, cartões, escanteios, estratégias de trading e palpites!")
         
         if "messages" not in st.session_state:
             st.session_state.messages = [
-                {"role": "assistant", "content": f"Olá! Sou a IA Preditiva do Painel Pro. Atualmente o time em foco é **{time_principal or 'Nenhum selecionado'}** na competição **{opcao_liga or 'Geral'}**. Como posso ajudar nas suas análises hoje?"}
+                {"role": "assistant", "content": f"Olá! Sou a IA Preditiva do Painel Pro. Atualmente o time em foco é **{time_principal or 'Nenhum selecionado'}** na competição **{opcao_liga or 'Geral'}**. Pode me fazer qualquer pergunta sobre estatísticas, cartões, gols ou palpites!"}
             ]
             
         for message in st.session_state.messages:
@@ -896,25 +845,30 @@ else:
                 st.markdown(prompt_usuario)
                 
             with st.chat_message("assistant"):
-                with st.spinner("Analisando dados do painel e gerando resposta..."):
-                    # Processamento da resposta com base no contexto ativo
-                    pergunta_lower = prompt_usuario.lower()
-                    contexto_base = f"Time: {time_principal} | Competição: {opcao_liga} | Gols Feitos (Média): {stats_t1.get('gols_feitos_media', 0):.2f}"
+                with st.spinner("Gerando resposta inteligente com o Gemini..."):
+                    # Contexto completo extraído do painel para a IA entender do que estamos falando
+                    cantos_totais_media = corners_t1.get('corners_for_geral', 0) + corners_t1.get('corners_ag_geral', 0)
+                    contexto_painel = f"""
+                    Você é um assistente de IA especialista em trading esportivo e estatísticas de futebol integrados em um painel profissional.
+                    Time em foco atual: {time_principal or 'Nenhum selecionado'}
+                    Competição: {opcao_liga or 'Geral'}
+                    Média de Gols Feitos do time: {stats_t1.get('gols_feitos_media', 0):.2f}
+                    Média de Gols Sofridos do time: {stats_t1.get('gols_sofridos_media', 0):.2f}
+                    Média de Escanteios Pró+Contra (Geral): {cantos_totais_media:.2f}
+                    Média de Cartões Pró: {corners_t1.get('media_cartoes_pro', 0):.2f}
+                    Média de Cartões Contra: {corners_t1.get('media_cartoes_contra', 0):.2f}
+                    Partidas Jogadas: {stats_t1.get('jogos', 0)}
+                    """
                     
-                    if "poisson" in pergunta_lower:
-                        resposta_ia = f"O modelo de Distribuição de Poisson avalia a taxa de gols esperados de cada equipe com base no histórico em casa e fora, calculando a probabilidade estatística exata para mercados de gols e vencedor. ({contexto_base})"
-                    elif "gols" in pergunta_lower or "over" in pergunta_lower:
-                        resposta_ia = f"Para **{time_principal}**, a média atual de gols marcados é de `{stats_t1.get('gols_feitos_media', 0):.2f}` e sofridos de `{stats_t1.get('gols_sofridos_media', 0):.2f}`. Se houver confronto H2H ativado, verifique a aba do painel para o cálculo exato do Over 2.5."
-                    elif "escanteio" in pergunta_lower or "cantos" in pergunta_lower:
-                        cantos_total = corners_t1.get('corners_for_geral', 0) + corners_t1.get('corners_ag_geral', 0)
-                        resposta_ia = f"A média combinada de escanteios (pró + contra) para **{time_principal}** é de aproximadamente `{cantos_total:.2f}` por partida."
-                    elif "sugestão" in pergunta_lower or "aposta" in pergunta_lower or "palpite" in pergunta_lower or "vitória" in pergunta_lower or "jogo" in pergunta_lower:
-                        media_gf = stats_t1.get('gols_feitos_media', 0)
-                        media_gc = stats_t1.get('gols_sofridos_media', 0)
-                        cantos_geral = corners_t1.get('corners_for_geral', 0) + corners_t1.get('corners_ag_geral', 0)
-                        resposta_ia = f"Análise rápida para **{time_principal}**: \n- **Média de Gols Pró:** `{media_gf:.2f}` | **Sofridos:** `{media_gc:.2f}`\n- **Média de Cantos:** `{cantos_geral:.2f}`\n\n💡 *Dica:* Para simular confrontos diretos (como Flamengo x Vitória), ative o **Simulador H2H & Motor de Poisson** na aba 'Painel IA & Elenco' para gerar o bilhete e as probabilidades exatas de vitória e gols!"
+                    if modelo_gemini:
+                        try:
+                            prompt_completo = f"{contexto_painel}\n\nPergunta do usuário: {prompt_usuario}"
+                            resposta_ia = modelo_gemini.generate_content(prompt_completo).text
+                        except Exception as e:
+                            resposta_ia = f"Erro ao acionar a IA do Gemini: {e}"
                     else:
-                        resposta_ia = f"Com base nas informações ativas (**{time_principal or opcao_liga}**), o painel está calibrado com dados oficiais da API. Você pode me perguntar sobre **gols, escanteios, distribuição de Poisson ou sugestões de apostas** para o time selecionado!"
+                        # Fallback se a chave do Gemini não estiver configurada
+                        resposta_ia = "⚠️ A chave da API do Google Gemini não foi configurada no código (`GEMINI_API_KEY`). Por favor, insira sua chave válida para ativar conversas inteligentes e fluidas!"
                     
                     st.markdown(resposta_ia)
                     st.session_state.messages.append({"role": "assistant", "content": resposta_ia})
@@ -947,7 +901,6 @@ if st.sidebar.button("🚀 Disparar Análise Pré-Live (IA)"):
     else: 
         st.sidebar.error("❌ Falha ao enviar.")
 
-# BOTÃO: BILHETE DO DIA (SMART TIPSTER COM IA)
 if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro)"):
     with st.spinner("Varrendo partidas de hoje com motor de Poisson e calibrando fuso horário..."):
         jogos_monitorados_hoje = buscar_jogos_ligas_monitoradas_por_data(DATA_HOJE_STR, API_KEY_FIXA, CHAVE_ATUALIZACAO)
@@ -996,4 +949,4 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro)"):
         else:
             st.sidebar.error("❌ Falha ao enviar ao Telegram.")
     else:
-        st.sidebar.warning(f"⚠️ Não hay jogos cadastrados para hoje ({DATA_HOJE_STR}) nas ligas monitoradas.")
+        st.sidebar.warning(f"⚠️ Não há jogos cadastrados para hoje ({DATA_HOJE_STR}) nas ligas monitoradas.")
