@@ -15,15 +15,28 @@ SEASON = datetime.now().year
 TELEGRAM_TOKEN = "8281259090:AAEggXJKpCMxRbhhrcCZymcmNUKWNoOPFfY"
 TELEGRAM_CHAT_ID = "-1004464226419"
 
-# --- CONFIGURAÇÃO DO GEMINI IA (NOVA BIBLIOTECA GOOGLE-GENAI) ---
+# --- CONFIGURAÇÃO DO GEMINI IA (COM SUPORTE A SECRETS E BARRA LATERAL) ---
+gemini_key_config = ""
 try:
-    GEMINI_API_KEY = st.secrets["AQ.Ab8RN6LUFgIywwdRku7dHwz7HcfXispuE7F3ikQrZBfc4B914w"]
+    if "GEMINI_API_KEY" in st.secrets:
+        gemini_key_config = st.secrets["AQ.Ab8RN6LUFgIywwdRku7dHwz7HcfXispuE7F3ikQrZBfc4B914w"]
 except:
-    GEMINI_API_KEY = ""
+    pass
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 🤖 Configuração da IA (Gemini)")
+gemini_input_sidebar = st.sidebar.text_input(
+    "Cole sua Gemini API Key:", 
+    value=gemini_key_config, 
+    type="password", 
+    help="Cole sua chave aqui caso o painel do Streamlit Cloud não esteja lendo os Secrets."
+)
+
+ativa_gemini_key = gemini_input_sidebar or gemini_key_config
 
 try:
-    if GEMINI_API_KEY:
-        client = genai.Client(api_key=GEMINI_API_KEY)
+    if ativa_gemini_key:
+        client = genai.Client(api_key=ativa_gemini_key)
     else:
         client = None
 except:
@@ -98,7 +111,7 @@ def calcular_probabilidades_poisson(lambda_home, lambda_away, max_gols=6):
         'empate': prob_empate * 100
     }
 
-# --- FUNÇÕES DE BUSCA NA API (DECLARADAS ANTES DO USO) ---
+# --- FUNÇÕES DE BUSCA NA API ---
 
 @st.cache_data(persist="disk")
 def descobrir_temporada_valida(league_id, season_atual, key, data_cache):
@@ -888,7 +901,7 @@ else:
                         except Exception as e:
                             resposta_ia = f"Erro ao acionar a IA do Gemini: {e}"
                     else:
-                        resposta_ia = "⚠️ A chave da API do Google Gemini não foi configurada corretamente nos Secrets (`GEMINI_API_KEY`). Por favor, adicione sua chave nas configurações do app no Streamlit Cloud!"
+                        resposta_ia = "⚠️ Insira a sua chave da API do Google Gemini no campo localizado na **barra lateral** à esquerda para habilitar o chat inteligente!"
                     
                     st.markdown(resposta_ia)
                     st.session_state.messages.append({"role": "assistant", "content": resposta_ia})
@@ -968,4 +981,4 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro)"):
         else:
             st.sidebar.error("❌ Falha ao enviar ao Telegram.")
     else:
-        st.sidebar.warning(f"⚠️ Não há jogos cadastrados para hoje ({DATA_HOJE_STR}) nas ligas monitoradas.")
+        st.sidebar.warning(f"⚠️ Não hay jogos cadastrados para hoje ({DATA_HOJE_STR}) nas ligas monitoradas.")
