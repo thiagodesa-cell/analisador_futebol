@@ -57,7 +57,6 @@ def calcular_probabilidades_poisson(lambda_home, lambda_away, max_gols=6):
     def poisson_prob(lmbda, k):
         return (math.exp(-lmbda) * (lmbda ** k)) / math.factorial(k)
     
-    matriz_prob = 0.0
     prob_over_2_5 = 0.0
     prob_btts = 0.0
     prob_vitoria_home = 0.0
@@ -140,9 +139,28 @@ def buscar_times_global(termo, season, key, data_cache):
         data = res.json()
         times_dict = {}
         if data.get('results', 0) > 0:
+            termo_lower = termo.lower().strip()
+            # Termos e padrões indesejados para funilar apenas para os times principais
+            palavras_proibidas = ['sub-', 'sub ', 'u17', 'u19', 'u20', 'u21', 'u23', 'under', 'feminino', 'women', 'fem', ' b', ' ii']
+            
             for item in data['response']:
                 t_name = item['team']['name']
+                t_name_lower = t_name.lower()
                 t_id = item['team']['id']
+                
+                # Ignora categorias de base, feminino e reservas/B
+                if any(p in t_name_lower for p in palavras_proibidas):
+                    continue
+                
+                # Ignora filiais estaduais secundárias a menos que especificamente buscadas
+                if 'flamengo' in termo_lower and not ('piauí' in termo_lower or 'pi' in termo_lower):
+                    if 'piauí' in t_name_lower or '-pi' in t_name_lower:
+                        continue
+                        
+                if 'botafogo' in termo_lower and not ('paraíba' in termo_lower or 'pb' in termo_lower):
+                    if 'paraíba' in t_name_lower or '-pb' in t_name_lower:
+                        continue
+
                 country = item['venue'].get('country') or item['team'].get('country', 'Mundo')
                 label = f"{t_name} ({country})"
                 times_dict[label] = {'id': t_id, 'name': t_name}
@@ -898,7 +916,6 @@ else:
                 
             with st.chat_message("assistant"):
                 with st.spinner("Analisando dados do painel e gerando resposta..."):
-                    # Processamento da resposta com base no contexto ativo
                     pergunta_lower = prompt_usuario.lower()
                     contexto_base = f"Time: {time_principal} | Competição: {opcao_liga} | Gols Feitos (Média): {stats_t1.get('gols_feitos_media', 0):.2f}"
                     
@@ -944,7 +961,7 @@ if st.sidebar.button("🚀 Disparar Análise Pré-Live (IA)"):
         st.sidebar.error("❌ Falha ao enviar.")
 
 # BOTÃO: BILHETE DO DIA (SMART TIPSTER COM IA)
-if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro)"):
+if st.sidebar.button("💎 Gerar & Enviar 'Bilhete du Dia' (IA Pro)"):
     with st.spinner("Varrendo partidas de hoje com motor de Poisson e calibrando fuso horário..."):
         jogos_monitorados_hoje = buscar_jogos_ligas_monitoradas_por_data(DATA_HOJE_STR, API_KEY_FIXA, CHAVE_ATUALIZACAO)
         
@@ -966,7 +983,7 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro)"):
             c_a_data = buscar_medias_escanteios(a_id, l_id, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
             
             g_h_calc = (s_h['gf_home'] + s_a['ga_away']) / 2 if s_h['jogos'] > 0 and s_a['jogos'] > 0 else 1.3
-            g_a_calc = (s_a['gf_away'] + s_h['ga_home']) / 2 if s_a['jogos'] > 0 and s_h['jogos'] > 0 else 1.2
+            g_a_calc = (s_a['gf_away'] + s_h['ga_home']) / 2 if s_a['jogos'] > 0 and s_a['jogos'] > 0 else 1.2
             
             p_res = calcular_probabilidades_poisson(g_h_calc, g_a_calc)
             
@@ -992,4 +1009,4 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro)"):
         else:
             st.sidebar.error("❌ Falha ao enviar ao Telegram.")
     else:
-        st.sidebar.warning(f"⚠️ Não hay jogos cadastrados para hoje ({DATA_HOJE_STR}) nas ligas monitoradas.")
+        st.sidebar.warning(f"⚠️ Não há jogos cadastrados para hoje ({DATA_HOJE_STR}) nas ligas monitoradas.")
