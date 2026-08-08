@@ -4,7 +4,7 @@ import requests
 import time
 import math
 from datetime import datetime, timedelta, timezone
-import google.generativeai as genai
+from google import genai
 
 st.set_page_config(page_title="Painel Pro - Global Trading & IA Preditiva", layout="wide")
 
@@ -15,14 +15,12 @@ SEASON = datetime.now().year
 TELEGRAM_TOKEN = "8281259090:AAEggXJKpCMxRbhhrcCZymcmNUKWNoOPFfY"
 TELEGRAM_CHAT_ID = "-1004464226419"
 
-# --- CONFIGURAÇÃO DO GEMINI IA ---
-# Cole aqui sua chave correta do Google AI Studio (começa com AIza...)
-GEMINI_API_KEY = "AQ.Ab8RN6JEn6ploP_KKMFVNq7mBLnSxdSNa4s21SzZhROUaFbg6Q" 
+# --- CONFIGURAÇÃO DO GEMINI IA (NOVA BIBLIOTECA GOOGLE-GENAI) ---
+GEMINI_API_KEY = "AQ.Ab8RN6JEn6ploP_KKMFVNq7mBLnSxDSNa4s21SzZhROUaFbg6Q" 
 try:
-    genai.configure(api_key=GEMINI_API_KEY)
-    modelo_gemini = genai.GenerativeModel('gemini-1.5-flash')
+    client = genai.Client(api_key=GEMINI_API_KEY)
 except:
-    modelo_gemini = None
+    client = None
 
 # --- DICIONÁRIO DE LIGAS MONITORADAS ---
 LIGAS_MONITORADAS = {
@@ -852,14 +850,18 @@ else:
                     Partidas Jogadas: {stats_t1.get('jogos', 0)}
                     """
                     
-                    if modelo_gemini:
+                    if client:
                         try:
                             prompt_completo = f"{contexto_painel}\n\nPergunta do usuário: {prompt_usuario}"
-                            resposta_ia = modelo_gemini.generate_content(prompt_completo).text
+                            response = client.models.generate_content(
+                                model='gemini-2.5-flash',
+                                contents=prompt_completo
+                            )
+                            resposta_ia = response.text
                         except Exception as e:
                             resposta_ia = f"Erro ao acionar a IA do Gemini: {e}"
                     else:
-                        resposta_ia = "⚠️ A chave da API do Google Gemini não foi configurada corretamente no código (`GEMINI_API_KEY`). Por favor, insira uma chave válida do Google AI Studio (começada com AIza) para ativar conversas inteligentes!"
+                        resposta_ia = "⚠️ A chave da API do Google Gemini não foi configurada corretamente no código (`GEMINI_API_KEY`). Por favor, insira uma chave válida do Google AI Studio para ativar conversas inteligentes!"
                     
                     st.markdown(resposta_ia)
                     st.session_state.messages.append({"role": "assistant", "content": resposta_ia})
