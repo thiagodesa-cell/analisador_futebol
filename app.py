@@ -1,9 +1,14 @@
+import os
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 import google.generativeai as genai
 
-# Configuração simples e direta da API do Gemini
+# Remove qualquer vestígio de credencial antiga do Google Cloud que cause conflito 401
+os.environ.pop("GOOGLE_APPLICATION_CREDENTIALS", None)
+os.environ.pop("GCP_PROJECT", None)
+
+# Configura explicitamente com a chave de API do AI Studio
 genai.configure(api_key=st.secrets["AQ.Ab8RN6LUFgIywwdRku7dHwz7HcfXispuE7F3ikQrZBfc4B914w"])
 model = genai.GenerativeModel('gemini-1.5-flash')
 
