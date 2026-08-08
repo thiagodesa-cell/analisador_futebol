@@ -16,8 +16,7 @@ TELEGRAM_TOKEN = "8281259090:AAEggXJKpCMxRbhhrcCZymcmNUKWNoOPFfY"
 TELEGRAM_CHAT_ID = "-1004464226419"
 
 # --- CONFIGURAÇÃO DO GEMINI IA ---
-# Insira sua chave da API do Google Gemini abaixo (ou deixe configurada no ambiente)
-GEMINI_API_KEY = "AQ.Ab8RN6L6PP5g_I2hIPSgwBYc7DmLLYZn6tEUygyES5I2AY4MLQ" 
+GEMINI_API_KEY = "SUA_CHAVE_GEMINI_AQUI" 
 try:
     genai.configure(api_key=GEMINI_API_KEY)
     modelo_gemini = genai.GenerativeModel('gemini-1.5-flash')
@@ -40,7 +39,6 @@ LIGAS_MONITORADAS = {
     11: "Copa Sudamericana"
 }
 
-# --- VERSÃO 18 COM IA PREDITIVA E MODELO DE POISSON ---
 def obter_chave_atualizacao():
     agora = datetime.now()
     if agora.hour < 8:
@@ -61,7 +59,7 @@ def converter_para_horario_brasilia(iso_string):
     except:
         return iso_string[:10], f"{iso_string[8:10]}/{iso_string[5:7]}/{iso_string[0:4]}", iso_string[11:16]
 
-# --- MOTOR DE INTELIGÊNCIA ARTIFICIAL: DISTRIBUIÇÃO DE POISSON & PROBABILIDADES ---
+# --- MOTOR DE INTELIGÊNCIA ARTIFICIAL: DISTRIBUIÇÃO DE POISSON ---
 def calcular_probabilidades_poisson(lambda_home, lambda_away, max_gols=6):
     def poisson_prob(lmbda, k):
         return (math.exp(-lmbda) * (lmbda ** k)) / math.factorial(k)
@@ -94,17 +92,8 @@ def calcular_probabilidades_poisson(lambda_home, lambda_away, max_gols=6):
         'empate': prob_empate * 100
     }
 
-# --- BOTÃO DE SELEÇÃO DE LIGA NA BARRA LATERAL ---
-st.sidebar.header("🏆 Seleção da Competição Global")
-opcao_liga = st.sidebar.radio(
-    "Escolha qual campeonato deseja analisar:",
-    list(LIGAS_MONITORADAS.values()),
-    index=None
-)
+# --- FUNÇÕES DE BUSCA NA API (DECLARADAS ANTES DO USO) ---
 
-LEAGUE_ID = [k for k, v in LIGAS_MONITORADAS.items() if v == opcao_liga][0] if opcao_liga else None
-
-# --- DETECÇÃO INTELIGENTE DE TEMPORADA VÁLIDA ---
 @st.cache_data(persist="disk")
 def descobrir_temporada_valida(league_id, season_atual, key, data_cache):
     for s in [season_atual, season_atual - 1, season_atual - 2, season_atual - 3]:
@@ -119,13 +108,9 @@ def descobrir_temporada_valida(league_id, season_atual, key, data_cache):
             pass
     return season_atual
 
-SEASON_EFETIVA = descobrir_temporada_valida(LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO) if LEAGUE_ID else (SEASON - 1)
-
-# --- FUNÇÕES DE BUSCA NA API ---
-
 @st.cache_data(persist="disk")
-def buscar_times_global(termo, season, key, data_cache):
-    url = f"https://v3.football.api-sports.io/teams?search={termo}"
+def buscar_times_por_liga(league_id, season, key, data_cache):
+    url = f"https://v3.football.api-sports.io/teams?league={league_id}&season={season}"
     headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
     try:
         res = requests.get(url, headers=headers)
@@ -133,12 +118,7 @@ def buscar_times_global(termo, season, key, data_cache):
         times_dict = {}
         if data.get('results', 0) > 0:
             for item in data['response']:
-                t_name = item['team']['name']
-                t_id = item['team']['id']
-                country = item['venue'].get('country') or item['team'].get('country', 'Mundo')
-                # Inclui o ID para garantir que cada time tenha uma chave única no dicionário
-                label = f"{t_name} ({country}) [ID: {t_id}]"
-                times_dict[label] = {'id': t_id, 'name': t_name}
+                times_dict[item['team']['name']] = item['team']['id']
             return times_dict
     except:
         pass
@@ -157,7 +137,8 @@ def buscar_times_global(termo, season, key, data_cache):
                 t_name = item['team']['name']
                 t_id = item['team']['id']
                 country = item['venue'].get('country') or item['team'].get('country', 'Mundo')
-                label = f"{t_name} ({country})"
+                # ID incluído para evitar conflitos de nomes duplicados (ex: Flamengo masculino e feminino)
+                label = f"{t_name} ({country}) [ID: {t_id}]"
                 times_dict[label] = {'id': t_id, 'name': t_name}
             return times_dict
     except:
@@ -230,114 +211,6 @@ def buscar_liga_por_time(team_id, season, key, data_cache):
     except:
         pass
     return None, None
-
-TEAM_IDS = buscar_times_por_liga(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO) if LEAGUE_ID else {}
-
-# --- BUSCA GLOBAL DE CLUBES (MUNDO) ---
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 🌍 Busca Global de Clubes")
-termo_busca_global = st.sidebar.text_input("Pesquisar qualquer clube no mundo:", placeholder="Ex: Flamengo, Boca Juniors...")
-
-clube_global_selecionado = None
-id_time_global = None
-
-if termo_busca_global and len(termo_busca_global) >= 2:
-    dict_globais = buscar_times_global(termo_busca_global, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-    if dict_globais:
-        escolha_g = st.sidebar.selectbox(
-            "Resultados da Busca Global:", list(dict_globais.keys()), index=None, placeholder="Selecione o clube..."
-        )
-        if escolha_g:
-            clube_global_selecionado = dict_globais[escolha_g]['name']
-            id_time_global = dict_globais[escolha_g]['id']
-            l_id, l_name = buscar_liga_por_time(id_time_global, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-            if l_id:
-                LEAGUE_ID = l_id
-                opcao_liga = l_name
-            else:
-                LEAGUE_ID = 71
-                opcao_liga = LIGAS_MONITORADAS[LEAGUE_ID]
-            
-            SEASON_EFETIVA = descobrir_temporada_valida(LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-            TEAM_IDS = buscar_times_por_liga(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-
-# --- BUSCA GLOBAL DE JOGADORES ---
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 🔍 Busca Global de Jogadores")
-termo_busca_jogador = st.sidebar.text_input("Pesquisar qualquer jogador:", placeholder="Ex: Borja, Hulk...")
-
-jogador_global_selecionado = None
-id_time_global_jogador = None
-
-if termo_busca_jogador and len(termo_busca_jogador) >= 3:
-    dict_jogadores_globais = buscar_jogador_global(termo_busca_jogador, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-    
-    if "__rate_limit__" in dict_jogadores_globais:
-        st.sidebar.error("⚠️ Limite diário de requisições da API atingido.")
-    elif dict_jogadores_globais:
-        escolha_j = st.sidebar.selectbox(
-            "Resultados da Busca de Jogadores:", list(dict_jogadores_globais.keys()), index=None, placeholder="Selecione o jogador..."
-        )
-        if escolha_j:
-            j_info = dict_jogadores_globais[escolha_j]
-            LEAGUE_ID = j_info['league_id'] if j_info['league_id'] in LIGAS_MONITORADAS else 71
-            opcao_liga = j_info['league_name'] if j_info['league_id'] in LIGAS_MONITORADAS else LIGAS_MONITORADAS[71]
-            id_time_global_jogador = j_info['team_id']
-            clube_global_selecionado = j_info['team_name']
-            jogador_global_selecionado = j_info['player_name']
-            SEASON_EFETIVA = j_info.get('season', SEASON - 1)
-            TEAM_IDS = buscar_times_por_liga(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-
-# --- CONFIGURAÇÕES DE ANÁLISE ---
-st.sidebar.markdown("---")
-st.sidebar.header("⚙️ Configurações de Análise IA")
-
-if jogador_global_selecionado:
-    time_principal = clube_global_selecionado
-    id_time1 = id_time_global_jogador
-    st.sidebar.success(f"🔍 Jogador: **{jogador_global_selecionado}** ({time_principal})")
-elif clube_global_selecionado:
-    time_principal = clube_global_selecionado
-    id_time1 = id_time_global
-    st.sidebar.success(f"🌐 Ativo via Busca Global: **{time_principal}**")
-elif LEAGUE_ID:
-    times_disponiveis = sorted(list(TEAM_IDS.keys())) if TEAM_IDS else []
-    time_principal = st.sidebar.selectbox(
-        "Escolha o Time (Opcional)", times_disponiveis, index=None, placeholder="Selecione para ver o Raio-X"
-    )
-    if time_principal:
-        id_time1 = TEAM_IDS[time_principal]
-    else:
-        id_time1 = None
-else:
-    time_principal = None
-    id_time1 = None
-    st.sidebar.info("📌 Selecione uma competição, clube ou pesquise um jogador acima.")
-
-if LEAGUE_ID:
-    st.sidebar.success(f"✅ Competição Ativa: {opcao_liga} ({SEASON_EFETIVA})")
-else:
-    st.sidebar.warning("⚠️ Nenhuma competição selecionada.")
-
-st.sidebar.info(f"🔄 Motor IA v18 Ativo • Base: {CHAVE_ATUALIZACAO}")
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 👨‍💻 Desenvolvido por:")
-st.sidebar.markdown("**Thiago Oliveira De sá**")
-st.sidebar.markdown("📧 `thiago.desa@yahoo.com.br`")
-st.sidebar.markdown("📞 `(21) 96485-9482`")
-st.sidebar.markdown("---")
-
-# --- FUNÇÃO DE ENVIO PARA O TELEGRAM ---
-def enviar_alerta_telegram(mensagem):
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": mensagem, "parse_mode": "HTML"}
-    try:
-        res = requests.post(url, json=payload)
-        return res.status_code == 200
-    except:
-        return False
-
-# --- FUNÇÕES DE BUSCA NA API (COM CACHE) ---
 
 @st.cache_data(persist="disk")
 def buscar_tabela_classificacao(league_id, season, key, data_cache):
@@ -629,6 +502,123 @@ def buscar_h2h_api(id1, id2, key, data_cache):
         pass
     return None, "Sem confrontos recentes."
 
+# --- BOTÃO DE SELEÇÃO DE LIGA NA BARRA LATERAL ---
+st.sidebar.header("🏆 Seleção da Competição Global")
+opcao_liga = st.sidebar.radio(
+    "Escolha qual campeonato deseja analisar:",
+    list(LIGAS_MONITORADAS.values()),
+    index=None
+)
+
+LEAGUE_ID = [k for k, v in LIGAS_MONITORADAS.items() if v == opcao_liga][0] if opcao_liga else None
+
+SEASON_EFETIVA = descobrir_temporada_valida(LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO) if LEAGUE_ID else (SEASON - 1)
+TEAM_IDS = buscar_times_por_liga(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO) if LEAGUE_ID else {}
+
+# --- BUSCA GLOBAL DE CLUBES (MUNDO) ---
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 🌍 Busca Global de Clubes")
+termo_busca_global = st.sidebar.text_input("Pesquisar qualquer clube no mundo:", placeholder="Ex: Flamengo, Boca Juniors...")
+
+clube_global_selecionado = None
+id_time_global = None
+
+if termo_busca_global and len(termo_busca_global) >= 2:
+    dict_globais = buscar_times_global(termo_busca_global, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    if dict_globais:
+        escolha_g = st.sidebar.selectbox(
+            "Resultados da Busca Global:", list(dict_globais.keys()), index=None, placeholder="Selecione o clube..."
+        )
+        if escolha_g:
+            clube_global_selecionado = dict_globais[escolha_g]['name']
+            id_time_global = dict_globais[escolha_g]['id']
+            l_id, l_name = buscar_liga_por_time(id_time_global, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+            if l_id:
+                LEAGUE_ID = l_id
+                opcao_liga = l_name
+            else:
+                LEAGUE_ID = 71
+                opcao_liga = LIGAS_MONITORADAS[LEAGUE_ID]
+            
+            SEASON_EFETIVA = descobrir_temporada_valida(LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+            TEAM_IDS = buscar_times_por_liga(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+
+# --- BUSCA GLOBAL DE JOGADORES ---
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 🔍 Busca Global de Jogadores")
+termo_busca_jogador = st.sidebar.text_input("Pesquisar qualquer jogador:", placeholder="Ex: Borja, Hulk...")
+
+jogador_global_selecionado = None
+id_time_global_jogador = None
+
+if termo_busca_jogador and len(termo_busca_jogador) >= 3:
+    dict_jogadores_globais = buscar_jogador_global(termo_busca_jogador, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    
+    if "__rate_limit__" in dict_jogadores_globais:
+        st.sidebar.error("⚠️ Limite diário de requisições da API atingido.")
+    elif dict_jogadores_globais:
+        escolha_j = st.sidebar.selectbox(
+            "Resultados da Busca de Jogadores:", list(dict_jogadores_globais.keys()), index=None, placeholder="Selecione o jogador..."
+        )
+        if escolha_j:
+            j_info = dict_jogadores_globais[escolha_j]
+            LEAGUE_ID = j_info['league_id'] if j_info['league_id'] in LIGAS_MONITORADAS else 71
+            opcao_liga = j_info['league_name'] if j_info['league_id'] in LIGAS_MONITORADAS else LIGAS_MONITORADAS[71]
+            id_time_global_jogador = j_info['team_id']
+            clube_global_selecionado = j_info['team_name']
+            jogador_global_selecionado = j_info['player_name']
+            SEASON_EFETIVA = j_info.get('season', SEASON - 1)
+            TEAM_IDS = buscar_times_por_liga(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+
+# --- CONFIGURAÇÕES DE ANÁLISE ---
+st.sidebar.markdown("---")
+st.sidebar.header("⚙️ Configurações de Análise IA")
+
+if jogador_global_selecionado:
+    time_principal = clube_global_selecionado
+    id_time1 = id_time_global_jogador
+    st.sidebar.success(f"🔍 Jogador: **{jogador_global_selecionado}** ({time_principal})")
+elif clube_global_selecionado:
+    time_principal = clube_global_selecionado
+    id_time1 = id_time_global
+    st.sidebar.success(f"🌐 Ativo via Busca Global: **{time_principal}**")
+elif LEAGUE_ID:
+    times_disponiveis = sorted(list(TEAM_IDS.keys())) if TEAM_IDS else []
+    time_principal = st.sidebar.selectbox(
+        "Escolha o Time (Opcional)", times_disponiveis, index=None, placeholder="Selecione para ver o Raio-X"
+    )
+    if time_principal:
+        id_time1 = TEAM_IDS[time_principal]
+    else:
+        id_time1 = None
+else:
+    time_principal = None
+    id_time1 = None
+    st.sidebar.info("📌 Selecione uma competição, clube ou pesquise um jogador acima.")
+
+if LEAGUE_ID:
+    st.sidebar.success(f"✅ Competição Ativa: {opcao_liga} ({SEASON_EFETIVA})")
+else:
+    st.sidebar.warning("⚠️ Nenhuma competição selecionada.")
+
+st.sidebar.info(f"🔄 Motor IA v18 Ativo • Base: {CHAVE_ATUALIZACAO}")
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 👨‍💻 Desenvolvido por:")
+st.sidebar.markdown("**Thiago Oliveira De sá**")
+st.sidebar.markdown("📧 `thiago.desa@yahoo.com.br`")
+st.sidebar.markdown("📞 `(21) 96485-9482`")
+st.sidebar.markdown("---")
+
+# --- FUNÇÃO DE ENVIO PARA O TELEGRAM ---
+def enviar_alerta_telegram(mensagem):
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": mensagem, "parse_mode": "HTML"}
+    try:
+        res = requests.post(url, json=payload)
+        return res.status_code == 200
+    except:
+        return False
+
 # --- CARREGAMENTO DE DADOS GERAIS DA LIGA ---
 if LEAGUE_ID:
     with st.spinner(f"Extraindo panorama geral de {opcao_liga}..."):
@@ -808,7 +798,6 @@ else:
                 gols_t2 = (stats_t2['gf_away'] + stats_t1['ga_home']) / 2
                 
                 probs_poisson = calcular_probabilidades_poisson(gols_t1, gols_t2)
-                total_gols = gols_t1 + gols_t2
                 
                 c_proj_t1 = (corners_t1['corners_for_home'] + corners_t2['corners_ag_away']) / 2
                 c_proj_t2 = (corners_t2['corners_for_away'] + corners_t1['corners_ag_home']) / 2
@@ -817,7 +806,6 @@ else:
                 if LEAGUE_ID in [128, 71, 39]:
                     escanteios_jogo += 1.2
                 
-                total_cartoes = corners_t1['media_cartoes_pro'] + corners_t2['media_cartoes_pro']
                 confianca_ia = min(92, max(60, int(50 + abs(probs_poisson['vitoria_home'] - probs_poisson['vitoria_away']) * 0.6)))
 
                 sc1, sc2, sc3, sc4 = st.columns(4)
@@ -851,7 +839,6 @@ else:
                 
             with st.chat_message("assistant"):
                 with st.spinner("Gerando resposta inteligente com o Gemini..."):
-                    # Contexto completo extraído do painel para a IA entender do que estamos falando
                     cantos_totais_media = corners_t1.get('corners_for_geral', 0) + corners_t1.get('corners_ag_geral', 0)
                     contexto_painel = f"""
                     Você é um assistente de IA especialista em trading esportivo e estatísticas de futebol integrados em um painel profissional.
@@ -872,7 +859,6 @@ else:
                         except Exception as e:
                             resposta_ia = f"Erro ao acionar a IA do Gemini: {e}"
                     else:
-                        # Fallback se a chave do Gemini não estiver configurada
                         resposta_ia = "⚠️ A chave da API do Google Gemini não foi configurada no código (`GEMINI_API_KEY`). Por favor, insira sua chave válida para ativar conversas inteligentes e fluidas!"
                     
                     st.markdown(resposta_ia)
@@ -893,7 +879,6 @@ if st.sidebar.button("🚀 Disparar Análise Pré-Live (IA)"):
         c_proj_t2 = (corners_t2['corners_for_away'] + corners_t1['corners_ag_home']) / 2
         escanteios_jogo = c_proj_t1 + c_proj_t2
         if LEAGUE_ID in [128, 71, 39]: escanteios_jogo += 1.2
-        total_cartoes = corners_t1['media_cartoes_pro'] + corners_t2['media_cartoes_pro']
 
         msg = f"""🧠 <b>RELATÓRIO PRÉ-LIVE INTELIGENTE (IA v18)</b> 🧠\n\n⚽ <b>{time_principal} x {adversario}</b>\n🏆 Competição: {opcao_liga} ({SEASON_EFETIVA})\n\n📊 <b>MODELAGEM POISSON / GOLS:</b>\n• Expectativa Gols: {total_gols:.2f} ({p_res['over_2_5']:.1f}% Over 2.5)\n• BTTS: {p_res['btts']:.1f}%\n\n🚩 <b>ESCANTEIOS:</b>\n• Projeção Total: {escanteios_jogo:.1f} cantos\n\n🛡️ <b>MERCADO DE SEGURANÇA:</b>\n• Probabilidade Mandante: {p_res['vitoria_home']:.1f}%\n• Probabilidade Visitante: {p_res['vitoria_away']:.1f}%"""
     elif id_time1:
