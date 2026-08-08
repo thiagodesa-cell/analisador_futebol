@@ -16,7 +16,8 @@ TELEGRAM_TOKEN = "8281259090:AAEggXJKpCMxRbhhrcCZymcmNUKWNoOPFfY"
 TELEGRAM_CHAT_ID = "-1004464226419"
 
 # --- CONFIGURAÇÃO DO GEMINI IA ---
-GEMINI_API_KEY = "AQ.Ab8RN6L6PP5g_I2hIPSgwBYc7DmLLYZn6tEUygyES5I2AY4MLQ" 
+# Cole aqui sua chave correta do Google AI Studio (começa com AIza...)
+GEMINI_API_KEY = "AQ.Ab8RN6JEn6ploP_KKMFVNq7mBLnSxdSNa4s21SzZhROUaFbg6Q" 
 try:
     genai.configure(api_key=GEMINI_API_KEY)
     modelo_gemini = genai.GenerativeModel('gemini-1.5-flash')
@@ -137,7 +138,6 @@ def buscar_times_global(termo, season, key, data_cache):
                 t_name = item['team']['name']
                 t_id = item['team']['id']
                 country = item['venue'].get('country') or item['team'].get('country', 'Mundo')
-                # ID incluído para evitar conflitos de nomes duplicados (ex: Flamengo masculino e feminino)
                 label = f"{t_name} ({country}) [ID: {t_id}]"
                 times_dict[label] = {'id': t_id, 'name': t_name}
             return times_dict
@@ -683,7 +683,7 @@ elif LEAGUE_ID and not id_time1:
     with tab_pan_jogos:
         st.subheader(f"📅 Partidas - {opcao_liga}")
         if not df_jogos_liga.empty:
-            filtro_opcao = st.radio("Filtrar visualização:", ["Ver Jogos da Rodada Atual", "Ver Todos os Jogos da Temporada"], horizontal=True, key="filtro_jogos_pan")
+            filtro_opcao = st.radio("Filtrar visualização:", ["Ver Jogos da Rodada Atual", "Ver Todos los Jogos da Temporada"], horizontal=True, key="filtro_jogos_pan")
             df_exibir = df_jogos_liga.copy()
             if filtro_opcao == "Ver Jogos da Rodada Atual" and rodada_atual_str:
                 df_exibir = df_exibir[df_exibir['Rodada'] == rodada_atual_str]
@@ -842,7 +842,7 @@ else:
                     cantos_totais_media = corners_t1.get('corners_for_geral', 0) + corners_t1.get('corners_ag_geral', 0)
                     contexto_painel = f"""
                     Você é um assistente de IA especialista em trading esportivo e estatísticas de futebol integrados em um painel profissional.
-                    Time em foco atual: {time_principal or 'Nenhum selecionado'}
+                    Time in foco atual: {time_principal or 'Nenhum selecionado'}
                     Competição: {opcao_liga or 'Geral'}
                     Média de Gols Feitos do time: {stats_t1.get('gols_feitos_media', 0):.2f}
                     Média de Gols Sofridos do time: {stats_t1.get('gols_sofridos_media', 0):.2f}
@@ -859,7 +859,7 @@ else:
                         except Exception as e:
                             resposta_ia = f"Erro ao acionar a IA do Gemini: {e}"
                     else:
-                        resposta_ia = "⚠️ A chave da API do Google Gemini não foi configurada no código (`GEMINI_API_KEY`). Por favor, insira sua chave válida para ativar conversas inteligentes e fluidas!"
+                        resposta_ia = "⚠️ A chave da API do Google Gemini não foi configurada corretamente no código (`GEMINI_API_KEY`). Por favor, insira uma chave válida do Google AI Studio (começada com AIza) para ativar conversas inteligentes!"
                     
                     st.markdown(resposta_ia)
                     st.session_state.messages.append({"role": "assistant", "content": resposta_ia})
