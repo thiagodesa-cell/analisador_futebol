@@ -57,7 +57,6 @@ def calcular_probabilidades_poisson(lambda_home, lambda_away, max_gols=6):
     def poisson_prob(lmbda, k):
         return (math.exp(-lmbda) * (lmbda ** k)) / math.factorial(k)
     
-    matriz_prob = 0.0
     prob_over_2_5 = 0.0
     prob_btts = 0.0
     prob_vitoria_home = 0.0
@@ -903,14 +902,19 @@ else:
                     contexto_base = f"Time: {time_principal} | Competição: {opcao_liga} | Gols Feitos (Média): {stats_t1.get('gols_feitos_media', 0):.2f}"
                     
                     if "poisson" in pergunta_lower:
-                        resposta_ia = f"O modelo de Distribuição de Poisson avalia a taxa de gols esperados ($\\lambda$) de cada equipe com base no histórico em casa e fora, calculando a probabilidade estatística exata para mercados de gols e vencedor. ({contexto_base})"
+                        resposta_ia = f"O modelo de Distribuição de Poisson avalia a taxa de gols esperados de cada equipe com base no histórico em casa e fora, calculando a probabilidade estatística exata para mercados de gols e vencedor. ({contexto_base})"
                     elif "gols" in pergunta_lower or "over" in pergunta_lower:
                         resposta_ia = f"Para **{time_principal}**, a média atual de gols marcados é de `{stats_t1.get('gols_feitos_media', 0):.2f}` e sofridos de `{stats_t1.get('gols_sofridos_media', 0):.2f}`. Se houver confronto H2H ativado, verifique a aba do painel para o cálculo exato do Over 2.5."
                     elif "escanteio" in pergunta_lower or "cantos" in pergunta_lower:
                         cantos_total = corners_t1.get('corners_for_geral', 0) + corners_t1.get('corners_ag_geral', 0)
                         resposta_ia = f"A média combinada de escanteios (pró + contra) para **{time_principal}** é de aproximadamente `{cantos_total:.2f}` por partida."
+                    elif "sugestão" in pergunta_lower or "aposta" in pergunta_lower or "palpite" in pergunta_lower or "vitória" in pergunta_lower or "jogo" in pergunta_lower:
+                        media_gf = stats_t1.get('gols_feitos_media', 0)
+                        media_gc = stats_t1.get('gols_sofridos_media', 0)
+                        cantos_geral = corners_t1.get('corners_for_geral', 0) + corners_t1.get('corners_ag_geral', 0)
+                        resposta_ia = f"Análise rápida para **{time_principal}**: \n- **Média de Gols Pró:** `{media_gf:.2f}` | **Sofridos:** `{media_gc:.2f}`\n- **Média de Cantos:** `{cantos_geral:.2f}`\n\n💡 *Dica:* Para simular confrontos diretos (como Flamengo x Vitória), ative o **Simulador H2H & Motor de Poisson** na aba 'Painel IA & Elenco' para gerar o bilhete e as probabilidades exatas de vitória e gols!"
                     else:
-                        resposta_ia = f"Com base nas informações ativas (**{time_principal or opcao_liga}**), o painel está calibrado com dados oficiais da API. Recomendo analisar o cruzamento de estatísticas e a probabilidade de Poisson no painel de H2H para maior assertividade nas entradas."
+                        resposta_ia = f"Com base nas informações ativas (**{time_principal or opcao_liga}**), o painel está calibrado com dados oficiais da API. Você pode me perguntar sobre **gols, escanteios, distribuição de Poisson ou sugestões de apostas** para o time selecionado!"
                     
                     st.markdown(resposta_ia)
                     st.session_state.messages.append({"role": "assistant", "content": resposta_ia})
@@ -966,7 +970,7 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro)"):
             c_a_data = buscar_medias_escanteios(a_id, l_id, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
             
             g_h_calc = (s_h['gf_home'] + s_a['ga_away']) / 2 if s_h['jogos'] > 0 and s_a['jogos'] > 0 else 1.3
-            g_a_calc = (s_a['gf_away'] + s_h['ga_home']) / 2 if s_a['jogos'] > 0 and s_h['jogos'] > 0 else 1.2
+            g_a_calc = (s_a['gf_away'] + s_h['ga_home']) / 2 if s_a['jogos'] > 0 and s_a['jogos'] > 0 else 1.2
             
             p_res = calcular_probabilidades_poisson(g_h_calc, g_a_calc)
             
