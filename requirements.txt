@@ -2,3 +2,10 @@ streamlit
 pandas
 requests
 google-genai
+from google import genai
+
+# Cole a chave completa que você copiou do AI Studio aqui entre as aspas
+GEMINI_API_KEY = "AQ.Ab8RN6KeuJjfWedgYONekdS3w24Bgg9oWBDreo2FQWm5UuKRPA"
+
+# Inicializa o cliente do Gemini apontando a chave diretamente
+client = genai.Client(api_key=GEMINI_API_KEY)
