@@ -22,7 +22,7 @@ SEASON = datetime.now().year
 TELEGRAM_TOKEN = "8281259090:AAEggXJKpCMxRbhhrcCZymcmNUKWNoOPFfY"
 TELEGRAM_CHAT_ID = "-1004464226419"
 
-# --- DICIONÁRIO DE LIGAS MONITORADAS (COM ELITE EUROPEIA) ---
+# --- DICIONÁRIO DE LIGAS MONITORADAS ---
 LIGAS_MONITORADAS = {
     71: "Brasileirão Série A",
     72: "Brasileirão Série B",
@@ -31,10 +31,6 @@ LIGAS_MONITORADAS = {
     39: "Premier League (Inglaterra)",
     140: "La Liga (Espanha)",
     78: "Bundesliga (Alemanha)",
-    135: "Serie A (Itália)",
-    61: "Ligue 1 (França)",
-    94: "Primeira Liga (Portugal)",
-    88: "Eredivisie (Holanda)",
     2: "UEFA Champions League",
     3: "UEFA Liga Europa",
     848: "UEFA Conference League",
@@ -165,6 +161,11 @@ if btn_disparar:
     else:
         st.sidebar.error("❌ Erro ao enviar alertas.")
 
+if btn_atualizar:
+    st.cache_data.clear()
+    st.sidebar.success("🔄 Dados atualizados com sucesso!")
+    st.rerun()
+
 # --- CHATBOT INTERATIVO NO TELEGRAM (BACKGROUND THREAD) ---
 def iniciar_chatbot_telegram():
     if not TELEBOT_DISPONIVEL:
@@ -203,7 +204,7 @@ if "bot_iniciado" not in st.session_state:
         threading.Thread(target=iniciar_chatbot_telegram, daemon=True).side_effect = None
         threading.Thread(target=iniciar_chatbot_telegram, daemon=True).start()
 
-# --- CORPO PRINCIPAL DO PAINEL (EXATAMENTE O MESMO LAYOUT) ---
+# --- CORPO PRINCIPAL DO PAINEL ---
 st.title("⚽ Smart Tipster Pro - Painel Preditivo & IA")
 st.markdown(f"**Competição Ativa:** {opcao_liga} | **Temporada:** {SEASON_EFETIVA}")
 st.markdown("---")
