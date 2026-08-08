@@ -1,18 +1,11 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from google import genai
-import os
+import google.generativeai as genai
 
-# Configura o token OAuth do Google Cloud no ambiente
-os.environ["GOOGLE_OAUTH_ACCESS_TOKEN"] = "AQ.Ab8RN6KeuJjfWedgYONekdS3w24Bgg9oWBDreo2FQWm5UuKRPA"
-
-# Inicializa o cliente forçando o Vertex AI com o seu projeto do GCP
-client = genai.Client(
-    vertex=True,
-    project="866345979323",
-    location="us-central1"
-)
+# Configuração simples e direta da API do Gemini
+genai.configure(api_key=st.secrets["AQ.Ab8RN6LUFgIywwdRku7dHwz7HcfXispuE7F3ikQrZBfc4B914w"])
+model = genai.GenerativeModel('gemini-1.5-flash')
 
 st.set_page_config(page_title="Analisador Esportivo Pro", layout="wide")
 
@@ -93,11 +86,7 @@ if df is not None and not df.empty:
         with st.chat_message("assistant"):
             contexto = f"Analise o time {time_selecionado} que tem média de gols de {time_dados['gols_feitos_media']} e escanteios {time_dados['escanteios_media']}. Pergunta: {prompt}"
             try:
-                # No Vertex AI, o nome do modelo deve usar o caminho completo para evitar rotas incorretas
-                response = client.models.generate_content(
-                    model='publishers/google/models/gemini-2.0-flash', 
-                    contents=contexto
-                )
+                response = model.generate_content(contexto)
                 resposta = response.text
                 st.markdown(resposta)
                 st.session_state.messages.append({"role": "assistant", "content": resposta})
