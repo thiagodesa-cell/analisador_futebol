@@ -140,7 +140,6 @@ def buscar_times_global(termo, season, key, data_cache):
         times_dict = {}
         if data.get('results', 0) > 0:
             termo_lower = termo.lower().strip()
-            # Termos e padrões indesejados para funilar apenas para os times principais
             palavras_proibidas = ['sub-', 'sub ', 'u17', 'u19', 'u20', 'u21', 'u23', 'under', 'feminino', 'women', 'fem', ' b', ' ii']
             
             for item in data['response']:
@@ -148,11 +147,9 @@ def buscar_times_global(termo, season, key, data_cache):
                 t_name_lower = t_name.lower()
                 t_id = item['team']['id']
                 
-                # Ignora categorias de base, feminino e reservas/B
                 if any(p in t_name_lower for p in palavras_proibidas):
                     continue
                 
-                # Ignora filiais estaduais secundárias a menos que especificamente buscadas
                 if 'flamengo' in termo_lower and not ('piauí' in termo_lower or 'pi' in termo_lower):
                     if 'piauí' in t_name_lower or '-pi' in t_name_lower:
                         continue
@@ -819,11 +816,9 @@ else:
                 stats_t2 = buscar_estatisticas_time(id_time2, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
                 corners_t2 = buscar_medias_escanteios(id_time2, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
                 
-                # Expectativa de gols com Poisson
                 gols_t1 = (stats_t1['gf_home'] + stats_t2['ga_away']) / 2
                 gols_t2 = (stats_t2['gf_away'] + stats_t1['ga_home']) / 2
                 
-                # Cálculo via Poisson
                 probs_poisson = calcular_probabilidades_poisson(gols_t1, gols_t2)
                 total_gols = gols_t1 + gols_t2
                 
@@ -831,12 +826,11 @@ else:
                 c_proj_t2 = (corners_t2['corners_for_away'] + corners_t1['corners_ag_home']) / 2
                 escanteios_jogo = c_proj_t1 + c_proj_t2
                 
-                if LEAGUE_ID in [128, 71, 39]: # Ajuste calibrado para ligas intensas
+                if LEAGUE_ID in [128, 71, 39]:
                     escanteios_jogo += 1.2
                 
                 total_cartoes = corners_t1['media_cartoes_pro'] + corners_t2['media_cartoes_pro']
                 
-                # Índice de Confiança da IA (0 a 100%) baseado na força do modelo
                 confianca_ia = min(92, max(60, int(50 + abs(probs_poisson['vitoria_home'] - probs_poisson['vitoria_away']) * 0.6)))
 
                 sc1, sc2, sc3, sc4 = st.columns(4)
@@ -960,7 +954,6 @@ if st.sidebar.button("🚀 Disparar Análise Pré-Live (IA)"):
     else: 
         st.sidebar.error("❌ Falha ao enviar.")
 
-# BOTÃO: BILHETE DO DIA (SMART TIPSTER COM IA)
 if st.sidebar.button("💎 Gerar & Enviar 'Bilhete du Dia' (IA Pro)"):
     with st.spinner("Varrendo partidas de hoje com motor de Poisson e calibrando fuso horário..."):
         jogos_monitorados_hoje = buscar_jogos_ligas_monitoradas_por_data(DATA_HOJE_STR, API_KEY_FIXA, CHAVE_ATUALIZACAO)
