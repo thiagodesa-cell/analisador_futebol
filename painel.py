@@ -161,11 +161,6 @@ if btn_disparar:
     else:
         st.sidebar.error("❌ Erro ao enviar alertas.")
 
-if btn_atualizar:
-    st.cache_data.clear()
-    st.sidebar.success("🔄 Dados atualizados com sucesso!")
-    st.rerun()
-
 # --- CHATBOT INTERATIVO NO TELEGRAM (BACKGROUND THREAD) ---
 def iniciar_chatbot_telegram():
     if not TELEBOT_DISPONIVEL:
@@ -204,7 +199,7 @@ if "bot_iniciado" not in st.session_state:
         threading.Thread(target=iniciar_chatbot_telegram, daemon=True).side_effect = None
         threading.Thread(target=iniciar_chatbot_telegram, daemon=True).start()
 
-# --- CORPO PRINCIPAL DO PAINEL ---
+# --- CORPO PRINCIPAL DO PAINEL (LAYOUT ANTIGO RESTAURADO) ---
 st.title("⚽ Smart Tipster Pro - Painel Preditivo & IA")
 st.markdown(f"**Competição Ativa:** {opcao_liga} | **Temporada:** {SEASON_EFETIVA}")
 st.markdown("---")
@@ -249,6 +244,7 @@ with aba2:
     st.subheader("📊 Painel de Análise Estatística Avançada")
     st.info("Aqui você acompanha os cálculos de expectativa de gols, tendência de cantos e cruzamentos de forças das equipes.")
     
+    # Exemplo simulado interativo de cálculo para demonstração no painel
     h_lambda = st.slider("Média Esperada Gols (Mandante - Lambda)", 0.5, 3.0, 1.5, 0.1)
     a_lambda = st.slider("Média Esperada Gols (Visitante - Lambda)", 0.5, 3.0, 1.1, 0.1)
     
