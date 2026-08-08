@@ -4,10 +4,10 @@ import plotly.express as px
 from google import genai
 import os
 
-# --- CONFIGURAÇÃO COM O SEU TOKEN AQ. (VERTEX AI) ---
+# Configura o token OAuth do Google Cloud no ambiente
 os.environ["GOOGLE_OAUTH_ACCESS_TOKEN"] = "AQ.Ab8RN6KeuJjfWedgYONekdS3w24Bgg9oWBDreo2FQWm5UuKRPA"
 
-# O parâmetro vertex=True força a biblioteca a usar o token AQ. corretamente
+# Inicializa o cliente forçando o Vertex AI com o seu projeto do GCP
 client = genai.Client(
     vertex=True,
     project="866345979323",
@@ -93,7 +93,11 @@ if df is not None and not df.empty:
         with st.chat_message("assistant"):
             contexto = f"Analise o time {time_selecionado} que tem média de gols de {time_dados['gols_feitos_media']} e escanteios {time_dados['escanteios_media']}. Pergunta: {prompt}"
             try:
-                response = client.models.generate_content(model='gemini-2.0-flash', contents=contexto)
+                # No Vertex AI, o nome do modelo deve usar o caminho completo para evitar rotas incorretas
+                response = client.models.generate_content(
+                    model='publishers/google/models/gemini-2.0-flash', 
+                    contents=contexto
+                )
                 resposta = response.text
                 st.markdown(resposta)
                 st.session_state.messages.append({"role": "assistant", "content": resposta})
