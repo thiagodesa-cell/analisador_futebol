@@ -16,9 +16,16 @@ TELEGRAM_TOKEN = "8281259090:AAEggXJKpCMxRbhhrcCZymcmNUKWNoOPFfY"
 TELEGRAM_CHAT_ID = "-1004464226419"
 
 # --- CONFIGURAÇÃO DO GEMINI IA (NOVA BIBLIOTECA GOOGLE-GENAI) ---
-GEMINI_API_KEY = "AQ.Ab8RN6JEn6ploP_KKMFVNq7mBLnSxDSNa4s21SzZhROUaFbg6Q" 
 try:
-    client = genai.Client(api_key=GEMINI_API_KEY)
+    GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
+except:
+    GEMINI_API_KEY = ""
+
+try:
+    if GEMINI_API_KEY:
+        client = genai.Client(api_key=GEMINI_API_KEY)
+    else:
+        client = None
 except:
     client = None
 
@@ -132,7 +139,6 @@ def buscar_times_global(termo, season, key, data_cache):
         data = res.json()
         times_dict = {}
         if data.get('results', 0) > 0:
-            # Algoritmo inteligente para priorizar o clube principal (ex: Flamengo, Botafogo do Brasil)
             def calc_score(item):
                 t_name = item['team']['name'].strip()
                 country = item['team'].get('country', '').lower()
@@ -145,7 +151,6 @@ def buscar_times_global(termo, season, key, data_cache):
                 if country in ['brazil', 'brasil']:
                     score += 50
                 
-                # Penalizar equipes femininas, base ou estaduais secundárias nas buscas genéricas
                 sufixos_indesejados = ['w', 'women', 'u17', 'u19', 'u20', 'sub', 'arcoverde', 'pi', 'ba', 'sp', 'pb', 'ce', 'pe']
                 for suf in sufixos_indesejados:
                     if suf in t_lower.split():
@@ -883,7 +888,7 @@ else:
                         except Exception as e:
                             resposta_ia = f"Erro ao acionar a IA do Gemini: {e}"
                     else:
-                        resposta_ia = "⚠️ A chave da API do Google Gemini não foi configurada corretamente no código (`GEMINI_API_KEY`). Por favor, insira uma chave válida do Google AI Studio para ativar conversas inteligentes!"
+                        resposta_ia = "⚠️ A chave da API do Google Gemini não foi configurada corretamente nos Secrets (`GEMINI_API_KEY`). Por favor, adicione sua chave nas configurações do app no Streamlit Cloud!"
                     
                     st.markdown(resposta_ia)
                     st.session_state.messages.append({"role": "assistant", "content": resposta_ia})
@@ -933,8 +938,8 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro)"):
             s_h = buscar_estatisticas_time(h_id, l_id, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
             s_a = buscar_estatisticas_time(a_id, l_id, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
             
-            c_h_data = buscar_medias_escanteios(h_id, l_id, SEASON_EFETIVA, CHAVE_ATUALIZACAO)
-            c_a_data = buscar_medias_escanteios(a_id, l_id, SEASON_EFETIVA, CHAVE_ATUALIZACAO)
+            c_h_data = buscar_medias_escanteios(h_id, l_id, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+            c_a_data = buscar_medias_escanteios(a_id, l_id, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
             
             g_h_calc = (s_h['gf_home'] + s_a['ga_away']) / 2 if s_h['jogos'] > 0 and s_a['jogos'] > 0 else 1.3
             g_a_calc = (s_a['gf_away'] + s_h['ga_home']) / 2 if s_a['jogos'] > 0 and s_a['jogos'] > 0 else 1.2
@@ -963,4 +968,4 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro)"):
         else:
             st.sidebar.error("❌ Falha ao enviar ao Telegram.")
     else:
-        st.sidebar.warning(f"⚠️ Não hay jogos cadastrados para hoje ({DATA_HOJE_STR}) nas ligas monitoradas.")
+        st.sidebar.warning(f"⚠️ Não há jogos cadastrados para hoje ({DATA_HOJE_STR}) nas ligas monitoradas.")
