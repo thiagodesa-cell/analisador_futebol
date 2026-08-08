@@ -4,10 +4,10 @@ import plotly.express as px
 from google import genai
 import os
 
-# --- CONFIGURAÇÃO DO GEMINI (VERTEX AI) ---
-# Usando o seu token AQ. e projeto identificados
+# --- CONFIGURAÇÃO COM O SEU TOKEN AQ. (VERTEX AI) ---
 os.environ["GOOGLE_OAUTH_ACCESS_TOKEN"] = "AQ.Ab8RN6KeuJjfWedgYONekdS3w24Bgg9oWBDreo2FQWm5UuKRPA"
 
+# O parâmetro vertex=True força a biblioteca a usar o token AQ. corretamente
 client = genai.Client(
     vertex=True,
     project="866345979323",
@@ -100,5 +100,8 @@ if df is not None and not df.empty:
             except Exception as e:
                 st.error(f"Erro na IA: {e}")
 
-    # Exibição dos Gráficos (restante do seu código)
-    st.plotly_chart(px.bar(df_liga, x='Home', y=f'{mercado.lower().replace(" ", "_")}_media', title=f"Comparativo {mercado}"), use_container_width=True)
+    # Exibição dos Gráficos
+    coluna_grafico = f'{mercado.lower().replace(" ", "_")}_media'
+    if coluna_grafico in df_liga.columns:
+        fig = px.bar(df_liga, x='Home', y=coluna_grafico, title=f"Comparativo {mercado}")
+        st.plotly_chart(fig, use_container_width=True)
