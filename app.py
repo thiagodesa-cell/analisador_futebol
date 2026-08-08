@@ -1,6 +1,18 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+from google import genai
+import os
+
+# --- CONFIGURAÇÃO DO GEMINI (VERTEX AI) ---
+# Usando o seu token AQ. e projeto identificados
+os.environ["GOOGLE_OAUTH_ACCESS_TOKEN"] = "AQ.Ab8RN6KeuJjfWedgYONekdS3w24Bgg9oWBDreo2FQWm5UuKRPA"
+
+client = genai.Client(
+    vertex=True,
+    project="866345979323",
+    location="us-central1"
+)
 
 st.set_page_config(page_title="Analisador Esportivo Pro", layout="wide")
 
@@ -38,93 +50,55 @@ df = carregar_base_robusta()
 if df is not None and not df.empty:
     st.sidebar.header("Filtros de Análise")
     liga_selecionada = st.sidebar.selectbox("Escolha o Campeonato", df['Campeonato'].unique())
-
     df_liga = df[df['Campeonato'] == liga_selecionada]
-    
     times_disponiveis = df_liga['Home'].unique()
     time_selecionado = st.sidebar.selectbox("Escolha o Time", times_disponiveis)
-
-    mercado = st.sidebar.selectbox(
-        "Escolha o Mercado Principal", 
-        ["Gols", "Escanteios", "Chutes ao Gol", "Cartões Amarelos", "Posse de Bola", "Desarmes"]
-    )
+    mercado = st.sidebar.selectbox("Escolha o Mercado Principal", ["Gols", "Escanteios", "Chutes ao Gol", "Cartões Amarelos", "Posse de Bola", "Desarmes"])
 
     time_dados = df_liga[df_liga['Home'] == time_selecionado].iloc[0]
 
     st.subheader(f"Desempenho Recente (L5): {time_selecionado} ({liga_selecionada})")
-
     col1, col2, col3 = st.columns(3)
-
+    
     with col1:
         if mercado == "Gols":
-            st.metric(label="Média de Gols Feitos (L5)", value=time_dados['gols_feitos_media'])
-            st.metric(label="Média de Gols Sofridos (L5)", value=time_dados['gols_sofridos_media'])
+            st.metric(label="Média de Gols Feitos", value=time_dados['gols_feitos_media'])
+            st.metric(label="Média de Gols Sofridos", value=time_dados['gols_sofridos_media'])
         elif mercado == "Escanteios":
-            st.metric(label="Média de Escanteios (L5)", value=time_dados['escanteios_media'])
-        elif mercado == "Chutes ao Gol":
-            st.metric(label="Média de Chutes ao Gol (L5)", value=time_dados['chutes_ao_gol_media'])
-        elif mercado == "Cartões Amarelos":
-            st.metric(label="Média de Cartões Amarelos (L5)", value=time_dados['cartoes_amarelos_media'])
-        elif mercado == "Posse de Bola":
-            st.metric(label="Média de Posse de Bola", value=f"{time_dados['posse_bola_media']}%")
+            st.metric(label="Média de Escanteios", value=time_dados['escanteios_media'])
         else:
-            st.metric(label="Média de Desarmes (L5)", value=time_dados['desarmes_media'])
+            st.metric(label=f"Média de {mercado}", value=time_dados[f'{mercado.lower().replace(" ", "_")}_media'])
 
     with col2:
         st.metric(label="Mando de Campo Comum", value=time_dados['mando'])
-
     with col3:
         st.metric(label="Status de Confiabilidade", value="Alto 🟢")
 
+    # --- CHAT COM IA ---
     st.markdown("---")
-
-    # Gráficos Modernos e Intuitivos com Plotly
-    st.subheader(f"📊 Comparativo Visual da Liga: {liga_selecionada}")
+    st.subheader(f"🤖 Chat Preditivo: {time_selecionado}")
     
-    if mercado == "Gols":
-        fig = px.bar(
-            df_liga, x='Home', y=['gols_feitos_media', 'gols_sofridos_media'],
-            barmode='group', title="Média de Gols (Feitos vs Sofridos)",
-            labels={'Home': 'Times', 'value': 'Média por Jogo', 'variable': 'Métrica'}
-        )
-    elif mercado == "Escanteios":
-        fig = px.bar(
-            df_liga, x='Home', y='escanteios_media',
-            title="Média de Escanteios por Time",
-            labels={'Home': 'Times', 'escanteios_media': 'Média de Escanteios'},
-            text_auto=True, color='escanteios_media'
-        )
-    elif mercado == "Chutes ao Gol":
-        fig = px.bar(
-            df_liga, x='Home', y='chutes_ao_gol_media',
-            title="Média de Chutes ao Gol",
-            labels={'Home': 'Times', 'chutes_ao_gol_media': 'Média de Chutes'},
-            text_auto=True, color='chutes_ao_gol_media'
-        )
-    elif mercado == "Cartões Amarelos":
-        fig = px.bar(
-            df_liga, x='Home', y='cartoes_amarelos_media',
-            title="Média de Cartões Amarelos",
-            labels={'Home': 'Times', 'cartoes_amarelos_media': 'Média de Cartões'},
-            text_auto=True, color='cartoes_amarelos_media'
-        )
-    elif mercado == "Posse de Bola":
-        fig = px.bar(
-            df_liga, x='Home', y='posse_bola_media',
-            title="Média de Posse de Bola (%)",
-            labels={'Home': 'Times', 'posse_bola_media': 'Posse de Bola (%)'},
-            text_auto=True, color='posse_bola_media'
-        )
-    else:
-        fig = px.bar(
-            df_liga, x='Home', y='desarmes_media',
-            title="Média de Desarmes",
-            labels={'Home': 'Times', 'desarmes_media': 'Média de Desarmes'},
-            text_auto=True, color='desarmes_media'
-        )
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
 
-    # Exibe o gráfico interativo na tela
-    st.plotly_chart(fig, use_container_width=True)
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
 
-    with st.expander(f"Ver base de dados completa ({liga_selecionada})"):
-        st.dataframe(df_liga)
+    if prompt := st.chat_input("Pergunte algo sobre o jogo..."):
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        with st.chat_message("assistant"):
+            contexto = f"Analise o time {time_selecionado} que tem média de gols de {time_dados['gols_feitos_media']} e escanteios {time_dados['escanteios_media']}. Pergunta: {prompt}"
+            try:
+                response = client.models.generate_content(model='gemini-2.0-flash', contents=contexto)
+                resposta = response.text
+                st.markdown(resposta)
+                st.session_state.messages.append({"role": "assistant", "content": resposta})
+            except Exception as e:
+                st.error(f"Erro na IA: {e}")
+
+    # Exibição dos Gráficos (restante do seu código)
+    st.plotly_chart(px.bar(df_liga, x='Home', y=f'{mercado.lower().replace(" ", "_")}_media', title=f"Comparativo {mercado}"), use_container_width=True)
