@@ -2,14 +2,19 @@ import os
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+
+# Limpa qualquer vestígio de credencial antiga do Google Cloud
+for var in ["GOOGLE_APPLICATION_CREDENTIALS", "GCP_PROJECT", "CLOUD_ML_REGION"]:
+    os.environ.pop(var, None)
+
 import google.generativeai as genai
 
-# Remove qualquer vestígio de credencial antiga do Google Cloud que cause conflito 401
-os.environ.pop("GOOGLE_APPLICATION_CREDENTIALS", None)
-os.environ.pop("GCP_PROJECT", None)
+# ==========================================
+# COLE A SUA CHAVE DO AI STUDIO ABAIXO ENTRE AS ASPAS:
+# ==========================================
+API_KEY_DIRETA = "AQ.Ab8RN6LUFgIywwdRku7dHwz7HcfXispuE7F3ikQrZBfc4B914w"
 
-# Configura explicitamente com a chave de API do AI Studio
-genai.configure(api_key=st.secrets["AQ.Ab8RN6LUFgIywwdRku7dHwz7HcfXispuE7F3ikQrZBfc4B914w"])
+genai.configure(api_key=API_KEY_DIRETA)
 model = genai.GenerativeModel('gemini-1.5-flash')
 
 st.set_page_config(page_title="Analisador Esportivo Pro", layout="wide")
