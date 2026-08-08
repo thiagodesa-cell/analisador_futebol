@@ -16,7 +16,7 @@ TELEGRAM_TOKEN = "8281259090:AAEggXJKpCMxRbhhrcCZymcmNUKWNoOPFfY"
 TELEGRAM_CHAT_ID = "-1004464226419"
 
 # --- CONFIGURAÇÃO DO GEMINI IA ---
-GEMINI_API_KEY = "SUA_CHAVE_GEMINI_AQUI" 
+GEMINI_API_KEY = "AQ.Ab8RN6L6PP5g_I2hIPSgwBYc7DmLLYZn6tEUygyES5I2AY4MLQ" 
 try:
     genai.configure(api_key=GEMINI_API_KEY)
     modelo_gemini = genai.GenerativeModel('gemini-1.5-flash')
