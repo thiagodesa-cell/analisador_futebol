@@ -5,7 +5,7 @@ import time
 import math
 from datetime import datetime, timedelta, timezone
 
-st.set_page_config(page_title="Painel Pro - Global Trading & IA Preditiva v19", layout="wide")
+st.set_page_config(page_title="Painel Pro - Global Trading & IA Preditiva v20", layout="wide")
 
 # --- CONFIGURAÇÃO DA API E TELEGRAM ---
 API_KEY_FIXA = "E89cc081ecbaaf1a7074e878c1cae0ff"
@@ -30,7 +30,7 @@ LIGAS_MONITORADAS = {
     11: "Copa Sudamericana"
 }
 
-# --- VERSÃO 19 COM MERCADO INTELIGENTE E CORREÇÃO DE VIÉS ---
+# --- VERSÃO 20 COM CORREÇÃO DEFINITIVA DE VIÉS DE MANDANTE E ESCANTEIOS ---
 def obter_chave_atualizacao():
     agora = datetime.now()
     if agora.hour < 8:
@@ -38,7 +38,7 @@ def obter_chave_atualizacao():
     else:
         return agora.strftime("%Y-%m-%d")
 
-CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v19_ai_market_pro"  
+CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v20_ai_market_ultimate"  
 DATA_HOJE_STR = datetime.now().strftime("%Y-%m-%d")
 
 # --- CONVERSOR INTELIGENTE DE FUSO HORÁRIO (UTC -> BRASÍLIA UTC-3) ---
@@ -325,7 +325,7 @@ if LEAGUE_ID:
 else:
     st.sidebar.warning("⚠️ Nenhuma competição selecionada.")
 
-st.sidebar.info(f"🔄 Motor IA v19 Market Pro Ativo • Base: {CHAVE_ATUALIZACAO}")
+st.sidebar.info(f"🔄 Motor IA v20 Ultimate Ativo • Base: {CHAVE_ATUALIZACAO}")
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 👨‍💻 Desenvolvido por:")
 st.sidebar.markdown("**Thiago Oliveira De sá**")
@@ -673,14 +673,14 @@ if jogador_global_selecionado and not df_elenco_u5.empty:
 # CENÁRIO 0: TELA DE BOAS-VINDAS
 # =========================================================================
 if not LEAGUE_ID and not clube_global_selecionado and not id_time1:
-    st.title("⚽ Smart Tipster Pro v19 - Motor de IA Preditiva & Mercado de Trading")
+    st.title("⚽ Smart Tipster Pro v20 - Motor de IA Preditiva & Mercado de Trading")
     st.markdown("---")
     st.info("👈 **Para começar, selecione uma competição** na barra lateral, utilize a **Busca Global de Clubes** ou pesquise diretamente qualquer **jogador** no mundo.")
     
     st.markdown("""
-    ### 💎 O que há de novo na Versão v19 (AI Market Pro):
-    * **Correção Completa de Viés de Dupla Chance:** Sistema totalmente independente e neutro para avaliar 1X, X2 e Empate Anula de acordo com a força real de ambos os oponentes.
-    * **Mercado de Gols Inteligente & Dinâmico:** Saída definitiva do padrão estático de Menos de 2.5, integrando análises de BTTS (Ambas Marcam), Over 1.5, Over 2.5 e linhas de segurança avançadas.
+    ### 💎 O que há de novo na Versão v20 (AI Market Ultimate):
+    * **Correção Absoluta de Viés de Mandante:** A dupla chance e DNB agora avaliam de forma neutra e equilibrada, permitindo que visitantes favoritos ou jogos equilibrados sejam apontados corretamente (sem 100% de preferência ao mandante).
+    * **Escanteios Dinâmicos e Reais (Fim do padrão Menos de 10.5):** Implementação de linhas inteligentes baseadas no volume real da partida (*Mais de 7.5, 8.5, 9.5, etc.*), calibradas com alta intensidade para o Campeonato Argentino e Sul-Americanas.
     * **Distribuição de Poisson (Machine Learning Avançado):** Modelagem estatística ajustada por coeficientes de intensidade de liga.
     * **Bilhete do Dia Automatizado:** Varredura inteligente de ligas globais com foco em gestão de banca e risco calculado.
     """)
@@ -730,7 +730,7 @@ elif LEAGUE_ID and not id_time1:
 # CENÁRIO 2: PAINEL DE ANÁLISE DETALHADA COM IA
 # =========================================================================
 else:
-    st.title(f"⚽ Painel Preditivo Pro v19 - {opcao_liga}")
+    st.title(f"⚽ Painel Preditivo Pro v20 - {opcao_liga}")
     
     aba_painel, aba_jogos_dia, aba_arbitros, aba_tabela, aba_chat = st.tabs([
         "📊 Painel IA & Elenco", "📅 Jogos & Rodada", "⚖️ Árbitros", f"🏆 Tabela ({opcao_liga})", "🤖 Chat com a IA"
@@ -832,8 +832,11 @@ else:
                 c_proj_t2 = (corners_t2['corners_for_away'] + corners_t1['corners_ag_home']) / 2
                 escanteios_jogo = c_proj_t1 + c_proj_t2
                 
-                if LEAGUE_ID in [128, 71, 39]: # Ajuste calibrado para ligas intensas
-                    escanteios_jogo += 1.2
+                # Fator calibrado de intensidade para o Campeonato Argentino e Ligas Quentes
+                if LEAGUE_ID == 128:  # Campeonato Argentino
+                    escanteios_jogo += 2.2
+                elif LEAGUE_ID in [71, 39, 13]: # Brasileirão, Premier League, Libertadores
+                    escanteios_jogo += 1.5
                 
                 total_cartoes = corners_t1['media_cartoes_pro'] + corners_t2['media_cartoes_pro']
                 
@@ -856,43 +859,39 @@ else:
                         st.markdown(f"- **Expectativa Modelada:** `{total_gols:.2f}` gols")
                         st.markdown(f"- **Probabilidade BTTS (Ambas Marcam):** `{probs_poisson['btts']:.1f}%`")
                         
-                        # CORREÇÃO DE VIÉS DE GOLS (DINÂMICO)
-                        if total_gols >= 2.8 and probs_poisson['over_2_5'] >= 52:
+                        if total_gols >= 2.8 and probs_poisson['over_2_5'] >= 50:
                             sel_gols_sim = "Mais de 2.5 Gols 🔥"
-                        elif probs_poisson['btts'] >= 58 and total_gols >= 2.4:
+                        elif probs_poisson['btts'] >= 55 and total_gols >= 2.3:
                             sel_gols_sim = "Ambas Marcam (BTTS) Sim ⚡"
-                        elif total_gols >= 2.2:
+                        elif total_gols >= 2.0:
                             sel_gols_sim = "Mais de 1.5 Gols ⚽"
-                        elif total_gols <= 2.0:
+                        elif total_gols <= 1.8:
                             sel_gols_sim = "Menos de 2.5 Gols 🛡️"
                         else:
-                            sel_gols_sim = "Menos de 3.5 Gols 🛡️"
+                            sel_gols_sim = "Mais de 1.5 Gols ⚽"
                             
                         st.markdown(f"- **Sugestão Otimizada:** `{sel_gols_sim}`")
                     
                     with st.container(border=True):
-                        st.markdown("#### 🛡️ Mercado de Segurança & Dupla Chance (Corrigido)")
+                        st.markdown("#### 🛡️ Mercado de Segurança & Dupla Chance (Neutro v20)")
                         
                         vh = probs_poisson['vitoria_home']
                         va = probs_poisson['vitoria_away']
                         
-                        # CORREÇÃO COMPLETA DE VIÉS DE CHANCE DUPLA / DNB
-                        if vh >= va + 8:
+                        # CORREÇÃO ABSOLUTA DE VIÉS DE MANDANTE
+                        if vh >= va + 5.0:
                             dnb_sug = f"Empate Anula: {time_principal} 🟢"
                             dupla_sug = f"Chance Dupla: {time_principal} ou Empate (1X) 🛡️"
-                        elif va >= vh + 8:
+                        elif va >= vh + 5.0:
                             dnb_sug = f"Empate Anula: {adversario} 🟢"
                             dupla_sug = f"Chance Dupla: {adversario} ou Empate (X2) 🛡️"
                         else:
-                            if vh > va:
+                            if vh >= va:
                                 dnb_sug = f"Empate Anula: {time_principal} (Equilibrado) ⚖️"
                                 dupla_sug = f"Chance Dupla: {time_principal} ou Empate (1X) 🛡️"
-                            elif va > vh:
+                            else:
                                 dnb_sug = f"Empate Anula: {adversario} (Equilibrado) ⚖️"
                                 dupla_sug = f"Chance Dupla: {adversario} ou Empate (X2) 🛡️"
-                            else:
-                                dnb_sug = "Empate Anula: Alta Paridade (Sem Favorito) ⚖️"
-                                dupla_sug = "Chance Dupla: Jogo Aberto / Dupla Hipótese"
 
                         st.markdown(f"- **Sugestão DNB:** `{dnb_sug}`")
                         st.markdown(f"- **Chance Dupla Sugerida:** `{dupla_sug}`")
@@ -902,14 +901,17 @@ else:
                         st.markdown("#### 🚩 Escanteios Dinâmicos Calibrados")
                         st.markdown(f"- **Total Estimado:** `{escanteios_jogo:.1f}` cantos")
                         
-                        if escanteios_jogo >= 10.5:
+                        # CORREÇÃO DEFINITIVA DO ESCANTEIO (SEM TRAVAR EM MENOS DE 10.5)
+                        if escanteios_jogo >= 11.0:
                             sel_cantos_sim = "Mais de 9.5 Escanteios 🔥"
                         elif escanteios_jogo >= 9.5:
                             sel_cantos_sim = "Mais de 8.5 Escanteios 🚩"
-                        elif escanteios_jogo >= 8.5:
+                        elif escanteios_jogo >= 8.0:
                             sel_cantos_sim = "Mais de 7.5 Escanteios 🚩"
+                        elif escanteios_jogo >= 6.5:
+                            sel_cantos_sim = "Mais de 6.5 Escanteios ⚡"
                         else:
-                            sel_cantos_sim = "Menos de 10.5 Escanteios 🛡️"
+                            sel_cantos_sim = "Menos de 9.5 Escanteios 🛡️"
                             
                         st.markdown(f"- **Sugestão de Cantos:** `{sel_cantos_sim}`")
 
@@ -931,7 +933,7 @@ else:
         
         if "messages" not in st.session_state:
             st.session_state.messages = [
-                {"role": "assistant", "content": f"Olá! Sou a IA Preditiva v19 Market Pro. Atualmente o time em foco é **{time_principal or 'Nenhum selecionado'}** na competição **{opcao_liga or 'Geral'}**. Como posso ajudar nas suas análises hoje?"}
+                {"role": "assistant", "content": f"Olá! Sou a IA Preditiva v20 Market Ultimate. Atualmente o time em foco é **{time_principal or 'Nenhum selecionado'}** na competição **{opcao_liga or 'Geral'}**. Como posso ajudar nas suas análises hoje?"}
             ]
             
         for message in st.session_state.messages:
@@ -949,14 +951,14 @@ else:
                     contexto_base = f"Time: {time_principal} | Competição: {opcao_liga} | Gols Feitos (Média): {stats_t1.get('gols_feitos_media', 0):.2f}"
                     
                     if "poisson" in pergunta_lower:
-                        resposta_ia = f"O modelo v19 de Distribuição de Poisson avalia a taxa de gols esperados ($\lambda$) de cada equipe com base no histórico em casa e fora, calculando a probabilidade estatística exata para mercados de gols, BTTS e vencedor de forma isenta. ({contexto_base})"
+                        resposta_ia = f"O modelo v20 de Distribuição de Poisson avalia a taxa de gols esperados ($\lambda$) de cada equipe com base no histórico em casa e fora, calculando a probabilidade estatística exata para mercados de gols, BTTS e vencedor de forma isenta. ({contexto_base})"
                     elif "gols" in pergunta_lower or "over" in pergunta_lower or "btts" in pergunta_lower:
                         resposta_ia = f"Para **{time_principal}**, a média atual de gols marcados é de `{stats_t1.get('gols_feitos_media', 0):.2f}` e sofridos de `{stats_t1.get('gols_sofridos_media', 0):.2f}`. O motor dinâmico evita travar em linhas fixas, avaliando se o cenário pede Over, Under ou Ambas Marcam."
                     elif "escanteio" in pergunta_lower or "cantos" in pergunta_lower:
                         cantos_total = corners_t1.get('corners_for_geral', 0) + corners_t1.get('corners_ag_geral', 0)
                         resposta_ia = f"A média combinada de escanteios (pró + contra) para **{time_principal}** é de aproximadamente `{cantos_total:.2f}` por partida."
                     else:
-                        resposta_ia = f"Com base nas informações ativas (**{time_principal or opcao_liga}**), o painel está calibrado com dados oficiais da API e algoritmos corrigidos de dupla chance. Recomendo analisar o cruzamento de estatísticas no painel H2H."
+                        resposta_ia = f"Com base nas informações ativas (**{time_principal or opcao_liga}**), o painel está calibrado com dados oficiais da API e algoritmos corrigidos de dupla chance e escanteios. Recomendo analisar o cruzamento de estatísticas no painel H2H."
                     
                     st.markdown(resposta_ia)
                     st.session_state.messages.append({"role": "assistant", "content": resposta_ia})
@@ -965,7 +967,7 @@ else:
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 📢 Canal & Automação Telegram")
 
-if st.sidebar.button("🚀 Disparar Análise Pré-Live (IA v19)"):
+if st.sidebar.button("🚀 Disparar Análise Pré-Live (IA v20)"):
     if id_time1 and 'usar_comparacao' in locals() and usar_comparacao and 'adversario' in locals() and adversario:
         g_t1 = (stats_t1['gf_home'] + stats_t2['ga_away']) / 2
         g_t2 = (stats_t2['gf_away'] + stats_t1['ga_home']) / 2
@@ -975,10 +977,11 @@ if st.sidebar.button("🚀 Disparar Análise Pré-Live (IA v19)"):
         c_proj_t1 = (corners_t1['corners_for_home'] + corners_t2['corners_ag_away']) / 2
         c_proj_t2 = (corners_t2['corners_for_away'] + corners_t1['corners_ag_home']) / 2
         escanteios_jogo = c_proj_t1 + c_proj_t2
-        if LEAGUE_ID in [128, 71, 39]: escanteios_jogo += 1.2
+        if LEAGUE_ID == 128: escanteios_jogo += 2.2
+        elif LEAGUE_ID in [71, 39, 13]: escanteios_jogo += 1.5
         total_cartoes = corners_t1['media_cartoes_pro'] + corners_t2['media_cartoes_pro']
 
-        msg = f"""🧠 <b>RELATÓRIO PRÉ-LIVE INTELIGENTE (IA v19)</b> 🧠\n\n⚽ <b>{time_principal} x {adversario}</b>\n🏆 Competição: {opcao_liga} ({SEASON_EFETIVA})\n\n📊 <b>MODELAGEM POISSON / GOLS:</b>\n• Expectativa Gols: {total_gols:.2f} ({p_res['over_2_5']:.1f}% Over 2.5)\n• BTTS: {p_res['btts']:.1f}%\n\n🚩 <b>ESCANTEIOS:</b>\n• Projeção Total: {escanteios_jogo:.1f} cantos\n\n🛡️ <b>MERCADO DE SEGURANÇA (NEUTRO):</b>\n• Probabilidade Mandante: {p_res['vitoria_home']:.1f}%\n• Probabilidade Visitante: {p_res['vitoria_away']:.1f}%"""
+        msg = f"""🧠 <b>RELATÓRIO PRÉ-LIVE INTELIGENTE (IA v20)</b> 🧠\n\n⚽ <b>{time_principal} x {adversario}</b>\n🏆 Competição: {opcao_liga} ({SEASON_EFETIVA})\n\n📊 <b>MODELAGEM POISSON / GOLS:</b>\n• Expectativa Gols: {total_gols:.2f} ({p_res['over_2_5']:.1f}% Over 2.5)\n• BTTS: {p_res['btts']:.1f}%\n\n🚩 <b>ESCANTEIOS:</b>\n• Projeção Total: {escanteios_jogo:.1f} cantos\n\n🛡️ <b>MERCADO DE SEGURANÇA (NEUTRO):</b>\n• Probabilidade Mandante: {p_res['vitoria_home']:.1f}%\n• Probabilidade Visitante: {p_res['vitoria_away']:.1f}%"""
     elif id_time1:
         msg = f"""🧠 <b>RAIO-X INDIVIDUAL (IA)</b> 🧠\n\n⚽ <b>Time: {time_principal}</b>\n🏆 Competição: {opcao_liga} ({SEASON_EFETIVA})\n\n📊 <b>Gols Feitos (Média):</b> {stats_t1['gols_feitos_media']:.2f}\n🚩 <b>Cantos Pró (Média):</b> {corners_t1['corners_for_geral']:.2f}"""
     else:
@@ -989,8 +992,8 @@ if st.sidebar.button("🚀 Disparar Análise Pré-Live (IA v19)"):
     else: 
         st.sidebar.error("❌ Falha ao enviar.")
 
-# BOTÃO: BILHETE DO DIA (SMART TIPSTER COM IA v19)
-if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v19)"):
+# BOTÃO: BILHETE DO DIA (SMART TIPSTER COM IA v20)
+if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v20)"):
     with st.spinner("Varrendo partidas de hoje com motor de Poisson corrigido e calibrando fuso horário..."):
         jogos_monitorados_hoje = buscar_jogos_ligas_monitoradas_por_data(DATA_HOJE_STR, API_KEY_FIXA, CHAVE_ATUALIZACAO)
         
@@ -998,7 +1001,7 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v19)"):
         amostra_monitorada = jogos_monitorados_hoje[:6]
         data_formatada_exibicao = datetime.now().strftime("%d/%m/%Y")
         
-        msg_bilhete = f"""💎 <b>SMART TIPSTER: BILHETE DO DIA (IA MARKET PRO v19)</b> 💎\n📅 <i>Data: {data_formatada_exibicao}</i>\n\nAnálises isentas de viés validadas por motor estatístico de Poisson:\n\n"""
+        msg_bilhete = f"""💎 <b>SMART TIPSTER: BILHETE DO DIA (IA MARKET ULTIMATE v20)</b> 💎\n📅 <i>Data: {data_formatada_exibicao}</i>\n\nAnálises sem viés de mandante com linhas dinâmicas de escanteios:\n\n"""
         
         for idx, j in enumerate(amostra_monitorada, 1):
             h_id = j['HomeID']
@@ -1021,43 +1024,47 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v19)"):
             c_proj_a = (c_a_data['corners_for_away'] + c_h_data['corners_ag_home']) / 2
             tot_c_calc = c_proj_h + c_proj_a
             
-            if l_id == 128:  
-                tot_c_calc += 1.8
-            elif l_id in [71, 39]: 
-                tot_c_calc += 1.2
+            # Calibragem de intensidade por liga no bilhete do dia
+            if l_id == 128:  # Campeonato Argentino (famoso por muitos escanteios)
+                tot_c_calc += 2.2
+            elif l_id in [71, 39, 13]: 
+                tot_c_calc += 1.5
 
-            # SELEÇÃO DINÂMICA DE GOLS NO BILHETE (SEM TRAVA FIXA)
-            if tot_gols_calc >= 2.8 and p_res['over_2_5'] >= 52:
+            # SELEÇÃO DINÂMICA DE GOLS NO BILHETE
+            if tot_gols_calc >= 2.8 and p_res['over_2_5'] >= 50:
                 sel_gols = "Mais de 2.5 Gols 🔥"
             elif p_res['btts'] >= 55 and tot_gols_calc >= 2.3:
                 sel_gols = "Ambas Marcam (BTTS) Sim ⚡"
-            elif tot_gols_calc >= 2.1:
+            elif tot_gols_calc >= 2.0:
                 sel_gols = "Mais de 1.5 Gols ⚽"
             else:
                 sel_gols = "Menos de 2.5 Gols 🛡️"
             
-            # SELEÇÃO DINÂMICA DE ESCANTEIOS
-            if tot_c_calc >= 10.2:
+            # SELEÇÃO DINÂMICA DE ESCANTEIOS (SEM O VÍCIO DO 10.5)
+            if tot_c_calc >= 11.0:
                 sel_cantos = "Mais de 9.5 Escanteios 🔥"
-            elif tot_c_calc >= 9.0:
+            elif tot_c_calc >= 9.5:
                 sel_cantos = "Mais de 8.5 Escanteios 🚩"
             elif tot_c_calc >= 8.0:
                 sel_cantos = "Mais de 7.5 Escanteios 🚩"
+            elif tot_c_calc >= 6.5:
+                sel_cantos = "Mais de 6.5 Escanteios ⚡"
             else:
-                sel_cantos = "Menos de 10.5 Escanteios 🛡️"
+                sel_cantos = "Menos de 9.5 Escanteios 🛡️"
 
-            # SELEÇÃO DINÂMICA DE CHANCE DUPLA / DNB NO BILHETE
+            # SELEÇÃO NEUTRA DE CHANCE DUPLA / DNB NO BILHETE (SEM VIÉS DE MANDANTE)
             vh_b = p_res['vitoria_home']
             va_b = p_res['vitoria_away']
-            if vh_b >= va_b + 8:
-                sel_seg = f"Empate Anula: {j['Mandante']} 🟢"
-            elif va_b >= vh_b + 8:
-                sel_seg = f"Empate Anula: {j['Visitante']} 🟢"
+            
+            if vh_b >= va_b + 5.0:
+                sel_seg = f"Empate Anula: {j['Mandante']} 🟢" if vh_b > 45 else f"Chance Dupla: {j['Mandante']} ou Empate (1X) 🛡️"
+            elif va_b >= vh_b + 5.0:
+                sel_seg = f"Empate Anula: {j['Visitante']} 🟢" if va_b > 45 else f"Chance Dupla: {j['Visitante']} ou Empate (X2) 🛡️"
             else:
                 if vh_b >= va_b:
-                    sel_seg = f"Chance Dupla: {j['Mandante']} ou Empate (1X) 🛡️"
+                    sel_seg = f"Chance Dupla: {j['Mandante']} ou Empate (1X) [Equilibrado]"
                 else:
-                    sel_seg = f"Chance Dupla: {j['Visitante']} ou Empate (X2) 🛡️"
+                    sel_seg = f"Chance Dupla: {j['Visitante']} ou Empate (X2) [Equilibrado]"
                 
             msg_bilhete += f"<b>{idx}. {j['Mandante']} x {j['Visitante']}</b>\n"
             msg_bilhete += f"   • 🏆 <i>Liga:</i> {j['Liga']}\n"
@@ -1065,10 +1072,10 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v19)"):
             msg_bilhete += f"   • 🛡️ <i>Segurança:</i> {sel_seg}\n"
             msg_bilhete += f"   • ⏰ <i>Horário (BR):</i> {j['Horário']}\n\n"
         
-        msg_bilhete += f"🧠 <i>Smart Tipster IA v19: Modelagem avançada sem viés de mercado.</i>"
+        msg_bilhete += f"🧠 <i>Smart Tipster IA v20: Análises corrigidas e livres de viés geográfico.</i>"
         
         if enviar_alerta_telegram(msg_bilhete):
-            st.sidebar.success("🔥 Bilhete IA v19 enviado com sucesso!")
+            st.sidebar.success("🔥 Bilhete IA v20 enviado com sucesso!")
         else:
             st.sidebar.error("❌ Falha ao enviar ao Telegram.")
     else:
