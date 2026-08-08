@@ -124,8 +124,8 @@ SEASON_EFETIVA = descobrir_temporada_valida(LEAGUE_ID, SEASON, API_KEY_FIXA, CHA
 # --- FUNÇÕES DE BUSCA NA API ---
 
 @st.cache_data(persist="disk")
-def buscar_times_por_liga(league_id, season, key, data_cache):
-    url = f"https://v3.football.api-sports.io/teams?league={league_id}&season={season}"
+def buscar_times_global(termo, season, key, data_cache):
+    url = f"https://v3.football.api-sports.io/teams?search={termo}"
     headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
     try:
         res = requests.get(url, headers=headers)
@@ -133,7 +133,12 @@ def buscar_times_por_liga(league_id, season, key, data_cache):
         times_dict = {}
         if data.get('results', 0) > 0:
             for item in data['response']:
-                times_dict[item['team']['name']] = item['team']['id']
+                t_name = item['team']['name']
+                t_id = item['team']['id']
+                country = item['venue'].get('country') or item['team'].get('country', 'Mundo')
+                # Inclui o ID para garantir que cada time tenha uma chave única no dicionário
+                label = f"{t_name} ({country}) [ID: {t_id}]"
+                times_dict[label] = {'id': t_id, 'name': t_name}
             return times_dict
     except:
         pass
