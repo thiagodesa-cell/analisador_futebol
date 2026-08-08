@@ -22,7 +22,7 @@ SEASON = datetime.now().year
 TELEGRAM_TOKEN = "8281259090:AAEggXJKpCMxRbhhrcCZymcmNUKWNoOPFfY"
 TELEGRAM_CHAT_ID = "-1004464226419"
 
-# --- DICIONÁRIO DE LIGAS MONITORADAS (COM AS PRINCIPAIS LIGAS E ELITE EUROPEIA) ---
+# --- DICIONÁRIO DE LIGAS MONITORADAS (COM ELITE EUROPEIA) ---
 LIGAS_MONITORADAS = {
     71: "Brasileirão Série A",
     72: "Brasileirão Série B",
@@ -203,7 +203,7 @@ if "bot_iniciado" not in st.session_state:
         threading.Thread(target=iniciar_chatbot_telegram, daemon=True).side_effect = None
         threading.Thread(target=iniciar_chatbot_telegram, daemon=True).start()
 
-# --- CORPO PRINCIPAL DO PAINEL (LAYOUT ANTIGO RESTAURADO) ---
+# --- CORPO PRINCIPAL DO PAINEL (EXATAMENTE O MESMO LAYOUT) ---
 st.title("⚽ Smart Tipster Pro - Painel Preditivo & IA")
 st.markdown(f"**Competição Ativa:** {opcao_liga} | **Temporada:** {SEASON_EFETIVA}")
 st.markdown("---")
@@ -248,7 +248,6 @@ with aba2:
     st.subheader("📊 Painel de Análise Estatística Avançada")
     st.info("Aqui você acompanha os cálculos de expectativa de gols, tendência de cantos e cruzamentos de forças das equipes.")
     
-    # Exemplo simulado interativo de cálculo para demonstração no painel
     h_lambda = st.slider("Média Esperada Gols (Mandante - Lambda)", 0.5, 3.0, 1.5, 0.1)
     a_lambda = st.slider("Média Esperada Gols (Visitante - Lambda)", 0.5, 3.0, 1.1, 0.1)
     
