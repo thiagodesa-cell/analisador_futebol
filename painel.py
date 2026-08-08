@@ -22,17 +22,12 @@ SEASON = datetime.now().year
 TELEGRAM_TOKEN = "8281259090:AAEggXJKpCMxRbhhrcCZymcmNUKWNoOPFfY"
 TELEGRAM_CHAT_ID = "-1004464226419"
 
-# --- DICIONÁRIO DE LIGAS MONITORADAS (EXPANDIDO COM A ELITE EUROPEIA) ---
+# --- DICIONÁRIO DE LIGAS MONITORADAS (COM AS PRINCIPAIS LIGAS E ELITE EUROPEIA) ---
 LIGAS_MONITORADAS = {
-    # Brasil & América do Sul
     71: "Brasileirão Série A",
     72: "Brasileirão Série B",
     73: "Copa do Brasil",
     128: "Campeonato Argentino",
-    13: "Copa Libertadores",
-    11: "Copa Sudamericana",
-    
-    # Europa - Principais Ligas de Elite
     39: "Premier League (Inglaterra)",
     140: "La Liga (Espanha)",
     78: "Bundesliga (Alemanha)",
@@ -40,11 +35,11 @@ LIGAS_MONITORADAS = {
     61: "Ligue 1 (França)",
     94: "Primeira Liga (Portugal)",
     88: "Eredivisie (Holanda)",
-    
-    # Europa - Competições Continentais
     2: "UEFA Champions League",
     3: "UEFA Liga Europa",
-    848: "UEFA Conference League"
+    848: "UEFA Conference League",
+    13: "Copa Libertadores",
+    11: "Copa Sudamericana"
 }
 
 def obter_chave_atualizacao():
