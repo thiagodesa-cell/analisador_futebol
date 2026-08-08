@@ -2,5 +2,4 @@ streamlit
 pandas
 requests
 google-genai
-from google import genai
 
