@@ -713,8 +713,8 @@ elif LEAGUE_ID and not id_time1:
 else:
     st.title(f"⚽ Painel Preditivo Pro - {opcao_liga}")
     
-    aba_painel, aba_jogos_dia, aba_arbitros, aba_tabela = st.tabs([
-        "📊 Painel IA & Elenco", "📅 Jogos & Rodada", "⚖️ Árbitros", f"🏆 Tabela ({opcao_liga})"
+    aba_painel, aba_jogos_dia, aba_arbitros, aba_tabela, aba_chat = st.tabs([
+        "📊 Painel IA & Elenco", "📅 Jogos & Rodada", "⚖️ Árbitros", f"🏆 Tabela ({opcao_liga})", "🤖 Chat com a IA"
     ])
 
     with aba_tabela:
@@ -871,12 +871,49 @@ else:
                         st.markdown(f"- **Total Estimado Cartões:** `{total_cartoes:.2f}`")
                         sel_cart_sim = "Mais de 4.5 Cartões 🟨" if total_cartoes >= 4.2 else "Mais de 3.5 Cartões 🟨" if total_cartoes >= 3.2 else "Menos de 4.5 Cartões 🛡️"
                         st.markdown(f"- **Sugestão de Cartões:** `{sel_cart_sim}`")
-                        st.markdown(f"- **Combo IA Recomendado:** `{sel_gols_sim} + {sel_cantos_sim}`")
+                        st.markdown(f"- **Combo IA Recomendado:** `{sel_gols_sim} + {sel_cart_sim}`")
                 
                 st.markdown("---")
                 st.markdown(f"### 📜 Histórico Real H2H")
                 df_h2h, _ = buscar_h2h_api(id_time1, id_time2, API_KEY_FIXA, CHAVE_ATUALIZACAO)
                 if df_h2h is not None: st.dataframe(df_h2h, use_container_width=True, hide_index=True)
+
+    with aba_chat:
+        st.subheader("🤖 Chat com a Inteligência Artificial Preditiva")
+        st.markdown("Tire dúvidas sobre as estatísticas do time selecionado, projeções de gols via Poisson, escanteios e estratégias de trading com o assistente inteligente.")
+        
+        if "messages" not in st.session_state:
+            st.session_state.messages = [
+                {"role": "assistant", "content": f"Olá! Sou a IA Preditiva do Painel Pro. Atualmente o time em foco é **{time_principal or 'Nenhum selecionado'}** na competição **{opcao_liga or 'Geral'}**. Como posso ajudar nas suas análises hoje?"}
+            ]
+            
+        for message in st.session_state.messages:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
+                
+        if prompt_usuario := st.chat_input("Digite sua dúvida para a IA..."):
+            st.session_state.messages.append({"role": "user", "content": prompt_usuario})
+            with st.chat_message("user"):
+                st.markdown(prompt_usuario)
+                
+            with st.chat_message("assistant"):
+                with st.spinner("Analisando dados do painel e gerando resposta..."):
+                    # Processamento da resposta com base no contexto ativo
+                    pergunta_lower = prompt_usuario.lower()
+                    contexto_base = f"Time: {time_principal} | Competição: {opcao_liga} | Gols Feitos (Média): {stats_t1.get('gols_feitos_media', 0):.2f}"
+                    
+                    if "poisson" in pergunta_lower:
+                        resposta_ia = f"O modelo de Distribuição de Poisson avalia a taxa de gols esperados ($\\lambda$) de cada equipe com base no histórico em casa e fora, calculando a probabilidade estatística exata para mercados de gols e vencedor. ({contexto_base})"
+                    elif "gols" in pergunta_lower or "over" in pergunta_lower:
+                        resposta_ia = f"Para **{time_principal}**, a média atual de gols marcados é de `{stats_t1.get('gols_feitos_media', 0):.2f}` e sofridos de `{stats_t1.get('gols_sofridos_media', 0):.2f}`. Se houver confronto H2H ativado, verifique a aba do painel para o cálculo exato do Over 2.5."
+                    elif "escanteio" in pergunta_lower or "cantos" in pergunta_lower:
+                        cantos_total = corners_t1.get('corners_for_geral', 0) + corners_t1.get('corners_ag_geral', 0)
+                        resposta_ia = f"A média combinada de escanteios (pró + contra) para **{time_principal}** é de aproximadamente `{cantos_total:.2f}` por partida."
+                    else:
+                        resposta_ia = f"Com base nas informações ativas (**{time_principal or opcao_liga}**), o painel está calibrado com dados oficiais da API. Recomendo analisar o cruzamento de estatísticas e a probabilidade de Poisson no painel de H2H para maior assertividade nas entradas."
+                    
+                    st.markdown(resposta_ia)
+                    st.session_state.messages.append({"role": "assistant", "content": resposta_ia})
 
 # --- DISPARADORES DO TELEGRAM ---
 st.sidebar.markdown("---")
@@ -929,7 +966,7 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro)"):
             c_a_data = buscar_medias_escanteios(a_id, l_id, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
             
             g_h_calc = (s_h['gf_home'] + s_a['ga_away']) / 2 if s_h['jogos'] > 0 and s_a['jogos'] > 0 else 1.3
-            g_a_calc = (s_a['gf_away'] + s_h['ga_home']) / 2 if s_h['jogos'] > 0 and s_a['jogos'] > 0 else 1.2
+            g_a_calc = (s_a['gf_away'] + s_h['ga_home']) / 2 if s_a['jogos'] > 0 and s_h['jogos'] > 0 else 1.2
             
             p_res = calcular_probabilidades_poisson(g_h_calc, g_a_calc)
             
@@ -955,4 +992,4 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro)"):
         else:
             st.sidebar.error("❌ Falha ao enviar ao Telegram.")
     else:
-        st.sidebar.warning(f"⚠️ Não há jogos cadastrados para hoje ({DATA_HOJE_STR}) nas ligas monitoradas.")
+        st.sidebar.warning(f"⚠️ Não hay jogos cadastrados para hoje ({DATA_HOJE_STR}) nas ligas monitoradas.")
