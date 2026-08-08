@@ -678,7 +678,7 @@ if not LEAGUE_ID and not clube_global_selecionado and not id_time1:
     * **Distribuição de Poisson (Machine Learning):** Modelagem estatística avançada para calcular probabilidades reais de gols e mercados.
     * **Índice de Confiança de IA (Score):** Pontuação algorítmica para validar o risco de cada entrada.
     * **Horários Automáticos em Brasília:** Conversão precisa de fuso horário UTC para evitar confusões de agenda.
-    * **Bilhete do Dia Automatizado:** Varredura inteligente nas ligas de maior volume de cantos e gols com foco em gestão de banca e segurança (DNB).
+    * **Bilhete do Dia Automatizado:** Varredura inteligente nas ligas de maior volume de cantos e gols com foco em gestão de banca e segurança (DNB/Chance Dupla).
     """)
 
 # =========================================================================
@@ -859,15 +859,20 @@ else:
                     
                     with st.container(border=True):
                         st.markdown("#### 🛡️ Mercado de Segurança & DNB")
-                        if probs_poisson['vitoria_home'] > probs_poisson['vitoria_away'] + 15:
+                        # Lógica dinâmica corrigida para o Simulador Manual
+                        if probs_poisson['vitoria_home'] > probs_poisson['vitoria_away'] + 6:
                             dnb_sug = f"Empate Anula: {time_principal} 🟢"
                             dupla_sug = f"Chance Dupla: {time_principal} ou Empate (1X)"
-                        elif probs_poisson['vitoria_away'] > probs_poisson['vitoria_home'] + 15:
+                        elif probs_poisson['vitoria_away'] > probs_poisson['vitoria_home'] + 6:
                             dnb_sug = f"Empate Anula: {adversario} 🟢"
                             dupla_sug = f"Chance Dupla: {adversario} ou Empate (X2)"
+                        elif probs_poisson['vitoria_home'] >= probs_poisson['vitoria_away']:
+                            dnb_sug = "Empate Anula: Jogo Equilibrado ⚖️"
+                            dupla_sug = f"Chance Dupla: {time_principal} ou Empate (1X)"
                         else:
-                            dnb_sug = "Empate Anula: Jogo de Alta Paridade ⚖️"
-                            dupla_sug = "Chance Dupla: Jogo Aberto / Equilibrado"
+                            dnb_sug = "Empate Anula: Jogo Equilibrado ⚖️"
+                            dupla_sug = f"Chance Dupla: {adversario} ou Empate (X2)"
+                            
                         st.markdown(f"- **Sugestão Principal:** `{dnb_sug}`")
                         st.markdown(f"- **Alternativa Segura:** `{dupla_sug}`")
 
@@ -987,7 +992,16 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete du Dia' (IA Pro)"):
 
             sel_gols = "Mais de 2.5 Gols 🔥" if p_res['over_2_5'] >= 58 else "Mais de 1.5 Gols ⚡" if p_res['over_2_5'] >= 42 else "Menos de 2.5 Gols 🛡️"
             sel_cantos = "Mais de 9.5 Escanteios 🚩" if tot_c_calc >= 9.2 else "Mais de 8.5 Escanteios 🚩" if tot_c_calc >= 8.0 else "Menos de 9.5 Escanteios 🛡️"
-            sel_dnb = f"Empate Anula: {j['Mandante']} 🟢" if p_res['vitoria_home'] > p_res['vitoria_away'] + 10 else f"Empate Anula: {j['Visitante']} 🟢" if p_res['vitoria_away'] > p_res['vitoria_home'] + 10 else "Chance Dupla (1X) 🛡️"
+            
+            # --- CORREÇÃO DINÂMICA DA CHANCE DUPLA / DNB NO BILHETE DO DIA ---
+            if p_res['vitoria_home'] > p_res['vitoria_away'] + 6:
+                sel_dnb = f"Empate Anula: {j['Mandante']} 🟢"
+            elif p_res['vitoria_away'] > p_res['vitoria_home'] + 6:
+                sel_dnb = f"Empate Anula: {j['Visitante']} 🟢"
+            elif p_res['vitoria_home'] >= p_res['vitoria_away']:
+                sel_dnb = f"Chance Dupla: {j['Mandante']} ou Empate (1X) 🛡️"
+            else:
+                sel_dnb = f"Chance Dupla: {j['Visitante']} ou Empate (X2) 🛡️"
                 
             msg_bilhete += f"<b>{idx}. {j['Mandante']} x {j['Visitante']}</b>\n"
             msg_bilhete += f"   • 🏆 <i>Liga:</i> {j['Liga']}\n"
