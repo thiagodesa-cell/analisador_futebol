@@ -132,7 +132,29 @@ def buscar_times_global(termo, season, key, data_cache):
         data = res.json()
         times_dict = {}
         if data.get('results', 0) > 0:
-            for item in data['response']:
+            # Algoritmo inteligente para priorizar o clube principal (ex: Flamengo, Botafogo do Brasil)
+            def calc_score(item):
+                t_name = item['team']['name'].strip()
+                country = item['team'].get('country', '').lower()
+                t_lower = t_name.lower()
+                term_lower = termo.strip().lower()
+                
+                score = 0
+                if t_lower == term_lower:
+                    score += 100
+                if country in ['brazil', 'brasil']:
+                    score += 50
+                
+                # Penalizar equipes femininas, base ou estaduais secundárias nas buscas genéricas
+                sufixos_indesejados = ['w', 'women', 'u17', 'u19', 'u20', 'sub', 'arcoverde', 'pi', 'ba', 'sp', 'pb', 'ce', 'pe']
+                for suf in sufixos_indesejados:
+                    if suf in t_lower.split():
+                        score -= 40
+                return score
+
+            sorted_response = sorted(data['response'], key=calc_score, reverse=True)
+
+            for item in sorted_response:
                 t_name = item['team']['name']
                 t_id = item['team']['id']
                 country = item['venue'].get('country') or item['team'].get('country', 'Mundo')
@@ -516,7 +538,7 @@ TEAM_IDS = buscar_times_por_liga(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_
 # --- BUSCA GLOBAL DE CLUBES (MUNDO) ---
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 🌍 Busca Global de Clubes")
-termo_busca_global = st.sidebar.text_input("Pesquisar qualquer clube no mundo:", placeholder="Ex: Flamengo, Boca Juniors...")
+termo_busca_global = st.sidebar.text_input("Pesquisar qualquer clube no mundo:", placeholder="Ex: Flamengo, Botafogo...")
 
 clube_global_selecionado = None
 id_time_global = None
@@ -911,8 +933,8 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro)"):
             s_h = buscar_estatisticas_time(h_id, l_id, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
             s_a = buscar_estatisticas_time(a_id, l_id, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
             
-            c_h_data = buscar_medias_escanteios(h_id, l_id, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-            c_a_data = buscar_medias_escanteios(a_id, l_id, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+            c_h_data = buscar_medias_escanteios(h_id, l_id, SEASON_EFETIVA, CHAVE_ATUALIZACAO)
+            c_a_data = buscar_medias_escanteios(a_id, l_id, SEASON_EFETIVA, CHAVE_ATUALIZACAO)
             
             g_h_calc = (s_h['gf_home'] + s_a['ga_away']) / 2 if s_h['jogos'] > 0 and s_a['jogos'] > 0 else 1.3
             g_a_calc = (s_a['gf_away'] + s_h['ga_home']) / 2 if s_a['jogos'] > 0 and s_a['jogos'] > 0 else 1.2
@@ -941,4 +963,4 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro)"):
         else:
             st.sidebar.error("❌ Falha ao enviar ao Telegram.")
     else:
-        st.sidebar.warning(f"⚠️ Não há jogos cadastrados para hoje ({DATA_HOJE_STR}) nas ligas monitoradas.")
+        st.sidebar.warning(f"⚠️ Não hay jogos cadastrados para hoje ({DATA_HOJE_STR}) nas ligas monitoradas.")
