@@ -4,7 +4,6 @@ import requests
 import time
 import math
 from datetime import datetime, timedelta, timezone
-from google import genai
 
 st.set_page_config(page_title="Painel Pro - Global Trading & IA Preditiva", layout="wide")
 
@@ -15,7 +14,7 @@ SEASON = datetime.now().year
 TELEGRAM_TOKEN = "8281259090:AAEggXJKpCMxRbhhrcCZymcmNUKWNoOPFfY"
 TELEGRAM_CHAT_ID = "-1004464226419"
 
-# --- CONFIGURAÇÃO DO GEMINI IA (COM SUPORTE A SECRETS E BARRA LATERAL) ---
+# --- CONFIGURAÇÃO DO TOKEN/CHAVE NA BARRA LATERAL ---
 gemini_key_config = ""
 try:
     if "GEMINI_API_KEY" in st.secrets:
@@ -26,21 +25,13 @@ except:
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 🤖 Configuração da IA (Gemini)")
 gemini_input_sidebar = st.sidebar.text_input(
-    "Cole sua Gemini API Key:", 
+    "Cole sua Chave ou Token:", 
     value=gemini_key_config, 
     type="password", 
-    help="Cole sua chave aqui caso o painel do Streamlit Cloud não esteja lendo os Secrets."
+    help="Cole sua chave aqui (suporta tokens iniciados em AQ. ou AIza)."
 )
 
 ativa_gemini_key = gemini_input_sidebar or gemini_key_config
-
-try:
-    if ativa_gemini_key:
-        client = genai.Client(api_key=ativa_gemini_key)
-    else:
-        client = None
-except:
-    client = None
 
 # --- DICIONÁRIO DE LIGAS MONITORADAS ---
 LIGAS_MONITORADAS = {
@@ -880,7 +871,7 @@ else:
                     cantos_totais_media = corners_t1.get('corners_for_geral', 0) + corners_t1.get('corners_ag_geral', 0)
                     contexto_painel = f"""
                     Você é um assistente de IA especialista em trading esportivo e estatísticas de futebol integrados em um painel profissional.
-                    Time in foco atual: {time_principal or 'Nenhum selecionado'}
+                    Time em foco atual: {time_principal or 'Nenhum selecionado'}
                     Competição: {opcao_liga or 'Geral'}
                     Média de Gols Feitos do time: {stats_t1.get('gols_feitos_media', 0):.2f}
                     Média de Gols Sofridos do time: {stats_t1.get('gols_sofridos_media', 0):.2f}
@@ -890,18 +881,35 @@ else:
                     Partidas Jogadas: {stats_t1.get('jogos', 0)}
                     """
                     
-                    if client:
+                    if ativa_gemini_key:
                         try:
                             prompt_completo = f"{contexto_painel}\n\nPergunta do usuário: {prompt_usuario}"
-                            response = client.models.generate_content(
-                                model='gemini-2.5-flash',
-                                contents=prompt_completo
-                            )
-                            resposta_ia = response.text
+                            
+                            # Suporte inteligente tanto para chave padrão (AIza) quanto para tokens OAuth/Google Cloud (AQ.)
+                            if ativa_gemini_key.startswith("AIza"):
+                                url_gemini = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={ativa_gemini_key}"
+                                headers_gemini = {"Content-Type": "application/json"}
+                            else:
+                                url_gemini = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+                                headers_gemini = {"Content-Type": "application/json", "Authorization": f"Bearer {ativa_gemini_key}"}
+                            
+                            payload_gemini = {
+                                "contents": [{
+                                    "parts": [{"text": prompt_completo}]
+                                }]
+                            }
+                            
+                            response = requests.post(url_gemini, headers=headers_gemini, json=payload_gemini)
+                            
+                            if response.status_code == 200:
+                                data_res = response.json()
+                                resposta_ia = data_res['candidates'][0]['content']['parts'][0]['text']
+                            else:
+                                resposta_ia = f"Erro na API do Gemini (Código {response.status_code}): {response.text}"
                         except Exception as e:
-                            resposta_ia = f"Erro ao acionar a IA do Gemini: {e}"
+                            resposta_ia = f"Erro ao acionar a API do Gemini: {e}"
                     else:
-                        resposta_ia = "⚠️ Insira a sua chave da API do Google Gemini no campo localizado na **barra lateral** à esquerda para habilitar o chat inteligente!"
+                        resposta_ia = "⚠️ Insira a sua chave ou token no campo localizado na **barra lateral** à esquerda para habilitar o chat inteligente!"
                     
                     st.markdown(resposta_ia)
                     st.session_state.messages.append({"role": "assistant", "content": resposta_ia})
@@ -981,4 +989,4 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro)"):
         else:
             st.sidebar.error("❌ Falha ao enviar ao Telegram.")
     else:
-        st.sidebar.warning(f"⚠️ Não hay jogos cadastrados para hoje ({DATA_HOJE_STR}) nas ligas monitoradas.")
+        st.sidebar.warning(f"⚠️ Não há jogos cadastrados para hoje ({DATA_HOJE_STR}) nas ligas monitoradas.")
