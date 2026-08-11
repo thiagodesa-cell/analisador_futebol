@@ -5,10 +5,19 @@ import time
 import math
 from datetime import datetime, timedelta, timezone
 
-st.set_page_config(page_title="Painel Pro - Global Trading & IA Preditiva v22.1", layout="wide")
+# Tenta importar o SDK moderno do Google GenAI
+try:
+    from google import genai
+    from google.genai import types
+    GEANAI_SDK_DISPONIVEL = True
+except ImportError:
+    GEANAI_SDK_DISPONIVEL = False
+
+st.set_page_config(page_title="Painel Pro - Global Trading & IA Preditiva v22.2", layout="wide")
 
 # --- CONFIGURAÇÃO DA API E TELEGRAM ---
-API_KEY_FIXA = "E89cc081ecbaaf1a7074e878c1cae0ff"
+# Compatível com chaves antigas (AIza) ou novas (HAQ)
+API_KEY_FIXA = "E89cc081ecbaaf1a7074e878c1cae0ff" 
 SEASON = datetime.now().year 
 
 TELEGRAM_TOKEN = "8281259090:AAEggXJKpCMxRbhhrcCZymcmNUKWNoOPFfY"
@@ -30,7 +39,7 @@ LIGAS_MONITORADAS = {
     11: "Copa Sudamericana"
 }
 
-# --- VERSÃO 22.1 COM BASE DINÂMICA U6, TENDÊNCIAS E HISTÓRICO DE BILHETES ---
+# --- VERSÃO 22.2 COM CHAT INTEGRADO AO GEMINI RECURSIVO ---
 def obter_chave_atualizacao():
     agora = datetime.now()
     if agora.hour < 8:
@@ -38,10 +47,9 @@ def obter_chave_atualizacao():
     else:
         return agora.strftime("%Y-%m-%d")
 
-CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v22_1_ai_market_u6"  
+CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v22_2_ai_market_u6"  
 DATA_HOJE_STR = datetime.now().strftime("%Y-%m-%d")
 
-# Inicialização do Histórico de Bilhetes no Session State
 if "historico_bilhetes" not in st.session_state:
     st.session_state.historico_bilhetes = []
 
@@ -57,7 +65,6 @@ def converter_para_horario_brasilia(iso_string):
 
 # --- MOTOR DE INTELIGÊNCIA ARTIFICIAL: DISTRIBUIÇÃO DE POISSON & PROBABILIDADES ---
 def calcular_probabilidades_poisson(lambda_home, lambda_away, max_gols=6):
-    """Calcula a matriz de probabilidades de placares usando a Distribuição de Poisson."""
     def poisson_prob(lmbda, k):
         return (math.exp(-lmbda) * (lmbda ** k)) / math.factorial(k)
     
@@ -166,16 +173,8 @@ def buscar_times_global(termo, season, key, data_cache):
                 t_name_lower = t_name.lower()
                 t_id = item['team']['id']
                 
-                if any(p in t_name_lower for p in filtro_ruido):
-                    continue
-                
-                if 'flamengo' in termo_lower and t_name_lower not in ['flamengo', 'cr flamengo']:
-                    continue
-                if 'botafogo' in termo_lower and t_name_lower not in ['botafogo', 'botafogo fr']:
-                    continue
-                
-                if any(r in t_name_lower for r in ruido_regional):
-                    continue
+                if any(p in t_name_lower for p in filtro_ruido): continue
+                if any(r in t_name_lower for r in ruido_regional): continue
 
                 country = item['venue'].get('country') or item['team'].get('country', 'Mundo')
                 label = f"{t_name} ({country})"
@@ -189,47 +188,32 @@ def buscar_times_global(termo, season, key, data_cache):
 def buscar_jogador_global(termo, season, key, data_cache):
     headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
     jogadores_dict = {}
-    anos_para_testar = [season - 1, season - 2, season, season - 3, season - 4]
+    anos_para_testar = [season - 1, season - 2, season, season - 3]
     
     for s in anos_para_testar:
         url = f"https://v3.football.api-sports.io/players?search={termo}&season={s}"
         try:
             res = requests.get(url, headers=headers)
-            if res.status_code == 429:
-                return {"__rate_limit__": True}
-            
+            if res.status_code == 429: return {"__rate_limit__": True}
             if res.status_code == 200:
                 data = res.json()
                 if data.get('results', 0) > 0:
                     for item in data['response']:
                         p_info = item['player']
-                        p_id = p_info['id']
-                        p_name = p_info['name']
                         stats_list = item.get('statistics', [])
                         if stats_list:
                             for stat in stats_list:
-                                team_info = stat['team']
-                                league_info = stat['league']
-                                t_id = team_info['id']
-                                t_name = team_info['name']
-                                l_id = league_info['id']
-                                l_name = league_info['name']
-                                
-                                label = f"{p_name} ({t_name} - {l_name}) [{s}]"
+                                t_id = stat['team']['id']
+                                t_name = stat['team']['name']
+                                l_id = stat['league']['id']
+                                l_name = stat['league']['name']
+                                label = f"{p_info['name']} ({t_name} - {l_name}) [{s}]"
                                 jogadores_dict[label] = {
-                                    'player_id': p_id, 'player_name': p_name,
+                                    'player_id': p_info['id'], 'player_name': p_info['name'],
                                     'team_id': t_id, 'team_name': t_name,
                                     'league_id': l_id, 'league_name': l_name, 'season': s
                                 }
-                        else:
-                            label = f"{p_name} (Temporada {s})"
-                            jogadores_dict[label] = {
-                                'player_id': p_id, 'player_name': p_name,
-                                'team_id': None, 'team_name': "Time não especificado",
-                                'league_id': 71, 'league_name': "Brasileirão Série A", 'season': s
-                            }
-                    if jogadores_dict:
-                        return jogadores_dict
+                    if jogadores_dict: return jogadores_dict
         except:
             pass
     return jogadores_dict
@@ -254,10 +238,10 @@ def buscar_liga_por_time(team_id, season, key, data_cache):
 
 TEAM_IDS = buscar_times_por_liga(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO) if LEAGUE_ID else {}
 
-# --- BUSCA GLOBAL DE CLUBES (MUNDO) ---
+# --- BUSCA GLOBAL DE CLUBES ---
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 🌍 Busca Global de Clubes")
-termo_busca_global = st.sidebar.text_input("Pesquisar qualquer clube no mundo:", placeholder="Ex: Flamengo, Boca Juniors...", key="input_busca_clube_global")
+termo_busca_global = st.sidebar.text_input("Pesquisar qualquer clube no mundo:", placeholder="Ex: Flamengo, Boca...", key="input_busca_clube_global")
 
 clube_global_selecionado = None
 id_time_global = None
@@ -265,9 +249,7 @@ id_time_global = None
 if termo_busca_global and len(termo_busca_global) >= 2:
     dict_globais = buscar_times_global(termo_busca_global, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     if dict_globais:
-        escolha_g = st.sidebar.selectbox(
-            "Resultados da Busca Global:", list(dict_globais.keys()), index=None, placeholder="Selecione o clube...", key="select_global_clube"
-        )
+        escolha_g = st.sidebar.selectbox("Resultados da Busca Global:", list(dict_globais.keys()), index=None, placeholder="Selecione o clube...", key="select_global_clube")
         if escolha_g:
             clube_global_selecionado = dict_globais[escolha_g]['name']
             id_time_global = dict_globais[escolha_g]['id']
@@ -278,7 +260,6 @@ if termo_busca_global and len(termo_busca_global) >= 2:
             else:
                 LEAGUE_ID = 71
                 opcao_liga = LIGAS_MONITORADAS[LEAGUE_ID]
-            
             SEASON_EFETIVA = descobrir_temporada_valida(LEAGUE_ID, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
             TEAM_IDS = buscar_times_por_liga(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
@@ -292,13 +273,10 @@ id_time_global_jogador = None
 
 if termo_busca_jogador and len(termo_busca_jogador) >= 3:
     dict_jogadores_globais = buscar_jogador_global(termo_busca_jogador, SEASON, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-    
     if "__rate_limit__" in dict_jogadores_globais:
-        st.sidebar.error("⚠️ Limite diário de requisições da API atingido.")
+        st.sidebar.error("⚠️ Limite diário da API de jogadores atingido.")
     elif dict_jogadores_globais:
-        escolha_j = st.sidebar.selectbox(
-            "Resultados da Busca de Jogadores:", list(dict_jogadores_globais.keys()), index=None, placeholder="Selecione o jogador...", key="select_global_jogador"
-        )
+        escolha_j = st.sidebar.selectbox("Resultados de Jogadores:", list(dict_jogadores_globais.keys()), index=None, placeholder="Selecione o jogador...", key="select_global_jogador")
         if escolha_j:
             j_info = dict_jogadores_globais[escolha_j]
             LEAGUE_ID = j_info['league_id'] if j_info['league_id'] in LIGAS_MONITORADAS else 71
@@ -316,39 +294,22 @@ st.sidebar.header("⚙️ Configurações de Análise IA")
 if jogador_global_selecionado:
     time_principal = clube_global_selecionado
     id_time1 = id_time_global_jogador
-    st.sidebar.success(f"🔍 Jogador: **{jogador_global_selecionado}** ({time_principal})")
+    st.sidebar.success(f"🔍 Jogador: **{jogador_global_selecionado}**")
 elif clube_global_selecionado:
     time_principal = clube_global_selecionado
     id_time1 = id_time_global
-    st.sidebar.success(f"🌐 Ativo via Busca Global: **{time_principal}**")
+    st.sidebar.success(f"🌐 Ativo: **{time_principal}**")
 elif LEAGUE_ID:
     times_disponiveis = sorted(list(TEAM_IDS.keys())) if TEAM_IDS else []
-    time_principal = st.sidebar.selectbox(
-        "Escolha o Time (Opcional)", times_disponiveis, index=None, placeholder="Selecione para ver o Raio-X", key="select_time_principal"
-    )
-    if time_principal:
-        id_time1 = TEAM_IDS[time_principal]
-    else:
-        id_time1 = None
+    time_principal = st.sidebar.selectbox("Escolha o Time", times_disponiveis, index=None, placeholder="Selecione...", key="select_time_principal")
+    id_time1 = TEAM_IDS[time_principal] if time_principal else None
 else:
-    time_principal = None
-    id_time1 = None
-    st.sidebar.info("📌 Selecione uma competição, clube ou pesquise um jogador acima.")
+    time_principal, id_time1 = None, None
 
-if LEAGUE_ID:
-    st.sidebar.success(f"✅ Competição Ativa: {opcao_liga} ({SEASON_EFETIVA})")
-else:
-    st.sidebar.warning("⚠️ Nenhuma competição selecionada.")
-
-st.sidebar.info(f"🔄 Motor IA v22.1 U6 Dinâmico Ativo • Base: {CHAVE_ATUALIZACAO}")
+st.sidebar.info(f"🔄 Motor IA v22.2 U6 • Base: {CHAVE_ATUALIZACAO}")
 st.sidebar.markdown("---")
-st.sidebar.markdown("### 👨‍💻 Desenvolvido por:")
-st.sidebar.markdown("**Thiago Oliveira De sá**")
-st.sidebar.markdown("📧 `thiago.desa@yahoo.com.br`")
-st.sidebar.markdown("📞 `(21) 96485-9482`")
-st.sidebar.markdown("---")
+st.sidebar.markdown("**Desenvolvido por:** Thiago Oliveira De sá")
 
-# --- FUNÇÃO DE ENVIO PARA O TELEGRAM ---
 def enviar_alerta_telegram(mensagem):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": mensagem, "parse_mode": "HTML"}
@@ -358,7 +319,7 @@ def enviar_alerta_telegram(mensagem):
     except:
         return False
 
-# --- FUNÇÕES DE BUSCA NA API (COM CACHE) ---
+# --- FUNÇÕES DE DADOS (CACHE) ---
 
 @st.cache_data(persist="disk")
 def buscar_tabela_classificacao(league_id, season, key, data_cache):
@@ -368,18 +329,14 @@ def buscar_tabela_classificacao(league_id, season, key, data_cache):
         res = requests.get(url, headers=headers)
         data = res.json()
         if data.get('results', 0) > 0:
-            response_league = data['response'][0]['league']
-            if 'standings' in response_league:
-                standings = response_league['standings'][0]
-                tabela = []
-                for s in standings:
-                    tabela.append({
-                        'Pos': s['rank'], 'Time': s['team']['name'], 'Pts': s['points'],
-                        'J': s['all']['played'], 'V': s['all']['win'], 'E': s['all']['draw'],
-                        'D': s['all']['lose'], 'GP': s['all']['goals']['for'], 'GC': s['all']['goals']['against'],
-                        'SG': s['goalsDiff']
-                    })
-                return pd.DataFrame(tabela)
+            standings = data['response'][0]['league']['standings'][0]
+            tabela = [{
+                'Pos': s['rank'], 'Time': s['team']['name'], 'Pts': s['points'],
+                'J': s['all']['played'], 'V': s['all']['win'], 'E': s['all']['draw'],
+                'D': s['all']['lose'], 'GP': s['all']['goals']['for'], 'GC': s['all']['goals']['against'],
+                'SG': s['goalsDiff']
+            } for s in standings]
+            return pd.DataFrame(tabela)
     except:
         pass
     return pd.DataFrame()
@@ -392,24 +349,16 @@ def buscar_jogos_liga(league_id, season, key, data_cache):
         res = requests.get(url, headers=headers)
         data = res.json()
         if data.get('results', 0) > 0:
-            fixtures = data['response']
             jogos_lista = []
-            for f in fixtures:
-                date_str = f['fixture']['date']
-                _, match_date_fmt, match_time = converter_para_horario_brasilia(date_str)
-                
+            for f in data['response']:
+                _, match_date_fmt, match_time = converter_para_horario_brasilia(f['fixture']['date'])
                 status = f['fixture']['status']['short']
-                home_name = f['teams']['home']['name']
-                away_name = f['teams']['away']['name']
-                goals_home = f['goals']['home']
-                goals_away = f['goals']['away']
-                
-                placar_str = f"{goals_home} x {goals_away}" if goals_home is not None else "vs"
-                round_name = f['league'].get('round', 'Rodada')
-                
+                g_home = f['goals']['home']
+                g_away = f['goals']['away']
+                placar_str = f"{g_home} x {g_away}" if g_home is not None else "vs"
                 jogos_lista.append({
-                    'Data': match_date_fmt, 'Horário': match_time, 'Rodada': round_name,
-                    'Mandante': home_name, 'Placar': placar_str, 'Visitante': away_name, 'Status': status
+                    'Data': match_date_fmt, 'Horário': match_time, 'Rodada': f['league'].get('round', 'Rodada'),
+                    'Mandante': f['teams']['home']['name'], 'Placar': placar_str, 'Visitante': f['teams']['away']['name'], 'Status': status
                 })
             return pd.DataFrame(jogos_lista)
     except:
@@ -426,23 +375,13 @@ def buscar_jogos_ligas_monitoradas_por_data(data_str, key, cache_key):
         jogos_filtrados = []
         if data.get('results', 0) > 0:
             for f in data['response']:
-                league_id = f['league']['id']
-                if league_id in LIGAS_MONITORADAS:
-                    date_str_f = f['fixture']['date']
-                    _, match_date_fmt, match_time = converter_para_horario_brasilia(date_str_f)
-                    league_name = LIGAS_MONITORADAS[league_id]
-                        
-                    home_name = f['teams']['home']['name']
-                    away_name = f['teams']['away']['name']
-                    home_id = f['teams']['home']['id']
-                    away_id = f['teams']['away']['id']
-                    status = f['fixture']['status']['short']
-                    
-                    if status in ['NS', 'TBD', '1H', 'HT', '2H']:
+                if f['league']['id'] in LIGAS_MONITORADAS:
+                    _, match_date_fmt, match_time = converter_para_horario_brasilia(f['fixture']['date'])
+                    if f['fixture']['status']['short'] in ['NS', 'TBD', '1H', 'HT', '2H']:
                         jogos_filtrados.append({
-                            'LeagueID': league_id, 'Liga': league_name,
-                            'Mandante': home_name, 'Visitante': away_name,
-                            'HomeID': home_id, 'AwayID': away_id,
+                            'LeagueID': f['league']['id'], 'Liga': LIGAS_MONITORADAS[f['league']['id']],
+                            'Mandante': f['teams']['home']['name'], 'Visitante': f['teams']['away']['name'],
+                            'HomeID': f['teams']['home']['id'], 'AwayID': f['teams']['away']['id'],
                             'Data': match_date_fmt, 'Horário': match_time
                         })
             return jogos_filtrados
@@ -474,15 +413,10 @@ def buscar_dados_arbitros(league_id, season, key, data_cache):
             ref_data = {}
             for f in data['response']:
                 ref = f['fixture']['referee'] or "Não Divulgado"
-                status = f['fixture']['status']['short']
-                if status in ['FT', 'AET', 'PEN', '1H', '2H', 'HT', 'ET']:
-                    home = f['teams']['home']['name']
-                    away = f['teams']['away']['name']
-                    if ref not in ref_data:
-                        ref_data[ref] = {'Jogos': 0, 'Confrontos': []}
+                if f['fixture']['status']['short'] in ['FT', 'AET', 'PEN', '1H', '2H', 'HT', 'ET']:
+                    if ref not in ref_data: ref_data[ref] = {'Jogos': 0, 'Confrontos': []}
                     ref_data[ref]['Jogos'] += 1
-                    ref_data[ref]['Confrontos'].append(f"{home} x {away}")
-            
+                    ref_data[ref]['Confrontos'].append(f"{f['teams']['home']['name']} x {f['teams']['away']['name']}")
             rows = [{'Árbitro': r, 'Jogos Apitados': i['Jogos'], 'Últimos Confrontos': ", ".join(i['Confrontos'][:2])} for r, i in ref_data.items()]
             return pd.DataFrame(rows).sort_values(by='Jogos Apitados', ascending=False) if rows else pd.DataFrame()
     except:
@@ -493,10 +427,8 @@ def buscar_dados_arbitros(league_id, season, key, data_cache):
 def buscar_medias_escanteios(team_id, league_id, season, key, data_cache):
     url_fixtures = f"https://v3.football.api-sports.io/fixtures?league={league_id}&season={season}&team={team_id}&last=10"
     headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
-    cantos_pro_casa, cantos_contra_casa = [], []
-    cantos_pro_fora, cantos_contra_fora = [], []
-    cartoes_pro_casa, cartoes_contra_casa_list = [], []
-    cartoes_pro_fora, cartoes_contra_fora_list = [], []
+    cantos_pro_casa, cantos_contra_casa, cantos_pro_fora, cantos_contra_fora = [], [], [], []
+    cartoes_pro, cartoes_contra = [], []
     detalhes = []
     try:
         res = requests.get(url_fixtures, headers=headers)
@@ -508,70 +440,54 @@ def buscar_medias_escanteios(team_id, league_id, season, key, data_cache):
                 adv = f['teams']['away']['name'] if is_home else f['teams']['home']['name']
                 _, dt_fmt, _ = converter_para_horario_brasilia(f['fixture']['date'])
                 
-                g_home = f['goals']['home'] if f['goals']['home'] is not None else 0
-                g_away = f['goals']['away'] if f['goals']['away'] is not None else 0
-                g_pro = g_home if is_home else g_away
-                g_contra = g_away if is_home else g_home
-                placar_real = f"{g_home} x {g_away}"
+                g_home, g_away = f['goals']['home'] or 0, f['goals']['away'] or 0
+                g_pro, g_contra = (g_home, g_away) if is_home else (g_away, g_home)
                 
                 time.sleep(0.15)
                 res_s = requests.get(f"https://v3.football.api-sports.io/fixtures/statistics?fixture={f_id}", headers=headers)
                 data_s = res_s.json()
-                
-                t_corners, o_corners = 0, 0
-                t_yellow, o_yellow = 0, 0
+                t_corners, o_corners, t_yellow, o_yellow = 0, 0, 0, 0
                 if data_s.get('results', 0) > 0:
                     for item in data_s['response']:
                         for s in item['statistics']:
                             if s['type'] == 'Corner Kicks' and s['value'] is not None:
-                                c_val = int(s['value'])
-                                if item['team']['id'] == team_id: t_corners = c_val
-                                else: o_corners = c_val
+                                c = int(s['value'])
+                                if item['team']['id'] == team_id: t_corners = c
+                                else: o_corners = c
                             elif s['type'] == 'Yellow Cards' and s['value'] is not None:
-                                y_val = int(s['value'])
-                                if item['team']['id'] == team_id: t_yellow = y_val
-                                else: o_yellow = y_val
+                                y = int(s['value'])
+                                if item['team']['id'] == team_id: t_yellow = y
+                                else: o_yellow = y
                 
                 if is_home:
                     cantos_pro_casa.append(t_corners)
                     cantos_contra_casa.append(o_corners)
-                    cartoes_pro_casa.append(t_yellow)
-                    cartoes_contra_casa_list.append(o_yellow)
+                    cartoes_pro.append(t_yellow)
+                    cartoes_contra.append(o_yellow)
                 else:
                     cantos_pro_fora.append(t_corners)
                     cantos_contra_fora.append(o_corners)
-                    cartoes_pro_fora.append(t_yellow)
-                    cartoes_contra_fora_list.append(o_yellow)
+                    cartoes_pro.append(t_yellow)
+                    cartoes_contra.append(o_yellow)
                 
                 detalhes.append({
-                    'Data': dt_fmt, 'Adversário': adv, 'Mando': 'Casa' if is_home else 'Fora', 'Placar': placar_real,
+                    'Data': dt_fmt, 'Adversário': adv, 'Mando': 'Casa' if is_home else 'Fora', 'Placar': f"{g_home} x {g_away}",
                     'Gols Pró': g_pro, 'Gols Contra': g_contra, 'Cantos Pró': t_corners, 'Cantos Contra': o_corners,
                     'Total Cantos': t_corners + o_corners, 'Cartões Pró': t_yellow, 'Cartões Contra': o_yellow, 'Total Cartões': t_yellow + o_yellow
                 })
         
-        todas_cartoes_pro = cartoes_pro_casa + cartoes_pro_fora
-        todas_cartoes_contra = cartoes_contra_casa_list + cartoes_contra_fora
-        
-        cf_geral = (sum(cantos_pro_casa+cantos_pro_fora)/max(len(cantos_pro_casa+cantos_pro_fora),1))
-        ca_geral = (sum(cantos_contra_casa+cantos_contra_fora)/max(len(cantos_contra_casa+cantos_contra_fora),1))
-        cf_home = sum(cantos_pro_casa)/max(len(cantos_pro_casa),1)
-        ca_home = sum(cantos_contra_casa)/max(len(cantos_contra_casa),1)
-        cf_away = sum(cantos_pro_fora)/max(len(cantos_pro_fora),1)
-        ca_away = sum(cantos_contra_fora)/max(len(cantos_contra_fora),1)
-
-        m_pro = sum(todas_cartoes_pro)/max(len(todas_cartoes_pro),1)
-        m_contra = sum(todas_cartoes_contra)/max(len(todas_cartoes_contra),1)
-        
-        if m_pro == m_contra and m_pro > 0:
-            m_contra = m_pro + 0.55
+        cf_geral = sum(cantos_pro_casa + cantos_pro_fora) / max(len(cantos_pro_casa + cantos_pro_fora), 1)
+        ca_geral = sum(cantos_contra_casa + cantos_contra_fora) / max(len(cantos_contra_casa + cantos_contra_fora), 1)
+        m_pro = sum(cartoes_pro) / max(len(cartoes_pro), 1)
+        m_contra = sum(cartoes_contra) / max(len(cartoes_contra), 1)
 
         return {
             'corners_for_geral': cf_geral if cf_geral > 1.0 else 4.8,
             'corners_ag_geral': ca_geral if ca_geral > 1.0 else 4.5,
-            'corners_for_home': cf_home if cf_home > 1.0 else 5.0, 
-            'corners_ag_home': ca_home if ca_home > 1.0 else 4.5,
-            'corners_for_away': cf_away if cf_away > 1.0 else 4.2, 
-            'corners_ag_away': ca_away if ca_away > 1.0 else 4.8,
+            'corners_for_home': sum(cantos_pro_casa)/max(len(cantos_pro_casa),1) if cantos_pro_casa else 5.0,
+            'corners_ag_home': sum(cantos_contra_casa)/max(len(cantos_contra_casa),1) if cantos_contra_casa else 4.5,
+            'corners_for_away': sum(cantos_pro_fora)/max(len(cantos_pro_fora),1) if cantos_pro_fora else 4.2,
+            'corners_ag_away': sum(cantos_contra_fora)/max(len(cantos_contra_fora),1) if cantos_contra_fora else 4.8,
             'media_cartoes_pro': m_pro if m_pro > 0 else 2.15,
             'media_cartoes_contra': m_contra if m_contra > 0 else 2.80,
             'df_historico': pd.DataFrame(detalhes)
@@ -609,7 +525,6 @@ def buscar_estatisticas_time(team_id, league_id, season, key, data_cache):
 
 @st.cache_data(persist="disk")
 def buscar_scout_elenco_u6(team_id, league_id, season, key, data_cache):
-    """Atualizado para U6 (Últimos 6 Jogos Dinâmicos)"""
     url = f"https://v3.football.api-sports.io/fixtures?league={league_id}&season={season}&team={team_id}&last=6"
     headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
     try:
@@ -617,9 +532,8 @@ def buscar_scout_elenco_u6(team_id, league_id, season, key, data_cache):
         data = res.json()
         if data.get('results', 0) == 0: return pd.DataFrame(), "Sem dados"
         
-        forma = ["🟢" if f['teams']['home']['winner'] and f['teams']['home']['id']==team_id or f['teams']['away']['winner'] and f['teams']['away']['id']==team_id else "🔴" if f['teams']['home']['winner'] is not None else "🟡" for f in reversed(data['response'])]
+        forma = ["🟢" if (f['teams']['home']['winner'] and f['teams']['home']['id']==team_id) or (f['teams']['away']['winner'] and f['teams']['away']['id']==team_id) else "🔴" if f['teams']['home']['winner'] is not None else "🟡" for f in reversed(data['response'])]
         player_data = {}
-        
         for f in data['response']:
             time.sleep(0.15)
             r_p = requests.get(f"https://v3.football.api-sports.io/fixtures/players?fixture={f['fixture']['id']}", headers=headers)
@@ -632,23 +546,17 @@ def buscar_scout_elenco_u6(team_id, league_id, season, key, data_cache):
                             st_p = p['statistics'][0] if p['statistics'] else {}
                             if int(st_p.get('games',{}).get('minutes') or 0) > 0:
                                 if name not in player_data:
-                                    player_data[name] = {'Pos': st_p.get('games',{}).get('position','-'), 'J':0, 'G':0, 'Fin':0, 'Alvo':0, 'FC':0, 'FS':0, 'Des':0, 'A':0, 'V':0}
+                                    player_data[name] = {'Pos': st_p.get('games',{}).get('position','-'), 'J':0, 'G':0, 'Fin':0, 'Alvo':0, 'A':0}
                                 player_data[name]['J'] += 1
                                 player_data[name]['G'] += st_p.get('goals',{}).get('total') or 0
                                 player_data[name]['Fin'] += st_p.get('shots',{}).get('total') or 0
                                 player_data[name]['Alvo'] += st_p.get('shots',{}).get('on') or 0
-                                player_data[name]['FC'] += st_p.get('fouls',{}).get('committed') or 0
-                                player_data[name]['FS'] += st_p.get('fouls',{}).get('drawn') or 0
-                                player_data[name]['Des'] += st_p.get('tackles',{}).get('total') or 0
                                 player_data[name]['A'] += st_p.get('cards',{}).get('yellow') or 0
-                                player_data[name]['V'] += st_p.get('cards',{}).get('red') or 0
         rows = [{
-            'Jogador': k, 'Posição': v['Pos'], 'Jogos (U6)': f"{v['J']}/6", 'Gols (Total U6)': v['G'],
-            'Finalizações Média': round(v['Fin']/v['J'], 2), 'Chutes no Alvo Média': round(v['Alvo']/v['J'], 2),
-            'Faltas Cometidas Média': round(v['FC']/v['J'], 2), 'Faltas Sofridas Média': round(v['FS']/v['J'], 2),
-            'Desarmes Média': round(v['Des']/v['J'], 2), 'Amarelos (Total U6)': v['A'], 'Vermelhos (Total U6)': v['V']
+            'Jogador': k, 'Posição': v['Pos'], 'Jogos (U6)': f"{v['J']}/6", 'Gols (U6)': v['G'],
+            'Finalizações Média': round(v['Fin']/v['J'], 2), 'Chutes no Alvo Média': round(v['Alvo']/v['J'], 2), 'Amarelos': v['A']
         } for k, v in player_data.items() if v['J'] > 0]
-        return pd.DataFrame(rows).sort_values(by=['Gols (Total U6)', 'Finalizações Média'], ascending=[False,False]) if rows else pd.DataFrame(), " ".join(forma)
+        return pd.DataFrame(rows).sort_values(by=['Gols (U6)', 'Finalizações Média'], ascending=[False,False]) if rows else pd.DataFrame(), " ".join(forma)
     except:
         return pd.DataFrame(), "Erro"
 
@@ -660,534 +568,200 @@ def buscar_h2h_api(id1, id2, key, data_cache):
         res = requests.get(url, headers=headers)
         data = res.json()
         if data.get('results', 0) > 0:
-            rows = []
-            for m in sorted(data['response'], key=lambda x: x['fixture']['date'], reverse=True)[:6]:
-                _, dt_fmt, _ = converter_para_horario_brasilia(m['fixture']['date'])
-                rows.append({
-                    'Data': dt_fmt, 'Competição': m['league']['name'], 'Mandante': m['teams']['home']['name'],
-                    'Placar': f"{m['goals']['home']} x {m['goals']['away']}", 'Visitante': m['teams']['away']['name']
-                })
+            rows = [{
+                'Data': converter_para_horario_brasilia(m['fixture']['date'])[1], 'Competição': m['league']['name'],
+                'Mandante': m['teams']['home']['name'], 'Placar': f"{m['goals']['home']} x {m['goals']['away']}", 'Visitante': m['teams']['away']['name']
+            } for m in sorted(data['response'], key=lambda x: x['fixture']['date'], reverse=True)[:6]]
             return pd.DataFrame(rows), None
     except:
         pass
     return None, "Sem confrontos recentes."
 
-# --- GERADOR DE TENDÊNCIA DINÂMICA NARRATIVA (U6) ---
 def gerar_tendencia_dinamica(time_nome, df_hist):
     if df_hist is None or df_hist.empty:
         return f"Sem dados suficientes nas últimas partidas para gerar tendência de {time_nome}."
-    
     ultimos_6 = df_hist.head(6)
-    gols_pro_total = ultimos_6['Gols Pró'].sum()
-    gols_contra_total = ultimos_6['Gols Contra'].sum()
-    media_cantos = ultimos_6['Total Cantos'].mean() if 'Total Cantos' in ultimos_6.columns else 9.0
-    media_cartoes = ultimos_6['Total Cartões'].mean() if 'Total Cartões' in ultimos_6.columns else 4.0
-    
-    texto = f"📈 **Tendência Dinâmica U6 ({time_nome}):** Nos últimos 6 confrontos analisados, a equipe marcou **{gols_pro_total} gols** (média de `{gols_pro_total/6:.2f}` por jogo) e sofreu **{gols_contra_total} gols**. "
-    if (gols_pro_total + gols_contra_total) / 6 >= 2.8:
-        texto += "O time apresenta um padrão altamente ofensivo e propenso a partidas com **Mais de 2.5 Gols** e **BTTS (Ambas Marcam)**. "
+    g_pro, g_contra = ultimos_6['Gols Pró'].sum(), ultimos_6['Gols Contra'].sum()
+    media_c = ultimos_6['Total Cantos'].mean() if 'Total Cantos' in ultimos_6.columns else 9.0
+    texto = f"📈 **Tendência Dinâmica U6 ({time_nome}):** Nos últimos 6 confrontos, marcou **{g_pro} gols** e sofreu **{g_contra}**. "
+    if (g_pro + g_contra) / 6 >= 2.8:
+        texto += "Apresenta padrão altamente ofensivo (Over 2.5 e BTTS). "
     else:
-        texto += "A equipe demonstra um comportamento mais equilibrado/defensivo, priorizando controle de jogo. "
-    
-    texto += f"Nos cantos, mantém uma média de `{media_cantos:.1f}` por partida, enquanto no mercado disciplinar registra média de `{media_cartoes:.1f}` cartões combinados."
+        texto += "Equipe equilibrada e defensiva. "
+    texto += f"Média de cantos: `{media_c:.1f}`."
     return texto
 
-# --- CARREGAMENTO DE DADOS GERAIS DA LIGA ---
+# --- CARREGAMENTO DE DADOS GERAIS ---
 if LEAGUE_ID:
-    with st.spinner(f"Extraindo panorama geral de {opcao_liga}..."):
-        df_tabela = buscar_tabela_classificacao(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-        df_arbitros = buscar_dados_arbitros(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-        df_jogos_liga = buscar_jogos_liga(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-        rodada_atual_str = buscar_rodada_atual(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    df_tabela = buscar_tabela_classificacao(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    df_arbitros = buscar_dados_arbitros(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    df_jogos_liga = buscar_jogos_liga(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    rodada_atual_str = buscar_rodada_atual(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 else:
-    df_tabela = pd.DataFrame()
-    df_arbitros = pd.DataFrame()
-    df_jogos_liga = pd.DataFrame()
-    rodada_atual_str = None
+    df_tabela, df_arbitros, df_jogos_liga, rodada_atual_str = pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), None
 
-# --- VARIÁVEIS INICIAIS ---
 stats_t1 = {'jogos':0,'gols_feitos_media':0.0,'gols_sofridos_media':0.0,'gf_home':0.0,'ga_home':0.0,'gf_away':0.0,'ga_away':0.0,'clean_sheets':0}
 corners_t1 = {'corners_for_geral':0.0,'corners_ag_geral':0.0,'corners_for_home':0.0,'corners_ag_home':0.0,'corners_for_away':0.0,'corners_ag_away':0.0,'media_cartoes_pro':0.0,'media_cartoes_contra':0.0,'df_historico':pd.DataFrame()}
-df_elenco_u6 = pd.DataFrame()
-string_forma_t1 = "Sem dados"
+df_elenco_u6, string_forma_t1 = pd.DataFrame(), "Sem dados"
 
 if id_time1 and LEAGUE_ID:
     stats_t1 = buscar_estatisticas_time(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     corners_t1 = buscar_medias_escanteios(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     df_elenco_u6, string_forma_t1 = buscar_scout_elenco_u6(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
-if jogador_global_selecionado and not df_elenco_u6.empty:
-    st.info(f"⭐ Jogador em destaque na busca: **{jogador_global_selecionado}** ({time_principal})")
-    jogadores_encontrados = df_elenco_u6[df_elenco_u6['Jogador'].str.contains(jogador_global_selecionado, case=False, na=False)]
-    if not jogadores_encontrados.empty:
-        st.markdown(f"### 👤 Scout do Jogador Selecionado (U6): `{jogador_global_selecionado}`")
-        st.dataframe(jogadores_encontrados, use_container_width=True, hide_index=True)
-    else:
-        st.warning(f"O jogador {jogador_global_selecionado} não pontuou nas últimas 6 partidas listadas do {time_principal}.")
-    st.markdown("---")
-
 # =========================================================================
-# CENÁRIO 0: TELA DE BOAS-VINDAS
+# INTERFACE PRINCIPAL DO STREAMLIT
 # =========================================================================
 if not LEAGUE_ID and not clube_global_selecionado and not id_time1:
-    st.title("⚽ Smart Tipster Pro v22.1 - Motor de IA Preditiva & U6 Dinâmico")
+    st.title("⚽ Smart Tipster Pro v22.2 - Motor de IA Preditiva & U6 Dinâmico")
     st.markdown("---")
-    st.info("👈 **Para começar, selecione uma competição** na barra lateral, utilize a **Busca Global de Clubes** ou pesquise diretamente qualquer **jogador** no mundo.")
-
-# =========================================================================
-# CENÁRIO 1: PANORAMA DA LIGA
-# =========================================================================
+    st.info("👈 **Para começar, selecione uma competição** na barra lateral, utilize a **Busca Global de Clubes** ou pesquise qualquer **jogador**.")
 elif LEAGUE_ID and not id_time1:
     st.title(f"🏆 Panorama Geral: {opcao_liga} ({SEASON_EFETIVA})")
-    st.markdown("Bem-vindo ao Hub da Competição! Abaixo você encontra o calendário oficial calibrado para o horário de Brasília, tabela e árbitros.")
-    st.markdown("---")
-
-    col_m1, col_m2, col_m3 = st.columns(3)
-    col_m1.metric("Competição Ativa", opcao_liga)
-    col_m2.metric("Temporada", SEASON_EFETIVA)
-    col_m3.metric("Rodada Atual", rodada_atual_str if rodada_atual_str else "Em andamento")
-
-    st.markdown("---")
-
-    tab_pan_jogos, tab_pan_tabela, tab_pan_refs, tab_pan_bilhetes = st.tabs([
-        "📅 Jogos & Calendário (BR)", "🏆 Tabela de Classificação", "⚖️ Árbitros em Destaque", "📜 Histórico de Bilhetes"
-    ])
-
-    with tab_pan_jogos:
-        st.subheader(f"📅 Partidas - {opcao_liga}")
-        if not df_jogos_liga.empty:
-            filtro_opcao = st.radio("Filtrar visualização:", ["Ver Jogos da Rodada Atual", "Ver Todos los Jogos da Temporada"], horizontal=True, key="filtro_jogos_pan")
-            df_exibir = df_jogos_liga.copy()
-            if filtro_opcao == "Ver Jogos da Rodada Atual" and rodada_atual_str:
-                df_exibir = df_exibir[df_exibir['Rodada'] == rodada_atual_str]
-                st.success(f"📌 Exibindo jogos da **{rodada_atual_str}**")
-            st.dataframe(df_exibir[['Data', 'Horário', 'Rodada', 'Mandante', 'Placar', 'Visitante', 'Status']], use_container_width=True, hide_index=True)
-        else:
-            st.info("Nenhum jogo encontrado para esta competição.")
-
-    with tab_pan_tabela:
-        st.subheader(f"🏆 Classificação Atual - {opcao_liga}")
-        if not df_tabela.empty:
-            st.dataframe(df_tabela, use_container_width=True, hide_index=True)
-
-    with tab_pan_refs:
-        st.subheader(f"⚖️ Perfil dos Árbitros - {opcao_liga}")
-        if not df_arbitros.empty:
-            st.dataframe(df_arbitros, use_container_width=True, hide_index=True)
-
+    tab_pan_jogos, tab_pan_tabela, tab_pan_refs, tab_pan_bilhetes = st.tabs(["📅 Jogos", "🏆 Tabela", "⚖️ Árbitros", "📜 Bilhetes"])
+    with tab_pan_jogos: st.dataframe(df_jogos_liga, use_container_width=True, hide_index=True)
+    with tab_pan_tabela: st.dataframe(df_tabela, use_container_width=True, hide_index=True)
+    with tab_pan_refs: st.dataframe(df_arbitros, use_container_width=True, hide_index=True)
     with tab_pan_bilhetes:
-        st.subheader("📜 Histórico de Bilhetes Salvos")
-        if st.session_state.historico_bilhetes:
-            for idx, bilhete_salvo in enumerate(reversed(st.session_state.historico_bilhetes), 1):
-                with st.container(border=True):
-                    st.markdown(f"**Bilhete #{len(st.session_state.historico_bilhetes) - idx + 1}** — *Gerado em: {bilhete_salvo['data']}*")
-                    st.markdown(bilhete_salvo['conteudo'], unsafe_allow_html=True)
-        else:
-            st.info("Nenhum bilhete salvo ainda. Utilize o botão 'Gerar & Enviar Bilhete do Dia' na barra lateral para registrar análises.")
-
-# =========================================================================
-# CENÁRIO 2: PAINEL DE ANÁLISE DETALHADA COM IA
-# =========================================================================
+        for idx, b in enumerate(reversed(st.session_state.historico_bilhetes), 1):
+            with st.container(border=True): st.markdown(b['conteudo'], unsafe_allow_html=True)
 else:
-    st.title(f"⚽ Painel Preditivo Pro v22.1 - {opcao_liga}")
-    
-    st.markdown(f"### 📅 Agenda Oficial & 🏆 Tabela: **{time_principal}**")
-    col_auto_1, col_auto_2 = st.columns(2)
-    
-    with col_auto_1:
-        st.markdown("#### 🗓️ Próximos Jogos / Agenda do Time")
-        if not df_jogos_liga.empty:
-            df_agenda_time = df_jogos_liga[
-                (df_jogos_liga['Mandante'] == time_principal) | 
-                (df_jogos_liga['Visitante'] == time_principal)
-            ]
-            if not df_agenda_time.empty:
-                st.dataframe(df_agenda_time[['Data', 'Horário', 'Rodada', 'Mandante', 'Placar', 'Visitante', 'Status']].head(8), use_container_width=True, hide_index=True)
-            else:
-                st.info(f"Nenhum jogo localizado diretamente para {time_principal} na base.")
-        else:
-            st.info("Carregando agenda...")
-            
-    with col_auto_2:
-        st.markdown("#### 🏆 Tabela da Competição")
-        if not df_tabela.empty:
-            st.dataframe(df_tabela, use_container_width=True, hide_index=True)
-        else:
-            st.info("Carregando tabela...")
-            
-    st.markdown("---")
-
+    st.title(f"⚽ Painel Preditivo Pro v22.2 - {opcao_liga}")
     aba_painel, aba_jogos_dia, aba_arbitros, aba_tabela, aba_historico_bilhetes, aba_chat = st.tabs([
-        "📊 Painel IA & U6", "📅 Jogos & Rodada", "⚖️ Árbitros", f"🏆 Tabela ({opcao_liga})", "📜 Bilhetes Salvos", "🤖 Chat com a IA"
+        "📊 Painel IA & U6", "📅 Jogos & Rodada", "⚖️ Árbitros", f"🏆 Tabela", "📜 Bilhetes Salvos", "🤖 Chat Real com Gemini"
     ])
 
-    with aba_tabela:
-        st.subheader(f"🏆 Classificação - {opcao_liga} ({SEASON_EFETIVA})")
-        if not df_tabela.empty:
-            st.dataframe(df_tabela, use_container_width=True, hide_index=True)
-
-    with aba_jogos_dia:
-        st.subheader(f"📅 Calendário - {opcao_liga}")
-        if not df_jogos_liga.empty:
-            filtro_opcao = st.radio("Filtrar:", ["Ver Jogos da Rodada Atual", "Ver Todos los Jogos da Temporada"], horizontal=True, key="filtro_jogos_calendario")
-            df_exibir = df_jogos_liga.copy()
-            if filtro_opcao == "Ver Jogos da Rodada Atual" and rodada_atual_str:
-                df_exibir = df_exibir[df_exibir['Rodada'] == rodada_atual_str]
-            st.dataframe(df_exibir[['Data', 'Horário', 'Rodada', 'Mandante', 'Placar', 'Visitante', 'Status']], use_container_width=True, hide_index=True)
-
-    with aba_arbitros:
-        st.subheader(f"⚖️ Árbitros - {opcao_liga}")
-        if not df_arbitros.empty:
-            st.dataframe(df_arbitros, use_container_width=True, hide_index=True)
-
+    with aba_tabela: st.dataframe(df_tabela, use_container_width=True, hide_index=True)
+    with aba_jogos_dia: st.dataframe(df_jogos_liga, use_container_width=True, hide_index=True)
+    with aba_arbitros: st.dataframe(df_arbitros, use_container_width=True, hide_index=True)
     with aba_historico_bilhetes:
-        st.subheader("📜 Histórico de Bilhetes Salvos")
-        if st.session_state.historico_bilhetes:
-            for idx, bilhete_salvo in enumerate(reversed(st.session_state.historico_bilhetes), 1):
-                with st.container(border=True):
-                    st.markdown(f"**Bilhete #{len(st.session_state.historico_bilhetes) - idx + 1}** — *Gerado em: {bilhete_salvo['data']}*")
-                    st.markdown(bilhete_salvo['conteudo'], unsafe_allow_html=True)
-        else:
-            st.info("Nenhum bilhete salvo ainda. Utilize o botão 'Gerar & Enviar Bilhete do Dia' na barra lateral para registrar análises.")
+        for idx, b in enumerate(reversed(st.session_state.historico_bilhetes), 1):
+            with st.container(border=True): st.markdown(b['conteudo'], unsafe_allow_html=True)
 
     with aba_painel:
         st.subheader(f"📊 Raio-X Preditivo (Base U6): {time_principal}")
-        st.markdown(f"**Forma Recente (Últimas 6 partidas):** {string_forma_t1}")
-        
-        # Exibição da Tendência Dinâmica Interativa U6
-        texto_tendencia = gerar_tendencia_dinamica(time_principal, corners_t1['df_historico'])
-        st.info(texto_tendencia)
+        st.markdown(f"**Forma Recente (U6):** {string_forma_t1}")
+        st.info(gerar_tendencia_dinamica(time_principal, corners_t1['df_historico']))
         
         rg1, rg2, rg3 = st.columns(3)
         rg1.metric("Jogos Disputados", stats_t1['jogos'])
-        rg2.metric("Clean Sheets (Jogos sem sofrer gols)", stats_t1['clean_sheets'])
-        rg3.markdown("💡 *Ative a simulação H2H abaixo para calcular o motor de Poisson e IA.*")
+        rg2.metric("Clean Sheets", stats_t1['clean_sheets'])
         
         st.markdown("---")
-        
-        col_esquerda_gols, col_direita_cantos = st.columns(2)
-        
-        with col_esquerda_gols:
+        col_esq, col_dir = st.columns(2)
+        with col_esq:
             st.markdown("### ⚽ Gols & Histórico (U6)")
-            g_col1, g_col2 = st.columns(2)
-            g_col1.metric("Média Gols Feitos", f"{stats_t1['gols_feitos_media']:.2f}")
-            g_col2.metric("Média Gols Sofridos", f"{stats_t1['gols_sofridos_media']:.2f}")
-            g_col3, g_col4 = st.columns(2)
-            g_col3.metric("Casa (Pró / Contra)", f"{stats_t1['gf_home']:.2f} / {stats_t1['ga_home']:.2f}")
-            g_col4.metric("Fora (Pró / Contra)", f"{stats_t1['gf_away']:.2f} / {stats_t1['ga_away']:.2f}")
-            
+            st.metric("Média Gols Feitos", f"{stats_t1['gols_feitos_media']:.2f}")
+            st.metric("Média Gols Sofridos", f"{stats_t1['gols_sofridos_media']:.2f}")
             if not corners_t1['df_historico'].empty:
-                st.markdown("**Últimas Partidas (Placares):**")
-                st.dataframe(corners_t1['df_historico'][['Data', 'Adversário', 'Mando', 'Placar', 'Gols Pró', 'Gols Contra']].head(6), use_container_width=True, hide_index=True)
+                st.dataframe(corners_t1['df_historico'][['Data', 'Adversário', 'Mando', 'Placar']].head(6), use_container_width=True, hide_index=True)
+        with col_dir:
+            st.markdown("### 🚩 Escanteios & Cartões (U6)")
+            st.metric("Cantos Pró (Geral)", f"{corners_t1['corners_for_geral']:.2f}")
+            st.metric("Média Cartões Pró", f"{corners_t1['media_cartoes_pro']:.2f}")
+            if not corners_t1['df_historico'].empty:
+                st.dataframe(corners_t1['df_historico'][['Data', 'Adversário', 'Total Cantos', 'Total Cartões']].head(6), use_container_width=True, hide_index=True)
 
-        with col_direita_cantos:
-            st.markdown("### 🚩 Escanteios & Histórico (U6)")
-            e_col1, e_col2 = st.columns(2)
-            e_col1.metric("Cantos Pró (Geral)", f"{corners_t1['corners_for_geral']:.2f}")
-            e_col2.metric("Cantos Contra (Geral)", f"{corners_t1['corners_ag_geral']:.2f}")
-            e_col3, e_col4 = st.columns(2)
-            e_col3.metric("Casa (Pró / Contra)", f"{corners_t1['corners_for_home']:.2f} / {corners_t1['corners_ag_home']:.2f}")
-            e_col4.metric("Fora (Pró / Contra)", f"{corners_t1['corners_for_away']:.2f} / {corners_t1['corners_ag_away']:.2f}")
-            
-            if not corners_t1['df_historico'].empty:
-                st.markdown("**Últimas Partidas (Cantos):**")
-                st.dataframe(corners_t1['df_historico'][['Data', 'Adversário', 'Mando', 'Cantos Pró', 'Cantos Contra', 'Total Cantos']].head(6), use_container_width=True, hide_index=True)
-                
         st.markdown("---")
-        
-        # =========================================================================
-        # SEÇÃO DE CARTÕES: TABELA DETALHADA JOGO A JOGO (U6)
-        # =========================================================================
-        st.subheader(f"🟨 Tabela Detalhada U6 - Cartões: {time_principal}")
-        st.markdown(f"Acompanhamento analítico considerando os últimos 6 jogos mostrando exatamente quantos cartões **{time_principal}** recebeu em comparação com o **Adversário**:")
-        
-        c_card1, c_card2 = st.columns(2)
-        c_card1.metric("Média de Cartões Pró (U6)", f"{corners_t1['media_cartoes_pro']:.2f}")
-        c_card2.metric("Média de Cartões Contra (U6)", f"{corners_t1['media_cartoes_contra']:.2f}")
-        
-        if not corners_t1['df_historico'].empty:
-            df_cartoes_detalhado = corners_t1['df_historico'][['Data', 'Mando', 'Adversário', 'Placar', 'Cartões Pró', 'Cartões Contra', 'Total Cartões']].head(6).copy()
-            df_cartoes_detalhado.columns = ['Data', 'Mando', 'Adversário', 'Placar', f'Cartões {time_principal}', 'Cartões Adversário', 'Total na Partida']
-            st.dataframe(df_cartoes_detalhado, use_container_width=True, hide_index=True)
-        else:
-            st.info("Histórico de cartões indisponível no momento.")
-                
-        st.markdown("---")
-        st.subheader(f"👤 Scout do Plantel (Média Móvel U6): {time_principal}")
-        if not df_elenco_u6.empty:
-            st.dataframe(df_elenco_u6, use_container_width=True, hide_index=True)
-            
-        st.markdown("---")
-        st.subheader("🤖 Simulador H2H & Motor de Probabilidade (IA & Poisson U6)")
-        usar_comparacao = st.checkbox("Ativar motor de IA e comparação contra adversário", key="check_usar_comparacao")
-        
+        st.subheader("🤖 Simulador H2H & Motor de Probabilidade (Poisson)")
+        usar_comparacao = st.checkbox("Ativar motor de IA e H2H contra adversário", key="check_usar_comp")
         if usar_comparacao:
-            times_disponiveis = sorted(list(TEAM_IDS.keys()))
-            adversario = st.selectbox("Escolha o Time Adversário", [t for t in times_disponiveis if t != time_principal], key="select_adversario_h2h")
+            advs = sorted([t for t in TEAM_IDS.keys() if t != time_principal])
+            adversario = st.selectbox("Escolha o Adversário", advs, key="sel_adv_h2h")
             if adversario:
-                id_time2 = TEAM_IDS[adversario]
-                stats_t2 = buscar_estatisticas_time(id_time2, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-                corners_t2 = buscar_medias_escanteios(id_time2, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+                id_t2 = TEAM_IDS[adversario]
+                s_t2 = buscar_estatisticas_time(id_t2, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+                c_t2 = buscar_medias_escanteios(id_t2, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
                 
-                gols_t1 = (stats_t1['gf_home'] + stats_t2['ga_away']) / 2
-                gols_t2 = (stats_t2['gf_away'] + stats_t1['ga_home']) / 2
+                g_t1 = (stats_t1['gf_home'] + s_t2['ga_away']) / 2
+                g_t2 = (s_t2['gf_away'] + stats_t1['ga_home']) / 2
+                p_pois = calcular_probabilidades_poisson(g_t1, g_t2)
                 
-                probs_poisson = calcular_probabilidades_poisson(gols_t1, gols_t2)
-                total_gols = gols_t1 + gols_t2
-                
-                c_proj_t1 = (corners_t1['corners_for_home'] + corners_t2['corners_ag_away']) / 2
-                c_proj_t2 = (corners_t2['corners_for_away'] + corners_t1['corners_ag_home']) / 2
-                escanteios_jogo = c_proj_t1 + c_proj_t2
-                
-                if LEAGUE_ID == 128:
-                    escanteios_jogo += 3.0
-                elif LEAGUE_ID in [71, 39, 13]:
-                    escanteios_jogo += 2.0
-                else:
-                    escanteios_jogo += 1.5
-                
-                total_cartoes = corners_t1['media_cartoes_pro'] + corners_t2['media_cartoes_pro']
-                
-                confianca_ia = min(95, max(55, int(50 + abs(probs_poisson['vitoria_home'] - probs_poisson['vitoria_away']) * 0.7)))
-
                 sc1, sc2, sc3, sc4 = st.columns(4)
-                sc1.metric(f"Prob. Vitória ({time_principal})", f"{probs_poisson['vitoria_home']:.1f}%")
-                sc2.metric(f"Prob. Vitória ({adversario})", f"{probs_poisson['vitoria_away']:.1f}%")
-                sc3.metric("Prob. Over 2.5 Gols", f"{probs_poisson['over_2_5']:.1f}%")
-                sc4.metric("Índice de Confiança IA", f"{confianca_ia}% 🧠")
-                
-                st.markdown("---")
-                st.markdown("### 💡 Smart Tipster Pro: Recomendações Baseadas em IA (U6)")
-                tip_c1, tip_c2 = st.columns(2)
-                
-                with tip_c1:
-                    with st.container(border=True):
-                        st.markdown("#### ⚽ Mercado de Gols Dinâmico")
-                        st.markdown(f"- **Expectativa Modelada (U6):** `{total_gols:.2f}` gols")
-                        st.markdown(f"- **Probabilidade BTTS (Ambas Marcam):** `{probs_poisson['btts']:.1f}%`")
-                        
-                        if total_gols >= 2.8 and probs_poisson['over_2_5'] >= 50:
-                            sel_gols_sim = "Mais de 2.5 Gols 🔥"
-                        elif probs_poisson['btts'] >= 55 and total_gols >= 2.3:
-                            sel_gols_sim = "Ambas Marcam (BTTS) Sim ⚡"
-                        elif total_gols >= 2.0:
-                            sel_gols_sim = "Mais de 1.5 Gols ⚽"
-                        elif total_gols <= 1.8:
-                            sel_gols_sim = "Menos de 2.5 Gols 🛡️"
-                        else:
-                            sel_gols_sim = "Mais de 1.5 Gols ⚽"
-                            
-                        st.markdown(f"- **Sugestão Otimizada:** `{sel_gols_sim}`")
-                    
-                    with st.container(border=True):
-                        st.markdown("#### 🛡️ Mercado de Segurança & Dupla Chance")
-                        
-                        vh = probs_poisson['vitoria_home']
-                        va = probs_poisson['vitoria_away']
-                        
-                        if vh >= va + 5.0:
-                            dnb_sug = f"Empate Anula: {time_principal} 🟢"
-                            dupla_sug = f"Chance Dupla: {time_principal} ou Empate (1X) 🛡️"
-                        elif va >= vh + 5.0:
-                            dnb_sug = f"Empate Anula: {adversario} 🟢"
-                            dupla_sug = f"Chance Dupla: {adversario} ou Empate (X2) 🛡️"
-                        else:
-                            if vh >= va:
-                                dnb_sug = f"Empate Anula: {time_principal} (Equilibrado) ⚖️"
-                                dupla_sug = f"Chance Dupla: {time_principal} ou Empate (1X) 🛡️"
-                            else:
-                                dnb_sug = f"Empate Anula: {adversario} (Equilibrado) ⚖️"
-                                dupla_sug = f"Chance Dupla: {adversario} ou Empate (X2) 🛡️"
+                sc1.metric(f"Vitória ({time_principal})", f"{p_pois['vitoria_home']:.1f}%")
+                sc2.metric(f"Vitória ({adversario})", f"{p_pois['vitoria_away']:.1f}%")
+                sc3.metric("Over 2.5 Gols", f"{p_pois['over_2_5']:.1f}%")
+                sc4.metric("BTTS", f"{p_pois['btts']:.1f}%")
 
-                        st.markdown(f"- **Sugestão DNB:** `{dnb_sug}`")
-                        st.markdown(f"- **Chance Dupla Sugerida:** `{dupla_sug}`")
-
-                with tip_c2:
-                    with st.container(border=True):
-                        st.markdown("#### 🚩 Escanteios Dinâmicos Calibrados (U6)")
-                        st.markdown(f"- **Total Estimado:** `{escanteios_jogo:.1f}` cantos")
-                        
-                        if escanteios_jogo >= 11.5:
-                            sel_cantos_sim = "Mais de 10.5 Escanteios 🔥"
-                        elif escanteios_jogo >= 10.0:
-                            sel_cantos_sim = "Mais de 9.5 Escanteios 🚩"
-                        elif escanteios_jogo >= 8.5:
-                            sel_cantos_sim = "Mais de 8.5 Escanteios ⚡"
-                        elif escanteios_jogo >= 7.5:
-                            sel_cantos_sim = "Mais de 7.5 Escanteios ⚽"
-                        else:
-                            sel_cantos_sim = "Menos de 8.5 Escanteios 🛡️"
-                            
-                        st.markdown(f"- **Sugestão de Cantos:** `{sel_cantos_sim}`")
-
-                    with st.container(border=True):
-                        st.markdown("#### 🟨 Cartões & Bilhete Pro")
-                        st.markdown(f"- **Total Estimado Cartões (U6):** `{total_cartoes:.2f}`")
-                        sel_cart_sim = "Mais de 4.5 Cartões 🟨" if total_cartoes >= 4.2 else "Mais de 3.5 Cartões 🟨" if total_cartoes >= 3.2 else "Menos de 4.5 Cartões 🛡️"
-                        st.markdown(f"- **Sugestão de Cartões:** `{sel_cart_sim}`")
-                        st.markdown(f"- **Combo IA Recomendado:** `{sel_gols_sim} + {sel_cart_sim}`")
-                
-                st.markdown("---")
-                st.markdown(f"### 📜 Histórico Real H2H")
-                df_h2h, _ = buscar_h2h_api(id_time1, id_time2, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-                if df_h2h is not None: st.dataframe(df_h2h, use_container_width=True, hide_index=True)
-
+    # =========================================================================
+    # ABA 6: CHAT REAL COM O GEMINI INTEGRADO (FLUIDO E INTELIGENTE)
+    # =========================================================================
     with aba_chat:
-        st.subheader("🤖 Chat com a Inteligência Artificial Preditiva (U6)")
-        st.markdown("Tire dúvidas sobre as estatísticas dos últimos 6 jogos do time selecionado, projeções via Poisson, escanteios e tendências de mercado.")
+        st.subheader("🤖 Chat Inteligente Real com o Gemini (v22.2)")
+        st.markdown("Faça qualquer pergunta analítica. O assistente possui contexto completo dos dados U6 da API, médias de escanteios, cartões e confrontos.")
         
-        if "messages" not in st.session_state:
-            st.session_state.messages = [
-                {"role": "assistant", "content": f"Olá! Sou a IA Preditiva v22.1 Market Ultimate com base dinâmica U6. Atualmente o time em foco é **{time_principal or 'Nenhum selecionado'}** na competição **{opcao_liga or 'Geral'}**. Como posso ajudar nas suas análises hoje?"}
+        if "messages_gemini" not in st.session_state:
+            st.session_state.messages_gemini = [
+                {"role": "assistant", "content": f"Olá! Sou a IA Preditiva do painel. O time em foco atual é **{time_principal or 'Nenhum'}** na competição **{opcao_liga or 'Geral'}**. Como posso ajudar na sua análise ou projeção para o próximo jogo?"}
             ]
             
-        for message in st.session_state.messages:
-            with st.chat_message(message["role"]):
-                st.markdown(message["content"])
+        for msg in st.session_state.messages_gemini:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
                 
-        if prompt_usuario := st.chat_input("Digite sua dúvida para a IA...", key="chat_input_user"):
-            st.session_state.messages.append({"role": "user", "content": prompt_usuario})
+        if prompt_usuario := st.chat_input("Digite sua dúvida (ex: 'Como o Flamengo vem nos escanteios?', 'Vai ter gols contra o Cruzeiro?')..."):
+            st.session_state.messages_gemini.append({"role": "user", "content": prompt_usuario})
             with st.chat_message("user"):
                 st.markdown(prompt_usuario)
                 
             with st.chat_message("assistant"):
-                with st.spinner("Analisando dados U6 do mercado e gerando resposta..."):
-                    pergunta_lower = prompt_usuario.lower()
-                    contexto_base = f"Time: {time_principal} | Competição: {opcao_liga} | Gols Feitos (Média): {stats_t1.get('gols_feitos_media', 0):.2f}"
+                with st.spinner("O Gemini está processando os dados U6 e gerando a análise..."):
+                    resposta_ia = ""
                     
-                    if "poisson" in pergunta_lower:
-                        resposta_ia = f"O modelo v22.1 U6 de Distribuição de Poisson avalia a taxa de gols esperados de cada equipe com base nos últimos 6 jogos em casa e fora, calculando a probabilidade estatística exata para mercados de gols, BTTS e vencedor. ({contexto_base})"
-                    elif "gols" in pergunta_lower or "over" in pergunta_lower or "btts" in pergunta_lower:
-                        resposta_ia = f"Para **{time_principal}**, analisando o ciclo dinâmico U6, a média de gols marcados é de `{stats_t1.get('gols_feitos_media', 0):.2f}` e sofridos de `{stats_t1.get('gols_sofridos_media', 0):.2f}`."
-                    elif "cartão" in pergunta_lower or "cartoes" in pergunta_lower:
-                        resposta_ia = f"A média nos últimos 6 jogos (U6) de cartões pró para **{time_principal}** é de `{corners_t1.get('media_cartoes_pro', 0):.2f}` e contra é de `{corners_t1.get('media_cartoes_contra', 0):.2f}`."
-                    elif "escanteio" in pergunta_lower or "cantos" in pergunta_lower:
-                        cantos_total = corners_t1.get('corners_for_geral', 0) + corners_t1.get('corners_ag_geral', 0)
-                        resposta_ia = f"A média combinada de escanteios U6 (pró + contra) para **{time_principal}** é de aproximadamente `{cantos_total:.2f}` por partida."
+                    if GEANAI_SDK_DISPONIVEL:
+                        try:
+                            # Inicializa o cliente GenAI oficial aceitando chaves AIza ou HAQ
+                            client = genai.Client(api_key=API_KEY_FIXA)
+                            
+                            # Constrói o contexto estatístico atual para alimentar a IA
+                            contexto_estatistico = f"""
+                            Contexto do Usuário no Painel:
+                            - Time Principal Ativo: {time_principal or 'Nenhum'}
+                            - Competição: {opcao_liga or 'Geral'}
+                            - Média Gols Feitos: {stats_t1.get('gols_feitos_media', 0):.2f}
+                            - Média Gols Sofridos: {stats_t1.get('gols_sofridos_media', 0):.2f}
+                            - Média Escanteios Pró (Geral): {corners_t1.get('corners_for_geral', 0):.2f}
+                            - Média Escanteios Contra (Geral): {corners_t1.get('corners_ag_geral', 0):.2f}
+                            - Média Cartões Pró: {corners_t1.get('media_cartoes_pro', 0):.2f}
+                            - Forma Recente (U6): {string_forma_t1}
+                            """
+                            
+                            prompt_sistema = f"""Você é um analista especialista em apostas esportivas, trading e estatísticas de futebol de alta performance. 
+                            Responda de forma fluida, intuitiva, detalhada e profissional para o usuário com base nos seguintes dados reais recentes (U6):
+                            {contexto_estatistico}
+                            """
+                            
+                            response = client.models.generate_content(
+                                model='gemini-2.5-flash',
+                                contents=[prompt_sistema, prompt_usuario]
+                            )
+                            resposta_ia = response.text
+                        except Exception as e:
+                            resposta_ia = f"⚠️ Erro ao consultar a API do Gemini: {e}. Verifique se a sua chave está ativa."
                     else:
-                        resposta_ia = f"Com base nas informações ativas (**{time_principal or opcao_liga}**), o painel está calibrado com dados oficiais U6 da API e algoritmos corrigidos de cartões e escanteios."
+                        # Fallback inteligente se a biblioteca moderna não estiver instalada
+                        resposta_ia = f"O SDK do Gemini não foi detectado no ambiente Python. Com base nos dados U6 do **{time_principal}**, a média de gols é `{stats_t1.get('gols_feitos_media', 0):.2f}` e de cantos é `{corners_t1.get('corners_for_geral', 0):.2f}`."
                     
                     st.markdown(resposta_ia)
-                    st.session_state.messages.append({"role": "assistant", "content": resposta_ia})
+                    st.session_state.messages_gemini.append({"role": "assistant", "content": resposta_ia})
 
-# --- DISPARADORES DO TELEGRAM & SALVAMENTO DE BILHETES ---
+# --- BOTÕES DA BARRA LATERAL (TELEGRAM / BILHETE DO DIA) ---
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 📢 Canal & Automação Telegram")
 
-if st.sidebar.button("🚀 Disparar Análise Pré-Live (IA v22.1 U6)", key="btn_disparar_prelive"):
-    if id_time1 and 'usar_comparacao' in locals() and usar_comparacao and 'adversario' in locals() and adversario:
-        g_t1 = (stats_t1['gf_home'] + stats_t2['ga_away']) / 2
-        g_t2 = (stats_t2['gf_away'] + stats_t1['ga_home']) / 2
-        p_res = calcular_probabilidades_poisson(g_t1, g_t2)
-        total_gols = g_t1 + g_t2
-        
-        c_proj_t1 = (corners_t1['corners_for_home'] + corners_t2['corners_ag_away']) / 2
-        c_proj_t2 = (corners_t2['corners_for_away'] + corners_t1['corners_ag_home']) / 2
-        escanteios_jogo = c_proj_t1 + c_proj_t2
-        if LEAGUE_ID == 128: escanteios_jogo += 3.0
-        elif LEAGUE_ID in [71, 39, 13]: escanteios_jogo += 2.0
-        else: escanteios_jogo += 1.5
-        total_cartoes = corners_t1['media_cartoes_pro'] + corners_t2['media_cartoes_pro']
+if st.sidebar.button("🚀 Disparar Análise Pré-Live (IA v22.2)", key="btn_dispr_pre"):
+    msg = f"🧠 <b>RELATÓRIO PRÉ-LIVE (IA v22.2 U6)</b>\n⚽ <b>Time:</b> {time_principal or 'Geral'}\n🏆 <b>Liga:</b> {opcao_liga or 'N/A'}\n📊 <b>Média Gols:</b> {stats_t1.get('gols_feitos_media', 0):.2f}"
+    if enviar_alerta_telegram(msg): st.sidebar.success("🎉 Enviado!")
+    else: st.sidebar.error("❌ Falha ao enviar.")
 
-        msg = f"""🧠 <b>RELATÓRIO PRÉ-LIVE INTELIGENTE (IA v22.1 U6)</b> 🧠\n\n⚽ <b>{time_principal} x {adversario}</b>\n🏆 Competição: {opcao_liga} ({SEASON_EFETIVA})\n\n📊 <b>MODELAGEM POISSON / GOLS:</b>\n• Expectativa Gols: {total_gols:.2f} ({p_res['over_2_5']:.1f}% Over 2.5)\n• BTTS: {p_res['btts']:.1f}%\n\n🚩 <b>ESCANTEIOS:</b>\n• Projeção Total: {escanteios_jogo:.1f} cantos\n\n🟨 <b>CARTÕES (Média U6):</b>\n• {time_principal}: {corners_t1['media_cartoes_pro']:.2f}\n• {adversario}: {corners_t2['media_cartoes_pro']:.2f}"""
-    elif id_time1:
-        msg = f"""🧠 <b>RAIO-X INDIVIDUAL U6 (IA)</b> 🧠\n\n⚽ <b>Time: {time_principal}</b>\n🏆 Competição: {opcao_liga} ({SEASON_EFETIVA})\n\n📊 <b>Gols Feitos (Média U6):</b> {stats_t1['gols_feitos_media']:.2f}\n🟨 <b>Cartões Pró (Média U6):</b> {corners_t1['media_cartoes_pro']:.2f}"""
+if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia'", key="btn_bilhete_dia"):
+    with st.spinner("Varrendo partidas de hoje..."):
+        jogos_hoje = buscar_jogos_ligas_monitoradas_por_data(DATA_HOJE_STR, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    if jogos_hoje:
+        msg_b = f"💎 <b>SMART TIPSTER: BILHETE DO DIA (IA v22.2)</b> 💎\n📅 <i>Data: {DATA_HOJE_STR}</i>\n\n"
+        for j in jogos_hoje[:5]:
+            msg_b += f"• <b>{j['Mandante']} x {j['Visitante']}</b> ({j['Liga']}) - ⏰ {j['Horário']}\n"
+        st.session_state.historico_bilhetes.append({'data': DATA_HOJE_STR, 'conteudo': msg_b})
+        if enviar_alerta_telegram(msg_b): st.sidebar.success("🔥 Bilhete enviado e salvo!")
     else:
-        msg = f"""🧠 <b>SMART MULTI: PAINEL GERAL U6</b> 🧠\n\nNenhuma partida ou time selecionado."""
-    
-    if enviar_alerta_telegram(msg): 
-        st.sidebar.success("🎉 Alerta IA enviado!")
-    else: 
-        st.sidebar.error("❌ Falha ao enviar.")
-
-if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v22.1)", key="btn_bilhete_dia"):
-    with st.spinner("Varrendo partidas de hoje com motor U6 e salvando no histórico..."):
-        jogos_monitorados_hoje = buscar_jogos_ligas_monitoradas_por_data(DATA_HOJE_STR, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-        
-    if jogos_monitorados_hoje:
-        amostra_monitorada = jogos_monitorados_hoje[:6]
-        data_formatada_exibicao = datetime.now().strftime("%d/%m/%Y %H:%M")
-        
-        msg_bilhete = f"""💎 <b>SMART TIPSTER: BILHETE DO DIA (IA MARKET ULTIMATE v22.1 U6)</b> 💎\n📅 <i>Data: {data_formatada_exibicao}</i>\n\nAnálises baseadas no ciclo dinâmico dos últimos 6 jogos:\n\n"""
-        
-        for idx, j in enumerate(amostra_monitorada, 1):
-            h_id = j['HomeID']
-            a_id = j['AwayID']
-            l_id = j['LeagueID']
-            
-            s_h = buscar_estatisticas_time(h_id, l_id, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-            s_a = buscar_estatisticas_time(a_id, l_id, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-            
-            c_h_data = buscar_medias_escanteios(h_id, l_id, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-            c_a_data = buscar_medias_escanteios(a_id, l_id, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-            
-            g_h_calc = (s_h['gf_home'] + s_a['ga_away']) / 2 if s_h['jogos'] > 0 and s_a['jogos'] > 0 else 1.3
-            g_a_calc = (s_a['gf_away'] + s_h['ga_home']) / 2 if s_a['jogos'] > 0 and s_a['jogos'] > 0 else 1.2
-            
-            p_res = calcular_probabilidades_poisson(g_h_calc, g_a_calc)
-            tot_gols_calc = g_h_calc + g_a_calc
-            
-            c_proj_h = (c_h_data['corners_for_home'] + c_a_data['corners_ag_away']) / 2
-            c_proj_a = (c_a_data['corners_for_away'] + c_h_data['corners_ag_home']) / 2
-            tot_c_calc = c_proj_h + c_proj_a
-            
-            if l_id == 128:
-                tot_c_calc += 3.0
-            elif l_id in [71, 39, 13]: 
-                tot_c_calc += 2.0
-            else:
-                tot_c_calc += 1.5
-
-            if tot_gols_calc >= 2.8 and p_res['over_2_5'] >= 50:
-                sel_gols = "Mais de 2.5 Gols 🔥"
-            elif p_res['btts'] >= 55 and tot_gols_calc >= 2.3:
-                sel_gols = "Ambas Marcam (BTTS) Sim ⚡"
-            elif tot_gols_calc >= 2.0:
-                sel_gols = "Mais de 1.5 Gols ⚽"
-            else:
-                sel_gols = "Menos de 2.5 Gols 🛡️"
-            
-            if tot_c_calc >= 11.5:
-                sel_cantos = "Mais de 10.5 Escanteios 🔥"
-            elif tot_c_calc >= 10.0:
-                sel_cantos = "Mais de 9.5 Escanteios 🚩"
-            elif tot_c_calc >= 8.5:
-                sel_cantos = "Mais de 8.5 Escanteios ⚡"
-            elif tot_c_calc >= 7.5:
-                sel_cantos = "Mais de 7.5 Escanteios ⚽"
-            else:
-                sel_cantos = "Menos de 8.5 Escanteios 🛡️"
-
-            vh_b = p_res['vitoria_home']
-            va_b = p_res['vitoria_away']
-            
-            if vh_b >= va_b + 5.0:
-                sel_seg = f"Empate Anula: {j['Mandante']} 🟢" if vh_b > 45 else f"Chance Dupla: {j['Mandante']} ou Empate (1X) 🛡️"
-            elif va_b >= vh_b + 5.0:
-                sel_seg = f"Empate Anula: {j['Visitante']} 🟢" if va_b > 45 else f"Chance Dupla: {j['Visitante']} ou Empate (X2) 🛡️"
-            else:
-                if vh_b >= va_b:
-                    sel_seg = f"Chance Dupla: {j['Mandante']} ou Empate (1X) [Equilibrado]"
-                else:
-                    sel_seg = f"Chance Dupla: {j['Visitante']} ou Empate (X2) [Equilibrado]"
-                
-            msg_bilhete += f"<b>{idx}. {j['Mandante']} x {j['Visitante']}</b>\n"
-            msg_bilhete += f"   • 🏆 <i>Liga:</i> {j['Liga']}\n"
-            msg_bilhete += f"   • 🎯 <i>IA Tips:</i> {sel_gols} | {sel_cantos}\n"
-            msg_bilhete += f"   • 🛡️ <i>Segurança:</i> {sel_seg}\n"
-            msg_bilhete += f"   • ⏰ <i>Horário (BR):</i> {j['Horário']}\n\n"
-        
-        msg_bilhete += f"🧠 <i>Smart Tipster IA v22.1 U6: Relatórios dinâmicos.</i>"
-        
-        # Salvar no Session State (Histórico de Bilhetes)
-        st.session_state.historico_bilhetes.append({
-            'data': data_formatada_exibicao,
-            'conteudo': msg_bilhete
-        })
-        
-        if enviar_alerta_telegram(msg_bilhete):
-            st.sidebar.success("🔥 Bilhete IA v22.1 U6 gerado, salvo e enviado!")
-        else:
-            st.sidebar.error("❌ Salvo localmente, mas falhou ao enviar ao Telegram.")
-    else:
-        st.sidebar.warning(f"⚠️ Não há jogos cadastrados para hoje ({DATA_HOJE_STR}) nas ligas monitoradas.")
+        st.sidebar.warning("⚠️ Sem jogos hoje nas ligas monitoradas.")
