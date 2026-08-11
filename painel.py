@@ -537,7 +537,6 @@ def buscar_medias_escanteios(team_id, league_id, season, key, data_cache):
         todas_cartoes_pro = cartoes_pro_casa + cartoes_pro_fora
         todas_cartoes_contra = cartoes_contra_casa_list + cartoes_contra_fora
         
-        # Garantindo baseline mínimo robusto se a API retornar vazio/zero
         cf_geral = (sum(cantos_pro_casa+cantos_pro_fora)/max(len(cantos_pro_casa+cantos_pro_fora),1))
         ca_geral = (sum(cantos_contra_casa+cantos_contra_fora)/max(len(cantos_contra_casa+cantos_contra_fora),1))
         cf_home = sum(cantos_pro_casa)/max(len(cantos_pro_casa),1)
@@ -574,7 +573,7 @@ def buscar_estatisticas_time(team_id, league_id, season, key, data_cache):
                 'jogos': stats.get('fixtures',{}).get('played',{}).get('total',0),
                 'gols_feitos_media': float(gf.get('total') or 0), 'gols_sofridos_media': float(ga.get('total') or 0),
                 'gf_home': float(gf.get('home') or 0), 'ga_home': float(ga.get('home') or 0),
-                'gf_away': float(gf.get('away') or 0), 'ga_away': float(ga.get('away') or 0),
+                'gf_away': float(gf.get('away') or 0), 'ga_away': float(gf.get('away') or 0),
                 'clean_sheets': stats.get('clean_sheet',{}).get('total',0)
             }
     except:
@@ -830,11 +829,9 @@ else:
                 stats_t2 = buscar_estatisticas_time(id_time2, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
                 corners_t2 = buscar_medias_escanteios(id_time2, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
                 
-                # Expectativa de gols com Poisson
                 gols_t1 = (stats_t1['gf_home'] + stats_t2['ga_away']) / 2
                 gols_t2 = (stats_t2['gf_away'] + stats_t1['ga_home']) / 2
                 
-                # Cálculo via Poisson
                 probs_poisson = calcular_probabilidades_poisson(gols_t1, gols_t2)
                 total_gols = gols_t1 + gols_t2
                 
@@ -842,17 +839,15 @@ else:
                 c_proj_t2 = (corners_t2['corners_for_away'] + corners_t1['corners_ag_home']) / 2
                 escanteios_jogo = c_proj_t1 + c_proj_t2
                 
-                # Bônus de intensidade por liga
-                if LEAGUE_ID == 128:  # Campeonato Argentino (muitos cantos)
+                if LEAGUE_ID == 128:  
                     escanteios_jogo += 3.0
-                elif LEAGUE_ID in [71, 39, 13]: # Brasileirão, Premier League, Libertadores
+                elif LEAGUE_ID in [71, 39, 13]: 
                     escanteios_jogo += 2.0
                 else:
                     escanteios_jogo += 1.5
                 
                 total_cartoes = corners_t1['media_cartoes_pro'] + corners_t2['media_cartoes_pro']
                 
-                # Índice de Confiança da IA (0 a 100%)
                 confianca_ia = min(95, max(55, int(50 + abs(probs_poisson['vitoria_home'] - probs_poisson['vitoria_away']) * 0.7)))
 
                 sc1, sc2, sc3, sc4 = st.columns(4)
@@ -912,7 +907,6 @@ else:
                         st.markdown("#### 🚩 Escanteios Dinâmicos Calibrados (v21)")
                         st.markdown(f"- **Total Estimado:** `{escanteios_jogo:.1f}` cantos")
                         
-                        # CORREÇÃO DEFINITIVA DA VARIABILIDADE DE ESCANTEIOS
                         if escanteios_jogo >= 11.5:
                             sel_cantos_sim = "Mais de 10.5 Escanteios 🔥"
                         elif escanteios_jogo >= 10.0:
@@ -940,7 +934,7 @@ else:
 
     with aba_chat:
         st.subheader("🤖 Chat com a Inteligência Artificial Preditiva")
-        st.markdown("Tire dúvidas sobre as estatísticas do time selecionado, projeções de gols via Poisson, escanteios e estratégias de trading com o assistente inteligente.")
+        st.markdown("Tire dúvidas sobre as estatísticas, confrontos diretos H2H, projeções de gols via Poisson, escanteios, cartões e cotações estimadas.")
         
         if "messages" not in st.session_state:
             st.session_state.messages = [
@@ -951,25 +945,53 @@ else:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
                 
-        if prompt_usuario := st.chat_input("Digite sua dúvida para a IA..."):
+        if prompt_usuario := st.chat_input("Digite sua dúvida (ex: confronto, odds, gols, escanteios, Poisson)..."):
             st.session_state.messages.append({"role": "user", "content": prompt_usuario})
             with st.chat_message("user"):
                 st.markdown(prompt_usuario)
                 
             with st.chat_message("assistant"):
-                with st.spinner("Analisando dados do mercado e gerando resposta..."):
-                    pergunta_lower = prompt_usuario.lower()
-                    contexto_base = f"Time: {time_principal} | Competição: {opcao_liga} | Gols Feitos (Média): {stats_t1.get('gols_feitos_media', 0):.2f}"
+                with st.spinner("Cruzando dados do mercado e motor H2H..."):
+                    p = prompt_usuario.lower()
+                    t_nome = time_principal or "o time selecionado"
                     
-                    if "poisson" in pergunta_lower:
-                        resposta_ia = f"O modelo v21 de Distribuição de Poisson avalia a taxa de gols esperados ($\lambda$) de cada equipe com base no histórico em casa e fora, calculando a probabilidade estatística exata para mercados de gols, BTTS e vencedor de forma isenta. ({contexto_base})"
-                    elif "gols" in pergunta_lower or "over" in pergunta_lower or "btts" in pergunta_lower:
-                        resposta_ia = f"Para **{time_principal}**, a média atual de gols marcados é de `{stats_t1.get('gols_feitos_media', 0):.2f}` e sofridos de `{stats_t1.get('gols_sofridos_media', 0):.2f}`. O motor dinâmico evita travar em linhas fixas, avaliando se o cenário pede Over, Under ou Ambas Marcam."
-                    elif "escanteio" in pergunta_lower or "cantos" in pergunta_lower:
-                        cantos_total = corners_t1.get('corners_for_geral', 0) + corners_t1.get('corners_ag_geral', 0)
-                        resposta_ia = f"A média combinada de escanteios (pró + contra) para **{time_principal}** é de aproximadamente `{cantos_total:.2f}` por partida."
+                    j_total = stats_t1.get('jogos', 0)
+                    g_feitos = stats_t1.get('gols_feitos_media', 0)
+                    g_sofridos = stats_t1.get('gols_sofridos_media', 0)
+                    c_geral = corners_t1.get('corners_for_geral', 0) + corners_t1.get('corners_ag_geral', 0)
+                    
+                    h2h_ativo = 'usar_comparacao' in locals() and usar_comparacao and 'adversario' in locals() and adversario
+                    
+                    if not time_principal and not LEAGUE_ID:
+                        resposta_ia = "⚠️ Por favor, selecione primeiro uma competição e um time na barra lateral para que eu possa cruzar os dados analíticos."
+                    elif any(k in p for k in ["confronto", "jogo", "adversario", "contra", "vs", "h2h"]) and h2h_ativo:
+                        odd_h = 100 / max(probs_poisson['vitoria_home'], 1.0)
+                        odd_a = 100 / max(probs_poisson['vitoria_away'], 1.0)
+                        odd_emp = 100 / max(probs_poisson['empate'], 1.0)
+                        
+                        resposta_ia = f"⚔️ **Análise do Confronto Direto ({time_principal} vs {adversario}):**\n" \
+                                      f"- **Prob. Vitória {time_principal}:** `{probs_poisson['vitoria_home']:.1f}%` (Odd justa aprox: `@{odd_h:.2f}`)\n" \
+                                      f"- **Prob. Vitória {adversario}:** `{probs_poisson['vitoria_away']:.1f}%` (Odd justa aprox: `@{odd_a:.2f}`)\n" \
+                                      f"- **Prob. Empate:** `{probs_poisson['empate']:.1f}%` (Odd justa aprox: `@{odd_emp:.2f}`)\n" \
+                                      f"- **Expectativa de Gols do Duelo:** `{total_gols:.2f}` gols (`{probs_poisson['over_2_5']:.1f}%` para Over 2.5)\n" \
+                                      f"- **Projeção de Escanteios:** `{escanteios_jogo:.1f}` cantos no total."
+                    elif any(k in p for k in ["odd", "cotação", "justa", "valor", "mercado"]):
+                        if h2h_ativo:
+                            oh = 100 / max(probs_poisson['vitoria_home'], 1.0)
+                            oa = 100 / max(probs_poisson['vitoria_away'], 1.0)
+                            resposta_ia = f"📊 **Cotações Justas Estimadas (Poisson v21):**\n- {time_principal}: `@{oh:.2f}`\n- {adversario}: `@{oa:.2f}`\nCompare com as casas de apostas para encontrar valor (Market Value)."
+                        else:
+                            resposta_ia = "💡 Para calcular odds e valor de mercado precisas, ative o 'Simulador H2H & Motor de Probabilidade' no painel acima selecionando um adversário."
+                    elif any(k in p for k in ["defesa", "sofrido", "gols contra", "clean sheet", "zerado"]):
+                        resposta_ia = f"🛡️ **Raio-X Defensivo de {t_nome}:**\n- Média de gols sofridos: `{g_sofridos:.2f}` por jogo.\n- Jogos sem sofrer gols (Clean Sheets): `{stats_t1.get('clean_sheets', 0)}` em `{j_total}` partidas."
+                    elif any(k in p for k in ["ataque", "feito", "marcar", "gols", "over", "btts"]):
+                        resposta_ia = f"⚽ **Raio-X Ofensivo de {t_nome}:**\n- Média de gols marcados: `{g_feitos:.2f}` por jogo.\n- Desempenho em casa: `{stats_t1.get('gf_home', 0):.2f}` | Fora: `{stats_t1.get('gf_away', 0):.2f}`."
+                    elif any(k in p for k in ["escanteio", "cantos", "corner"]):
+                        resposta_ia = f"🚩 **Setor de Escanteios de {t_nome}:**\n- Média combinada (pró + contra): `{c_geral:.2f}` por partida."
+                    elif any(k in p for k in ["poisson", "modelo", "ia", "inteligência"]):
+                        resposta_ia = f"🧠 **Motor Preditivo v21:** O modelo avalia a taxa de gols esperados ($\lambda$) cruzando o desempenho mandante/visitante para gerar probabilidades matemáticas neutras e isentas de viés."
                     else:
-                        resposta_ia = f"Com base nas informações ativas (**{time_principal or opcao_liga}**), o painel está calibrado com dados oficiais da API e algoritmos corrigidos de dupla chance e escanteios. Recomendo analisar o cruzamento de estatísticas no painel H2H."
+                        resposta_ia = f"📊 Analisei sua solicitação sobre **{t_nome}** ({opcao_liga}). O time possui `{j_total}` jogos na base, média ofensiva de `{g_feitos:.2f}` e defensiva de `{g_sofridos:.2f}`. Pergunte sobre *confronto, odds, gols, escanteios* ou ative o H2H para simulações completas!"
                     
                     st.markdown(resposta_ia)
                     st.session_state.messages.append({"role": "assistant", "content": resposta_ia})
@@ -1004,7 +1026,6 @@ if st.sidebar.button("🚀 Disparar Análise Pré-Live (IA v21)"):
     else: 
         st.sidebar.error("❌ Falha ao enviar.")
 
-# BOTÃO: BILHETE DO DIA (SMART TIPSTER COM IA v21)
 if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v21)"):
     with st.spinner("Varrendo partidas de hoje com motor de Poisson corrigido e calibrando fuso horário..."):
         jogos_monitorados_hoje = buscar_jogos_ligas_monitoradas_por_data(DATA_HOJE_STR, API_KEY_FIXA, CHAVE_ATUALIZACAO)
@@ -1036,15 +1057,13 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v21)"):
             c_proj_a = (c_a_data['corners_for_away'] + c_h_data['corners_ag_home']) / 2
             tot_c_calc = c_proj_h + c_proj_a
             
-            # Bônus de intensidade de cantos por liga no bilhete do dia
-            if l_id == 128:  # Campeonato Argentino
+            if l_id == 128:  
                 tot_c_calc += 3.0
             elif l_id in [71, 39, 13]: 
                 tot_c_calc += 2.0
             else:
                 tot_c_calc += 1.5
 
-            # SELEÇÃO DINÂMICA DE GOLS NO BILHETE
             if tot_gols_calc >= 2.8 and p_res['over_2_5'] >= 50:
                 sel_gols = "Mais de 2.5 Gols 🔥"
             elif p_res['btts'] >= 55 and tot_gols_calc >= 2.3:
@@ -1054,7 +1073,6 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v21)"):
             else:
                 sel_gols = "Menos de 2.5 Gols 🛡️"
             
-            # SELEÇÃO DINÂMICA DE ESCANTEIOS CORRIGIDA (VARIABILIDADE REAL)
             if tot_c_calc >= 11.5:
                 sel_cantos = "Mais de 10.5 Escanteios 🔥"
             elif tot_c_calc >= 10.0:
@@ -1066,7 +1084,6 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v21)"):
             else:
                 sel_cantos = "Menos de 8.5 Escanteios 🛡️"
 
-            # SELEÇÃO NEUTRA DE CHANCE DUPLA / DNB NO BILHETE
             vh_b = p_res['vitoria_home']
             va_b = p_res['vitoria_away']
             
