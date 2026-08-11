@@ -3,7 +3,10 @@ import pandas as pd
 import requests
 import time
 import math
+import os
 from datetime import datetime, timedelta, timezone
+# Importando a nova biblioteca do Google
+from google import genai
 
 st.set_page_config(page_title="Painel Pro - Global Trading & IA Preditiva v22.1", layout="wide")
 
@@ -13,6 +16,23 @@ SEASON = datetime.now().year
 
 TELEGRAM_TOKEN = "8281259090:AAEggXJKpCMxRbhhrcCZymcmNUKWNoOPFfY"
 TELEGRAM_CHAT_ID = "-1004464226419"
+
+# --- CONFIGURAÇÃO DA CHAVE DO GEMINI NA BARRA LATERAL ---
+st.sidebar.header("🔑 Configuração de IA Generativa")
+GEMINI_API_KEY_INPUT = st.sidebar.text_input(
+    "Cole sua API Key do Gemini:", 
+    value="AQ.Ab8RN6KIW_Uv1PYG4qsv5otrnWqL_m8DxlWVlkw7v3IzsOFRyg", 
+    type="password", 
+    key="input_gemini_key"
+)
+
+# Inicialização segura do Cliente Gemini (padrão AQ e AIza)
+client = None
+if GEMINI_API_KEY_INPUT:
+    try:
+        client = genai.Client(api_key=GEMINI_API_KEY_INPUT)
+    except Exception as e:
+        st.sidebar.error(f"Erro ao inicializar o Gemini: {e}")
 
 # --- DICIONÁRIO DE LIGAS MONITORADAS ---
 LIGAS_MONITORADAS = {
@@ -1055,17 +1075,33 @@ else:
                     pergunta_lower = prompt_usuario.lower()
                     contexto_base = f"Time: {time_principal} | Competição: {opcao_liga} | Gols Feitos (Média): {stats_t1.get('gols_feitos_media', 0):.2f}"
                     
-                    if "poisson" in pergunta_lower:
-                        resposta_ia = f"O modelo v22.1 U6 de Distribuição de Poisson avalia a taxa de gols esperados de cada equipe com base nos últimos 6 jogos em casa e fora, calculando a probabilidade estatística exata para mercados de gols, BTTS e vencedor. ({contexto_base})"
-                    elif "gols" in pergunta_lower or "over" in pergunta_lower or "btts" in pergunta_lower:
-                        resposta_ia = f"Para **{time_principal}**, analisando o ciclo dinâmico U6, a média de gols marcados é de `{stats_t1.get('gols_feitos_media', 0):.2f}` e sofridos de `{stats_t1.get('gols_sofridos_media', 0):.2f}`."
-                    elif "cartão" in pergunta_lower or "cartoes" in pergunta_lower:
-                        resposta_ia = f"A média nos últimos 6 jogos (U6) de cartões pró para **{time_principal}** é de `{corners_t1.get('media_cartoes_pro', 0):.2f}` e contra é de `{corners_t1.get('media_cartoes_contra', 0):.2f}`."
-                    elif "escanteio" in pergunta_lower or "cantos" in pergunta_lower:
-                        cantos_total = corners_t1.get('corners_for_geral', 0) + corners_t1.get('corners_ag_geral', 0)
-                        resposta_ia = f"A média combinada de escanteios U6 (pró + contra) para **{time_principal}** é de aproximadamente `{cantos_total:.2f}` por partida."
-                    else:
-                        resposta_ia = f"Com base nas informações ativas (**{time_principal or opcao_liga}**), o painel está calibrado com dados oficiais U6 da API e algoritmos corrigidos de cartões e escanteios."
+                    # Integração com o modelo Gemini caso o cliente esteja disponível
+                    resposta_ia = None
+                    if client:
+                        try:
+                            prompt_completo = f"Contexto de Futebol: {contexto_base}. Pergunta do usuário: {prompt_usuario}"
+                            response_gemini = client.models.generate_content(
+                                model="gemini-2.5-flash",
+                                contents=prompt_completo,
+                            )
+                            if response_gemini and response_gemini.text:
+                                resposta_ia = response_gemini.text
+                        except Exception as e:
+                            resposta_ia = f"Erro ao consultar o Gemini: {e}. Usando fallback local."
+
+                    # Fallback padrão caso ocorra algum problema na chamada da API do Gemini
+                    if not resposta_ia:
+                        if "poisson" in pergunta_lower:
+                            resposta_ia = f"O modelo v22.1 U6 de Distribuição de Poisson avalia a taxa de gols esperados de cada equipe com base nos últimos 6 jogos em casa e fora, calculando a probabilidade estatística exata para mercados de gols, BTTS e vencedor. ({contexto_base})"
+                        elif "gols" in pergunta_lower or "over" in pergunta_lower or "btts" in pergunta_lower:
+                            resposta_ia = f"Para **{time_principal}**, analisando o ciclo dinâmico U6, a média de gols marcados é de `{stats_t1.get('gols_feitos_media', 0):.2f}` e sofridos de `{stats_t1.get('gols_sofridos_media', 0):.2f}`."
+                        elif "cartão" in pergunta_lower or "cartoes" in pergunta_lower:
+                            resposta_ia = f"A média nos últimos 6 jogos (U6) de cartões pró para **{time_principal}** é de `{corners_t1.get('media_cartoes_pro', 0):.2f}` e contra é de `{corners_t1.get('media_cartoes_contra', 0):.2f}`."
+                        elif "escanteio" in pergunta_lower or "cantos" in pergunta_lower:
+                            cantos_total = corners_t1.get('corners_for_geral', 0) + corners_t1.get('corners_ag_geral', 0)
+                            resposta_ia = f"A média combinada de escanteios U6 (pró + contra) para **{time_principal}** é de aproximadamente `{cantos_total:.2f}` por partida."
+                        else:
+                            resposta_ia = f"Com base nas informações ativas (**{time_principal or opcao_liga}**), o painel está calibrado com dados oficiais U6 da API e algoritmos corrigidos de cartões e escanteios."
                     
                     st.markdown(resposta_ia)
                     st.session_state.messages.append({"role": "assistant", "content": resposta_ia})
