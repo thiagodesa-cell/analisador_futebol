@@ -3,8 +3,6 @@ import pandas as pd
 import requests
 import time
 import math
-import json
-import os
 from datetime import datetime, timedelta, timezone
 
 st.set_page_config(page_title="Painel Pro - Global Trading & IA Preditiva v21", layout="wide")
@@ -31,33 +29,6 @@ LIGAS_MONITORADAS = {
     13: "Copa Libertadores",
     11: "Copa Sudamericana"
 }
-
-# --- SISTEMA DE HISTÓRICO E RASTREIO DE BILHETES ---
-ARQUIVO_BILHETES = "historico_bilhetes.json"
-
-def salvar_bilhete_historico(data_str, bilhete_dados):
-    historico = {}
-    if os.path.exists(ARQUIVO_BILHETES):
-        try:
-            with open(ARQUIVO_BILHETES, "r", encoding="utf-8") as f:
-                historico = json.load(f)
-        except:
-            pass
-    historico[data_str] = bilhete_dados
-    try:
-        with open(ARQUIVO_BILHETES, "w", encoding="utf-8") as f:
-            json.dump(historico, f, ensure_ascii=False, indent=4)
-    except:
-        pass
-
-def carregar_historico_bilhetes():
-    if os.path.exists(ARQUIVO_BILHETES):
-        try:
-            with open(ARQUIVO_BILHETES, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except:
-            pass
-    return {}
 
 # --- VERSÃO 21 COM CORREÇÃO DEFINITIVA DE ESCANTEIOS E VARIABILIDADE ---
 def obter_chave_atualizacao():
@@ -720,8 +691,7 @@ if not LEAGUE_ID and not clube_global_selecionado and not id_time1:
     * **Correção Absoluta de Escanteios:** Fim do vício de Menos de 9.5 / 10.5. O motor agora conta com baselines e limiares totalmente dinâmicos que variam entre *Mais de 8.5*, *9.5*, *10.5* e *Menos de 8.5*.
     * **Correção Absoluta de Viés de Mandante:** A dupla chance e DNB avaliam de forma neutra e equilibrada.
     * **Distribuição de Poisson (Machine Learning Avançado):** Modelagem estatística ajustada por coeficientes de intensidade de liga.
-    * **Bilhete do Dia Automatizado:** Varredura inteligente de ligas globais com foco em gestão de banca e risco calculado.
-    * **Histórico de Bilhetes e Rastreio de Resultados:** Salva automaticamente os bilhetes gerados para acompanhamento de assertividade.
+    * **Bilhete do Dia Automatizado:** Varredura inteligente de ligas globais com foco em gestão de banca e risco calculado enviado diretamente para o seu Telegram.
     """)
 
 # =========================================================================
@@ -739,8 +709,8 @@ elif LEAGUE_ID and not id_time1:
 
     st.markdown("---")
 
-    tab_pan_jogos, tab_pan_tabela, tab_pan_refs, tab_pan_historico = st.tabs([
-        "📅 Jogos & Calendário (BR)", "🏆 Tabela de Classificação", "⚖️ Árbitros em Destaque", "📋 Histórico de Bilhetes"
+    tab_pan_jogos, tab_pan_tabela, tab_pan_refs = st.tabs([
+        "📅 Jogos & Calendário (BR)", "🏆 Tabela de Classificação", "⚖️ Árbitros em Destaque"
     ])
 
     with tab_pan_jogos:
@@ -764,19 +734,6 @@ elif LEAGUE_ID and not id_time1:
         st.subheader(f"⚖️ Perfil dos Árbitros - {opcao_liga}")
         if not df_arbitros.empty:
             st.dataframe(df_arbitros, use_container_width=True, hide_index=True)
-
-    with tab_pan_historico:
-        st.subheader("📋 Histórico Salvo de Bilhetes do Dia")
-        hist_bilhetes = carregar_historico_bilhetes()
-        if hist_bilhetes:
-            for data_b, info_b in sorted(hist_bilhetes.items(), reverse=True):
-                with st.expander(f"📅 Bilhete gerado em: {data_b}"):
-                    for j_item in info_b.get("jogos", []):
-                        st.markdown(f"**{j_item.get('Mandante')} x {j_item.get('Visitante')}** ({j_item.get('Liga')})")
-                        st.markdown(f"- Sugestões: `{j_item.get('SugestaoGols')}` | `{j_item.get('SugestaoCantos')}`")
-                        st.markdown("---")
-        else:
-            st.info("Nenhum bilhete salvo no histórico ainda. Gere um bilhete do dia pela barra lateral para registrar.")
 
 # =========================================================================
 # CENÁRIO 2: PAINEL DE ANÁLISE DETALHADA COM IA
@@ -882,9 +839,9 @@ else:
                 c_proj_t2 = (corners_t2['corners_for_away'] + corners_t1['corners_ag_home']) / 2
                 escanteios_jogo = c_proj_t1 + c_proj_t2
                 
-                if LEAGUE_ID == 128:
+                if LEAGUE_ID == 128:  
                     escanteios_jogo += 3.0
-                elif LEAGUE_ID in [71, 39, 13]:
+                elif LEAGUE_ID in [71, 39, 13]: 
                     escanteios_jogo += 2.0
                 else:
                     escanteios_jogo += 1.5
@@ -1010,7 +967,7 @@ else:
                     st.markdown(resposta_ia)
                     st.session_state.messages.append({"role": "assistant", "content": resposta_ia})
 
-# --- DISPARADORES E CONSULTAS NA BARRA LATERAL ---
+# --- DISPARADORES DO TELEGRAM ---
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 📢 Canal & Automação Telegram")
 
@@ -1040,6 +997,7 @@ if st.sidebar.button("🚀 Disparar Análise Pré-Live (IA v21)"):
     else: 
         st.sidebar.error("❌ Falha ao enviar.")
 
+# BOTÃO: BILHETE DO DIA (SMART TIPSTER COM IA v21) - ENVIADO DIRETAMENTE PARA O TELEGRAM
 if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v21)"):
     with st.spinner("Varrendo partidas de hoje com motor de Poisson corrigido e calibrando fuso horário..."):
         jogos_monitorados_hoje = buscar_jogos_ligas_monitoradas_por_data(DATA_HOJE_STR, API_KEY_FIXA, CHAVE_ATUALIZACAO)
@@ -1050,7 +1008,6 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v21)"):
         
         msg_bilhete = f"""💎 <b>SMART TIPSTER: BILHETE DO DIA (IA MARKET ULTIMATE v21)</b> 💎\n📅 <i>Data: {data_formatada_exibicao}</i>\n\nAnálises sem viés de mandante com linhas dinâmicas de escanteios:\n\n"""
         
-        jogos_salvar_lista = []
         for idx, j in enumerate(amostra_monitorada, 1):
             h_id = j['HomeID']
             a_id = j['AwayID']
@@ -1072,7 +1029,7 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v21)"):
             c_proj_a = (c_a_data['corners_for_away'] + c_h_data['corners_ag_home']) / 2
             tot_c_calc = c_proj_h + c_proj_a
             
-            if l_id == 128:
+            if l_id == 128:  
                 tot_c_calc += 3.0
             elif l_id in [71, 39, 13]: 
                 tot_c_calc += 2.0
@@ -1117,42 +1074,12 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v21)"):
             msg_bilhete += f"   • 🎯 <i>IA Tips:</i> {sel_gols} | {sel_cantos}\n"
             msg_bilhete += f"   • 🛡️ <i>Segurança:</i> {sel_seg}\n"
             msg_bilhete += f"   • ⏰ <i>Horário (BR):</i> {j['Horário']}\n\n"
-            
-            jogos_salvar_lista.append({
-                "Mandante": j['Mandante'],
-                "Visitante": j['Visitante'],
-                "Liga": j['Liga'],
-                "SugestaoGols": sel_gols,
-                "SugestaoCantos": sel_cantos,
-                "SugestaoSeguranca": sel_seg,
-                "Horario": j['Horário']
-            })
         
-        msg_bilhete += f"🧠 <i>Smart Tipster IA v21: Análises corrigidas com linhas de escanteios dinâmicos e reais.</i>"
-        
-        bilhete_registro = {
-            "data": DATA_HOJE_STR,
-            "jogos": jogos_salvar_lista
-        }
-        salvar_bilhete_historico(DATA_HOJE_STR, bilhete_registro)
+        msg_bilhete += f"🧠 <i>Smart Tipster IA v21: Análises corrigidas com linhas de escanteios dinâmicas e reais.</i>"
         
         if enviar_alerta_telegram(msg_bilhete):
-            st.sidebar.success("🔥 Bilhete IA v21 enviado e salvo no histórico!")
+            st.sidebar.success("🔥 Bilhete IA v21 enviado com sucesso para o Telegram!")
         else:
             st.sidebar.error("❌ Falha ao enviar ao Telegram.")
     else:
-        st.sidebar.warning(f"⚠️ Não há jogos cadastrados para hoje ({DATA_HOJE_STR}) nas ligas monitoradas.")
-
-# --- NOVO: CONSULTAR HISTÓRICO DE BILHETES DIRETO NA BARRA LATERAL ---
-st.sidebar.markdown("---")
-with st.sidebar.expander("📋 Conferir Bilhetes Salvos"):
-    hist_bilhetes = carregar_historico_bilhetes()
-    if hist_bilhetes:
-        for data_b, info_b in sorted(hist_bilhetes.items(), reverse=True):
-            st.markdown(f"**📅 Data: {data_b}**")
-            for j_item in info_b.get("jogos", []):
-                st.markdown(f"• **{j_item.get('Mandante')} x {j_item.get('Visitante')}**")
-                st.markdown(f"  `{j_item.get('SugestaoGols')}` | `{j_item.get('SugestaoCantos')}`")
-            st.markdown("---")
-    else:
-        st.info("Nenhum bilhete salvo no histórico ainda.")
+        st.sidebar.warning(f"⚠️ Não hay jogos cadastrados para hoje ({DATA_HOJE_STR}) nas ligas monitoradas.")
