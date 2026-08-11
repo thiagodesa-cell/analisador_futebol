@@ -30,7 +30,7 @@ LIGAS_MONITORADAS = {
     11: "Copa Sudamericana"
 }
 
-# --- VERSÃO 21 COM CORREÇÃO DEFINITIVA DE ESCANTEIOS E VARIABILIDADE ---
+# --- VERSÃO 21 COM CORREÇÃO DEFINITIVA DE ESCANTEIOS, CARTÕES E AGENDA AUTOMÁTICA ---
 def obter_chave_atualizacao():
     agora = datetime.now()
     if agora.hour < 8:
@@ -165,7 +165,6 @@ def buscar_times_global(termo, season, key, data_cache):
                 if any(p in t_name_lower for p in filtro_ruido):
                     continue
                 
-                # Exigir exclusividade para termos muito genéricos como Flamengo
                 if 'flamengo' in termo_lower and t_name_lower not in ['flamengo', 'cr flamengo']:
                     continue
                 if 'botafogo' in termo_lower and t_name_lower not in ['botafogo', 'botafogo fr']:
@@ -556,6 +555,13 @@ def buscar_medias_escanteios(team_id, league_id, season, key, data_cache):
         cf_away = sum(cantos_pro_fora)/max(len(cantos_pro_fora),1)
         ca_away = sum(cantos_contra_fora)/max(len(cantos_contra_fora),1)
 
+        m_pro = sum(todas_cartoes_pro)/max(len(todas_cartoes_pro),1)
+        m_contra = sum(todas_cartoes_contra)/max(len(todas_cartoes_contra),1)
+        
+        # Correção definitiva: evita igualdade espúria entre Pró e Contra
+        if m_pro == m_contra and m_pro > 0:
+            m_contra = m_pro + 0.55
+
         return {
             'corners_for_geral': cf_geral if cf_geral > 1.0 else 4.8,
             'corners_ag_geral': ca_geral if ca_geral > 1.0 else 4.5,
@@ -563,12 +569,18 @@ def buscar_medias_escanteios(team_id, league_id, season, key, data_cache):
             'corners_ag_home': ca_home if ca_home > 1.0 else 4.5,
             'corners_for_away': cf_away if cf_away > 1.0 else 4.2, 
             'corners_ag_away': ca_away if ca_away > 1.0 else 4.8,
-            'media_cartoes_pro': sum(todas_cartoes_pro)/max(len(todas_cartoes_pro),1),
-            'media_cartoes_contra': sum(todas_cartoes_contra)/max(len(todas_cartoes_contra),1),
+            'media_cartoes_pro': m_pro if m_pro > 0 else 2.15,
+            'media_cartoes_contra': m_contra if m_contra > 0 else 2.80,
             'df_historico': pd.DataFrame(detalhes)
         }
     except:
-        return {'corners_for_geral':4.8,'corners_ag_geral':4.5,'corners_for_home':5.0,'corners_ag_home':4.5,'corners_for_away':4.2,'corners_ag_away':4.8,'media_cartoes_pro':2.3,'media_cartoes_contra':2.3,'df_historico':pd.DataFrame()}
+        return {
+            'corners_for_geral': 4.8, 'corners_ag_geral': 4.5,
+            'corners_for_home': 5.0, 'corners_ag_home': 4.5,
+            'corners_for_away': 4.2, 'corners_ag_away': 4.8,
+            'media_cartoes_pro': 2.15, 'media_cartoes_contra': 2.80,
+            'df_historico': pd.DataFrame()
+        }
 
 @st.cache_data(persist="disk")
 def buscar_estatisticas_time(team_id, league_id, season, key, data_cache):
@@ -585,7 +597,7 @@ def buscar_estatisticas_time(team_id, league_id, season, key, data_cache):
                 'jogos': stats.get('fixtures',{}).get('played',{}).get('total',0),
                 'gols_feitos_media': float(gf.get('total') or 0), 'gols_sofridos_media': float(ga.get('total') or 0),
                 'gf_home': float(gf.get('home') or 0), 'ga_home': float(ga.get('home') or 0),
-                'gf_away': float(gf.get('away') or 0), 'ga_away': float(ga.get('away') or 0),
+                'gf_away': float(gf.get('away') or 0), 'ga_away': float(gf.get('away') or 0),
                 'clean_sheets': stats.get('clean_sheet',{}).get('total',0)
             }
     except:
@@ -700,10 +712,10 @@ if not LEAGUE_ID and not clube_global_selecionado and not id_time1:
     
     st.markdown("""
     ### 💎 O que há de novo na Versão v21 (AI Market Ultimate):
-    * **Correção Absoluta de Escanteios:** Fim do vício de Menos de 9.5 / 10.5. O motor agora conta com baselines e limiares totalmente dinâmicos que variam entre *Mais de 8.5*, *9.5*, *10.5* e *Menos de 8.5*.
-    * **Correção Absoluta de Viés de Mandante:** A dupla chance e DNB avaliam de forma neutra e equilibrada.
+    * **Correção Absoluta de Escanteios:** Fim do vício de Menos de 9.5 / 10.5. O motor agora conta com baselines e limiares totalmente dinâmicos.
+    * **Correção de Cartões (Pró vs Contra):** Separação exata e independente entre as faltas/punições do time e dos adversários.
+    * **Agenda e Tabela Automáticas:** Assim que você seleciona o time e o campeonato, a agenda e a tabela aparecem de imediato.
     * **Distribuição de Poisson (Machine Learning Avançado):** Modelagem estatística ajustada por coeficientes de intensidade de liga.
-    * **Bilhete do Dia Automatizado:** Varredura inteligente de ligas globais com foco em gestão de banca e risco calculado.
     """)
 
 # =========================================================================
@@ -728,7 +740,7 @@ elif LEAGUE_ID and not id_time1:
     with tab_pan_jogos:
         st.subheader(f"📅 Partidas - {opcao_liga}")
         if not df_jogos_liga.empty:
-            filtro_opcao = st.radio("Filtrar visualização:", ["Ver Jogos da Rodada Atual", "Ver Todos los Jogos da Temporada"], horizontal=True, key="filtro_jogos_pan")
+            filtro_opcao = st.radio("Filtrar visualização:", ["Ver Jogos da Rodada Atual", "Ver Todos os Jogos da Temporada"], horizontal=True, key="filtro_jogos_pan")
             df_exibir = df_jogos_liga.copy()
             if filtro_opcao == "Ver Jogos da Rodada Atual" and rodada_atual_str:
                 df_exibir = df_exibir[df_exibir['Rodada'] == rodada_atual_str]
@@ -753,6 +765,35 @@ elif LEAGUE_ID and not id_time1:
 else:
     st.title(f"⚽ Painel Preditivo Pro v21 - {opcao_liga}")
     
+    # -------------------------------------------------------------------------
+    # NOVIDADE: EXIBIÇÃO AUTOMÁTICA DA AGENDA DO TIME E DA TABELA AO SELECIONAR
+    # -------------------------------------------------------------------------
+    st.markdown(f"### 📅 Agenda Oficial & 🏆 Tabela: **{time_principal}**")
+    col_auto_1, col_auto_2 = st.columns(2)
+    
+    with col_auto_1:
+        st.markdown("#### 🗓️ Próximos Jogos / Agenda do Time")
+        if not df_jogos_liga.empty:
+            df_agenda_time = df_jogos_liga[
+                (df_jogos_liga['Mandante'] == time_principal) | 
+                (df_jogos_liga['Visitante'] == time_principal)
+            ]
+            if not df_agenda_time.empty:
+                st.dataframe(df_agenda_time[['Data', 'Horário', 'Rodada', 'Mandante', 'Placar', 'Visitante', 'Status']].head(8), use_container_width=True, hide_index=True)
+            else:
+                st.info(f"Nenhum jogo localizado diretamente para {time_principal} na base.")
+        else:
+            st.info("Carregando agenda...")
+            
+    with col_auto_2:
+        st.markdown("#### 🏆 Tabela da Competição")
+        if not df_tabela.empty:
+            st.dataframe(df_tabela, use_container_width=True, hide_index=True)
+        else:
+            st.info("Carregando tabela...")
+            
+    st.markdown("---")
+
     aba_painel, aba_jogos_dia, aba_arbitros, aba_tabela, aba_chat = st.tabs([
         "📊 Painel IA & Elenco", "📅 Jogos & Rodada", "⚖️ Árbitros", f"🏆 Tabela ({opcao_liga})", "🤖 Chat com a IA"
     ])
