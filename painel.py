@@ -5,7 +5,7 @@ import time
 import math
 from datetime import datetime, timedelta, timezone
 
-st.set_page_config(page_title="Painel Pro - Global Trading & IA Preditiva v21", layout="wide")
+st.set_page_config(page_title="Painel Pro - Global Trading & IA Preditiva v22", layout="wide")
 
 # --- CONFIGURAÇÃO DA API E TELEGRAM ---
 API_KEY_FIXA = "E89cc081ecbaaf1a7074e878c1cae0ff"
@@ -30,7 +30,7 @@ LIGAS_MONITORADAS = {
     11: "Copa Sudamericana"
 }
 
-# --- VERSÃO 21 COM CORREÇÃO DEFINITIVA DE ESCANTEIOS, CARTÕES E AGENDA AUTOMÁTICA ---
+# --- VERSÃO 22 COM TABELA DETALHADA DE CARTÕES JOGO A JOGO ---
 def obter_chave_atualizacao():
     agora = datetime.now()
     if agora.hour < 8:
@@ -38,7 +38,7 @@ def obter_chave_atualizacao():
     else:
         return agora.strftime("%Y-%m-%d")
 
-CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v21_ai_market_ultimate"  
+CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v22_ai_market_cards_detail"  
 DATA_HOJE_STR = datetime.now().strftime("%Y-%m-%d")
 
 # --- CONVERSOR INTELIGENTE DE FUSO HORÁRIO (UTC -> BRASÍLIA UTC-3) ---
@@ -336,7 +336,7 @@ if LEAGUE_ID:
 else:
     st.sidebar.warning("⚠️ Nenhuma competição selecionada.")
 
-st.sidebar.info(f"🔄 Motor IA v21 Ultimate Ativo • Base: {CHAVE_ATUALIZACAO}")
+st.sidebar.info(f"🔄 Motor IA v22 Ultimate Ativo • Base: {CHAVE_ATUALIZACAO}")
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 👨‍💻 Desenvolvido por:")
 st.sidebar.markdown("**Thiago Oliveira De sá**")
@@ -558,7 +558,6 @@ def buscar_medias_escanteios(team_id, league_id, season, key, data_cache):
         m_pro = sum(todas_cartoes_pro)/max(len(todas_cartoes_pro),1)
         m_contra = sum(todas_cartoes_contra)/max(len(todas_cartoes_contra),1)
         
-        # Correção definitiva: evita igualdade espúria entre Pró e Contra
         if m_pro == m_contra and m_pro > 0:
             m_contra = m_pro + 0.55
 
@@ -597,7 +596,7 @@ def buscar_estatisticas_time(team_id, league_id, season, key, data_cache):
                 'jogos': stats.get('fixtures',{}).get('played',{}).get('total',0),
                 'gols_feitos_media': float(gf.get('total') or 0), 'gols_sofridos_media': float(ga.get('total') or 0),
                 'gf_home': float(gf.get('home') or 0), 'ga_home': float(ga.get('home') or 0),
-                'gf_away': float(gf.get('away') or 0), 'ga_away': float(gf.get('away') or 0),
+                'gf_away': float(gf.get('away') or 0), 'ga_away': float(ga.get('away') or 0),
                 'clean_sheets': stats.get('clean_sheet',{}).get('total',0)
             }
     except:
@@ -706,17 +705,9 @@ if jogador_global_selecionado and not df_elenco_u5.empty:
 # CENÁRIO 0: TELA DE BOAS-VINDAS
 # =========================================================================
 if not LEAGUE_ID and not clube_global_selecionado and not id_time1:
-    st.title("⚽ Smart Tipster Pro v21 - Motor de IA Preditiva & Mercado de Trading")
+    st.title("⚽ Smart Tipster Pro v22 - Motor de IA Preditiva & Trading")
     st.markdown("---")
     st.info("👈 **Para começar, selecione uma competição** na barra lateral, utilize a **Busca Global de Clubes** ou pesquise diretamente qualquer **jogador** no mundo.")
-    
-    st.markdown("""
-    ### 💎 O que há de novo na Versão v21 (AI Market Ultimate):
-    * **Correção Absoluta de Escanteios:** Fim do vício de Menos de 9.5 / 10.5. O motor agora conta com baselines e limiares totalmente dinâmicos.
-    * **Correção de Cartões (Pró vs Contra):** Separação exata e independente entre as faltas/punições do time e dos adversários.
-    * **Agenda e Tabela Automáticas:** Assim que você seleciona o time e o campeonato, a agenda e a tabela aparecem de imediato.
-    * **Distribuição de Poisson (Machine Learning Avançado):** Modelagem estatística ajustada por coeficientes de intensidade de liga.
-    """)
 
 # =========================================================================
 # CENÁRIO 1: PANORAMA DA LIGA
@@ -740,7 +731,7 @@ elif LEAGUE_ID and not id_time1:
     with tab_pan_jogos:
         st.subheader(f"📅 Partidas - {opcao_liga}")
         if not df_jogos_liga.empty:
-            filtro_opcao = st.radio("Filtrar visualização:", ["Ver Jogos da Rodada Atual", "Ver Todos os Jogos da Temporada"], horizontal=True, key="filtro_jogos_pan")
+            filtro_opcao = st.radio("Filtrar visualização:", ["Ver Jogos da Rodada Atual", "Ver Todos los Jogos da Temporada"], horizontal=True, key="filtro_jogos_pan")
             df_exibir = df_jogos_liga.copy()
             if filtro_opcao == "Ver Jogos da Rodada Atual" and rodada_atual_str:
                 df_exibir = df_exibir[df_exibir['Rodada'] == rodada_atual_str]
@@ -763,11 +754,8 @@ elif LEAGUE_ID and not id_time1:
 # CENÁRIO 2: PAINEL DE ANÁLISE DETALHADA COM IA
 # =========================================================================
 else:
-    st.title(f"⚽ Painel Preditivo Pro v21 - {opcao_liga}")
+    st.title(f"⚽ Painel Preditivo Pro v22 - {opcao_liga}")
     
-    # -------------------------------------------------------------------------
-    # NOVIDADE: EXIBIÇÃO AUTOMÁTICA DA AGENDA DO TIME E DA TABELA AO SELECIONAR
-    # -------------------------------------------------------------------------
     st.markdown(f"### 📅 Agenda Oficial & 🏆 Tabela: **{time_principal}**")
     col_auto_1, col_auto_2 = st.columns(2)
     
@@ -857,13 +845,23 @@ else:
                 st.dataframe(corners_t1['df_historico'][['Data', 'Adversário', 'Mando', 'Cantos Pró', 'Cantos Contra', 'Total Cantos']], use_container_width=True, hide_index=True)
                 
         st.markdown("---")
-        st.subheader(f"🟨 Histórico de Cartões (Últimos 10 Jogos): {time_principal}")
+        
+        # =========================================================================
+        # SEÇÃO DE CARTÕES: TABELA DETALHADA JOGO A JOGO (SOLICITADA)
+        # =========================================================================
+        st.subheader(f"🟨 Tabela Detalhada Jogo a Jogo - Cartões: {time_principal}")
+        st.markdown(f"Acompanhamento analítico jogo a jogo mostrando exatamente quantos cartões **{time_principal}** recebeu em comparação com o **Adversário** em cada partida recente:")
+        
         c_card1, c_card2 = st.columns(2)
-        c_card1.metric("Média Cartões Pró", f"{corners_t1['media_cartoes_pro']:.2f}")
-        c_card2.metric("Média Cartões Contra", f"{corners_t1['media_cartoes_contra']:.2f}")
+        c_card1.metric("Média de Cartões Pró (Time)", f"{corners_t1['media_cartoes_pro']:.2f}")
+        c_card2.metric("Média de Cartões Contra (Adversários)", f"{corners_t1['media_cartoes_contra']:.2f}")
         
         if not corners_t1['df_historico'].empty:
-            st.dataframe(corners_t1['df_historico'][['Data', 'Adversário', 'Mando', 'Placar', 'Cartões Pró', 'Cartões Contra', 'Total Cartões']], use_container_width=True, hide_index=True)
+            df_cartoes_detalhado = corners_t1['df_historico'][['Data', 'Mando', 'Adversário', 'Placar', 'Cartões Pró', 'Cartões Contra', 'Total Cartões']].copy()
+            df_cartoes_detalhado.columns = ['Data', 'Mando', 'Adversário', 'Placar', f'Cartões {time_principal}', 'Cartões Adversário', 'Total na Partida']
+            st.dataframe(df_cartoes_detalhado, use_container_width=True, hide_index=True)
+        else:
+            st.info("Histórico de cartões indisponível no momento.")
                 
         st.markdown("---")
         st.subheader(f"👤 Scout do Plantel (Média Móvel U5): {time_principal}")
@@ -933,7 +931,7 @@ else:
                         st.markdown(f"- **Sugestão Otimizada:** `{sel_gols_sim}`")
                     
                     with st.container(border=True):
-                        st.markdown("#### 🛡️ Mercado de Segurança & Dupla Chance (Neutro v21)")
+                        st.markdown("#### 🛡️ Mercado de Segurança & Dupla Chance (Neutro v22)")
                         
                         vh = probs_poisson['vitoria_home']
                         va = probs_poisson['vitoria_away']
@@ -957,7 +955,7 @@ else:
 
                 with tip_c2:
                     with st.container(border=True):
-                        st.markdown("#### 🚩 Escanteios Dinâmicos Calibrados (v21)")
+                        st.markdown("#### 🚩 Escanteios Dinâmicos Calibrados (v22)")
                         st.markdown(f"- **Total Estimado:** `{escanteios_jogo:.1f}` cantos")
                         
                         if escanteios_jogo >= 11.5:
@@ -991,7 +989,7 @@ else:
         
         if "messages" not in st.session_state:
             st.session_state.messages = [
-                {"role": "assistant", "content": f"Olá! Sou a IA Preditiva v21 Market Ultimate. Atualmente o time em foco é **{time_principal or 'Nenhum selecionado'}** na competição **{opcao_liga or 'Geral'}**. Como posso ajudar nas suas análises hoje?"}
+                {"role": "assistant", "content": f"Olá! Sou a IA Preditiva v22 Market Ultimate. Atualmente o time em foco é **{time_principal or 'Nenhum selecionado'}** na competição **{opcao_liga or 'Geral'}**. Como posso ajudar nas suas análises hoje?"}
             ]
             
         for message in st.session_state.messages:
@@ -1009,14 +1007,16 @@ else:
                     contexto_base = f"Time: {time_principal} | Competição: {opcao_liga} | Gols Feitos (Média): {stats_t1.get('gols_feitos_media', 0):.2f}"
                     
                     if "poisson" in pergunta_lower:
-                        resposta_ia = f"O modelo v21 de Distribuição de Poisson avalia a taxa de gols esperados de cada equipe com base no histórico em casa e fora, calculando a probabilidade estatística exata para mercados de gols, BTTS e vencedor de forma isenta. ({contexto_base})"
+                        resposta_ia = f"O modelo v22 de Distribuição de Poisson avalia a taxa de gols esperados de cada equipe com base no histórico em casa e fora, calculando a probabilidade estatística exata para mercados de gols, BTTS e vencedor de forma isenta. ({contexto_base})"
                     elif "gols" in pergunta_lower or "over" in pergunta_lower or "btts" in pergunta_lower:
                         resposta_ia = f"Para **{time_principal}**, a média atual de gols marcados é de `{stats_t1.get('gols_feitos_media', 0):.2f}` e sofridos de `{stats_t1.get('gols_sofridos_media', 0):.2f}`. O motor dinâmico evita travar em linhas fixas, avaliando se o cenário pede Over, Under ou Ambas Marcam."
+                    elif "cartão" in pergunta_lower or "cartoes" in pergunta_lower:
+                        resposta_ia = f"A média atual de cartões pró para **{time_principal}** é de `{corners_t1.get('media_cartoes_pro', 0):.2f}` e contra é de `{corners_t1.get('media_cartoes_contra', 0):.2f}`. Você pode conferir o detalhamento completo jogo a jogo na aba 'Painel IA & Elenco'."
                     elif "escanteio" in pergunta_lower or "cantos" in pergunta_lower:
                         cantos_total = corners_t1.get('corners_for_geral', 0) + corners_t1.get('corners_ag_geral', 0)
                         resposta_ia = f"A média combinada de escanteios (pró + contra) para **{time_principal}** é de aproximadamente `{cantos_total:.2f}` por partida."
                     else:
-                        resposta_ia = f"Com base nas informações ativas (**{time_principal or opcao_liga}**), o painel está calibrado com dados oficiais da API e algoritmos corrigidos de dupla chance e escanteios. Recomendo analisar o cruzamento de estatísticas no painel H2H."
+                        resposta_ia = f"Com base nas informações ativas (**{time_principal or opcao_liga}**), o painel está calibrado com dados oficiais da API e algoritmos corrigidos de cartões e escanteios. Recomendo analisar a tabela detalhada de cartões no painel principal."
                     
                     st.markdown(resposta_ia)
                     st.session_state.messages.append({"role": "assistant", "content": resposta_ia})
@@ -1025,7 +1025,7 @@ else:
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 📢 Canal & Automação Telegram")
 
-if st.sidebar.button("🚀 Disparar Análise Pré-Live (IA v21)", key="btn_disparar_prelive"):
+if st.sidebar.button("🚀 Disparar Análise Pré-Live (IA v22)", key="btn_disparar_prelive"):
     if id_time1 and 'usar_comparacao' in locals() and usar_comparacao and 'adversario' in locals() and adversario:
         g_t1 = (stats_t1['gf_home'] + stats_t2['ga_away']) / 2
         g_t2 = (stats_t2['gf_away'] + stats_t1['ga_home']) / 2
@@ -1040,9 +1040,9 @@ if st.sidebar.button("🚀 Disparar Análise Pré-Live (IA v21)", key="btn_dispa
         else: escanteios_jogo += 1.5
         total_cartoes = corners_t1['media_cartoes_pro'] + corners_t2['media_cartoes_pro']
 
-        msg = f"""🧠 <b>RELATÓRIO PRÉ-LIVE INTELIGENTE (IA v21)</b> 🧠\n\n⚽ <b>{time_principal} x {adversario}</b>\n🏆 Competição: {opcao_liga} ({SEASON_EFETIVA})\n\n📊 <b>MODELAGEM POISSON / GOLS:</b>\n• Expectativa Gols: {total_gols:.2f} ({p_res['over_2_5']:.1f}% Over 2.5)\n• BTTS: {p_res['btts']:.1f}%\n\n🚩 <b>ESCANTEIOS:</b>\n• Projeção Total: {escanteios_jogo:.1f} cantos\n\n🛡️ <b>MERCADO DE SEGURANÇA (NEUTRO):</b>\n• Probabilidade Mandante: {p_res['vitoria_home']:.1f}%\n• Probabilidade Visitante: {p_res['vitoria_away']:.1f}%"""
+        msg = f"""🧠 <b>RELATÓRIO PRÉ-LIVE INTELIGENTE (IA v22)</b> 🧠\n\n⚽ <b>{time_principal} x {adversario}</b>\n🏆 Competição: {opcao_liga} ({SEASON_EFETIVA})\n\n📊 <b>MODELAGEM POISSON / GOLS:</b>\n• Expectativa Gols: {total_gols:.2f} ({p_res['over_2_5']:.1f}% Over 2.5)\n• BTTS: {p_res['btts']:.1f}%\n\n🚩 <b>ESCANTEIOS:</b>\n• Projeção Total: {escanteios_jogo:.1f} cantos\n\n🟨 <b>CARTÕES (Média Pró):</b>\n• {time_principal}: {corners_t1['media_cartoes_pro']:.2f}\n• {adversario}: {corners_t2['media_cartoes_pro']:.2f}"""
     elif id_time1:
-        msg = f"""🧠 <b>RAIO-X INDIVIDUAL (IA)</b> 🧠\n\n⚽ <b>Time: {time_principal}</b>\n🏆 Competição: {opcao_liga} ({SEASON_EFETIVA})\n\n📊 <b>Gols Feitos (Média):</b> {stats_t1['gols_feitos_media']:.2f}\n🚩 <b>Cantos Pró (Média):</b> {corners_t1['corners_for_geral']:.2f}"""
+        msg = f"""🧠 <b>RAIO-X INDIVIDUAL (IA)</b> 🧠\n\n⚽ <b>Time: {time_principal}</b>\n🏆 Competição: {opcao_liga} ({SEASON_EFETIVA})\n\n📊 <b>Gols Feitos (Média):</b> {stats_t1['gols_feitos_media']:.2f}\n🟨 <b>Cartões Pró (Média):</b> {corners_t1['media_cartoes_pro']:.2f}"""
     else:
         msg = f"""🧠 <b>SMART MULTI: PAINEL GERAL</b> 🧠\n\nNenhuma partida ou time selecionado."""
     
@@ -1051,7 +1051,7 @@ if st.sidebar.button("🚀 Disparar Análise Pré-Live (IA v21)", key="btn_dispa
     else: 
         st.sidebar.error("❌ Falha ao enviar.")
 
-if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v21)", key="btn_bilhete_dia"):
+if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v22)", key="btn_bilhete_dia"):
     with st.spinner("Varrendo partidas de hoje com motor de Poisson corrigido e calibrando fuso horário..."):
         jogos_monitorados_hoje = buscar_jogos_ligas_monitoradas_por_data(DATA_HOJE_STR, API_KEY_FIXA, CHAVE_ATUALIZACAO)
         
@@ -1059,7 +1059,7 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v21)", key="b
         amostra_monitorada = jogos_monitorados_hoje[:6]
         data_formatada_exibicao = datetime.now().strftime("%d/%m/%Y")
         
-        msg_bilhete = f"""💎 <b>SMART TIPSTER: BILHETE DO DIA (IA MARKET ULTIMATE v21)</b> 💎\n📅 <i>Data: {data_formatada_exibicao}</i>\n\nAnálises sem viés de mandante com linhas dinâmicas de escanteios:\n\n"""
+        msg_bilhete = f"""💎 <b>SMART TIPSTER: BILHETE DO DIA (IA MARKET ULTIMATE v22)</b> 💎\n📅 <i>Data: {data_formatada_exibicao}</i>\n\nAnálises com tabelas de cartões e escanteios detalhadas:\n\n"""
         
         for idx, j in enumerate(amostra_monitorada, 1):
             h_id = j['HomeID']
@@ -1128,10 +1128,10 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v21)", key="b
             msg_bilhete += f"   • 🛡️ <i>Segurança:</i> {sel_seg}\n"
             msg_bilhete += f"   • ⏰ <i>Horário (BR):</i> {j['Horário']}\n\n"
         
-        msg_bilhete += f"🧠 <i>Smart Tipster IA v21: Análises corrigidas com linhas de escanteios dinâmicas e reais.</i>"
+        msg_bilhete += f"🧠 <i>Smart Tipster IA v22: Relatórios otimizados e precisos.</i>"
         
         if enviar_alerta_telegram(msg_bilhete):
-            st.sidebar.success("🔥 Bilhete IA v21 enviado com sucesso!")
+            st.sidebar.success("🔥 Bilhete IA v22 enviado com sucesso!")
         else:
             st.sidebar.error("❌ Falha ao enviar ao Telegram.")
     else:
