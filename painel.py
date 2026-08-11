@@ -94,7 +94,8 @@ st.sidebar.header("🏆 Seleção da Competição Global")
 opcao_liga = st.sidebar.radio(
     "Escolha qual campeonato deseja analisar:",
     list(LIGAS_MONITORADAS.values()),
-    index=None
+    index=None,
+    key="radio_opcao_liga"
 )
 
 LEAGUE_ID = [k for k, v in LIGAS_MONITORADAS.items() if v == opcao_liga][0] if opcao_liga else None
@@ -136,9 +137,7 @@ def buscar_times_por_liga(league_id, season, key, data_cache):
 
 @st.cache_data(persist="disk")
 def buscar_times_global(termo, season, key, data_cache):
-    # Convertemos para minúsculo para garantir a busca case-insensitive
     termo_lower = termo.lower().strip()
-    
     url = f"https://v3.football.api-sports.io/teams?search={termo_lower}"
     headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
     try:
@@ -146,11 +145,16 @@ def buscar_times_global(termo, season, key, data_cache):
         data = res.json()
         times_dict = {}
         if data.get('results', 0) > 0:
-            # Lista de palavras que caracterizam times que NÃO queremos (filtro agressivo)
             filtro_ruido = [
                 'sub-', 'sub ', 'u17', 'u19', 'u20', 'u21', 'u23', 'under', 
                 'feminino', 'women', 'fem', 'girls', 'youth', 'academy',
                 ' b ', ' ii ', ' reserve', ' futsal', ' beach'
+            ]
+            
+            ruido_regional = [
+                '-pi', 'piauí', '-ba', 'bahia de feira', '-sp', '-ce', '-pe', 
+                '-pb', '-rn', '-ma', '-pa', '-am', '-es', '-sc', '-pr', '-rs', 
+                '-mg', '-go', '-mt', '-ms', 'arcoverde', 'guanambi', 'jaguaré'
             ]
             
             for item in data['response']:
@@ -158,14 +162,16 @@ def buscar_times_global(termo, season, key, data_cache):
                 t_name_lower = t_name.lower()
                 t_id = item['team']['id']
                 
-                # Filtra se o nome contém ruídos
                 if any(p in t_name_lower for p in filtro_ruido):
                     continue
                 
-                # Exceções específicas para evitar erros de busca entre clubes homônimos
-                if 'flamengo' in termo_lower and ('piauí' in t_name_lower or '-pi' in t_name_lower):
+                # Exigir exclusividade para termos muito genéricos como Flamengo
+                if 'flamengo' in termo_lower and t_name_lower not in ['flamengo', 'cr flamengo']:
                     continue
-                if 'botafogo' in termo_lower and ('paraíba' in t_name_lower or '-pb' in t_name_lower):
+                if 'botafogo' in termo_lower and t_name_lower not in ['botafogo', 'botafogo fr']:
+                    continue
+                
+                if any(r in t_name_lower for r in ruido_regional):
                     continue
 
                 country = item['venue'].get('country') or item['team'].get('country', 'Mundo')
@@ -248,7 +254,7 @@ TEAM_IDS = buscar_times_por_liga(LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_
 # --- BUSCA GLOBAL DE CLUBES (MUNDO) ---
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 🌍 Busca Global de Clubes")
-termo_busca_global = st.sidebar.text_input("Pesquisar qualquer clube no mundo:", placeholder="Ex: Flamengo, Boca Juniors...")
+termo_busca_global = st.sidebar.text_input("Pesquisar qualquer clube no mundo:", placeholder="Ex: Flamengo, Boca Juniors...", key="input_busca_clube_global")
 
 clube_global_selecionado = None
 id_time_global = None
@@ -257,7 +263,7 @@ if termo_busca_global and len(termo_busca_global) >= 2:
     dict_globais = buscar_times_global(termo_busca_global, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     if dict_globais:
         escolha_g = st.sidebar.selectbox(
-            "Resultados da Busca Global:", list(dict_globais.keys()), index=None, placeholder="Selecione o clube..."
+            "Resultados da Busca Global:", list(dict_globais.keys()), index=None, placeholder="Selecione o clube...", key="select_global_clube"
         )
         if escolha_g:
             clube_global_selecionado = dict_globais[escolha_g]['name']
@@ -276,7 +282,7 @@ if termo_busca_global and len(termo_busca_global) >= 2:
 # --- BUSCA GLOBAL DE JOGADORES ---
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 🔍 Busca Global de Jogadores")
-termo_busca_jogador = st.sidebar.text_input("Pesquisar qualquer jogador:", placeholder="Ex: Borja, Hulk...")
+termo_busca_jogador = st.sidebar.text_input("Pesquisar qualquer jogador:", placeholder="Ex: Borja, Hulk...", key="input_busca_jogador_global")
 
 jogador_global_selecionado = None
 id_time_global_jogador = None
@@ -288,7 +294,7 @@ if termo_busca_jogador and len(termo_busca_jogador) >= 3:
         st.sidebar.error("⚠️ Limite diário de requisições da API atingido.")
     elif dict_jogadores_globais:
         escolha_j = st.sidebar.selectbox(
-            "Resultados da Busca de Jogadores:", list(dict_jogadores_globais.keys()), index=None, placeholder="Selecione o jogador..."
+            "Resultados da Busca de Jogadores:", list(dict_jogadores_globais.keys()), index=None, placeholder="Selecione o jogador...", key="select_global_jogador"
         )
         if escolha_j:
             j_info = dict_jogadores_globais[escolha_j]
@@ -315,7 +321,7 @@ elif clube_global_selecionado:
 elif LEAGUE_ID:
     times_disponiveis = sorted(list(TEAM_IDS.keys())) if TEAM_IDS else []
     time_principal = st.sidebar.selectbox(
-        "Escolha o Time (Opcional)", times_disponiveis, index=None, placeholder="Selecione para ver o Raio-X"
+        "Escolha o Time (Opcional)", times_disponiveis, index=None, placeholder="Selecione para ver o Raio-X", key="select_time_principal"
     )
     if time_principal:
         id_time1 = TEAM_IDS[time_principal]
@@ -543,7 +549,6 @@ def buscar_medias_escanteios(team_id, league_id, season, key, data_cache):
         todas_cartoes_pro = cartoes_pro_casa + cartoes_pro_fora
         todas_cartoes_contra = cartoes_contra_casa_list + cartoes_contra_fora
         
-        # Garantindo baseline mínimo robusto se a API retornar vazio/zero
         cf_geral = (sum(cantos_pro_casa+cantos_pro_fora)/max(len(cantos_pro_casa+cantos_pro_fora),1))
         ca_geral = (sum(cantos_contra_casa+cantos_contra_fora)/max(len(cantos_contra_casa+cantos_contra_fora),1))
         cf_home = sum(cantos_pro_casa)/max(len(cantos_pro_casa),1)
@@ -760,7 +765,7 @@ else:
     with aba_jogos_dia:
         st.subheader(f"📅 Calendário - {opcao_liga}")
         if not df_jogos_liga.empty:
-            filtro_opcao = st.radio("Filtrar:", ["Ver Jogos da Rodada Atual", "Ver Todos os Jogos da Temporada"], horizontal=True)
+            filtro_opcao = st.radio("Filtrar:", ["Ver Jogos da Rodada Atual", "Ver Todos os Jogos da Temporada"], horizontal=True, key="filtro_jogos_calendario")
             df_exibir = df_jogos_liga.copy()
             if filtro_opcao == "Ver Jogos da Rodada Atual" and rodada_atual_str:
                 df_exibir = df_exibir[df_exibir['Rodada'] == rodada_atual_str]
@@ -826,21 +831,19 @@ else:
             
         st.markdown("---")
         st.subheader("🤖 Simulador H2H & Motor de Probabilidade (IA & Poisson)")
-        usar_comparacao = st.checkbox("Ativar motor de IA e comparação contra adversário")
+        usar_comparacao = st.checkbox("Ativar motor de IA e comparação contra adversário", key="check_usar_comparacao")
         
         if usar_comparacao:
             times_disponiveis = sorted(list(TEAM_IDS.keys()))
-            adversario = st.selectbox("Escolha o Time Adversário", [t for t in times_disponiveis if t != time_principal])
+            adversario = st.selectbox("Escolha o Time Adversário", [t for t in times_disponiveis if t != time_principal], key="select_adversario_h2h")
             if adversario:
                 id_time2 = TEAM_IDS[adversario]
                 stats_t2 = buscar_estatisticas_time(id_time2, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
                 corners_t2 = buscar_medias_escanteios(id_time2, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
                 
-                # Expectativa de gols com Poisson
                 gols_t1 = (stats_t1['gf_home'] + stats_t2['ga_away']) / 2
                 gols_t2 = (stats_t2['gf_away'] + stats_t1['ga_home']) / 2
                 
-                # Cálculo via Poisson
                 probs_poisson = calcular_probabilidades_poisson(gols_t1, gols_t2)
                 total_gols = gols_t1 + gols_t2
                 
@@ -848,17 +851,15 @@ else:
                 c_proj_t2 = (corners_t2['corners_for_away'] + corners_t1['corners_ag_home']) / 2
                 escanteios_jogo = c_proj_t1 + c_proj_t2
                 
-                # Bônus de intensidade por liga
-                if LEAGUE_ID == 128:  # Campeonato Argentino (muitos cantos)
+                if LEAGUE_ID == 128:
                     escanteios_jogo += 3.0
-                elif LEAGUE_ID in [71, 39, 13]: # Brasileirão, Premier League, Libertadores
+                elif LEAGUE_ID in [71, 39, 13]:
                     escanteios_jogo += 2.0
                 else:
                     escanteios_jogo += 1.5
                 
                 total_cartoes = corners_t1['media_cartoes_pro'] + corners_t2['media_cartoes_pro']
                 
-                # Índice de Confiança da IA (0 a 100%)
                 confianca_ia = min(95, max(55, int(50 + abs(probs_poisson['vitoria_home'] - probs_poisson['vitoria_away']) * 0.7)))
 
                 sc1, sc2, sc3, sc4 = st.columns(4)
@@ -918,7 +919,6 @@ else:
                         st.markdown("#### 🚩 Escanteios Dinâmicos Calibrados (v21)")
                         st.markdown(f"- **Total Estimado:** `{escanteios_jogo:.1f}` cantos")
                         
-                        # CORREÇÃO DEFINITIVA DA VARIABILIDADE DE ESCANTEIOS
                         if escanteios_jogo >= 11.5:
                             sel_cantos_sim = "Mais de 10.5 Escanteios 🔥"
                         elif escanteios_jogo >= 10.0:
@@ -957,7 +957,7 @@ else:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
                 
-        if prompt_usuario := st.chat_input("Digite sua dúvida para a IA..."):
+        if prompt_usuario := st.chat_input("Digite sua dúvida para a IA...", key="chat_input_user"):
             st.session_state.messages.append({"role": "user", "content": prompt_usuario})
             with st.chat_message("user"):
                 st.markdown(prompt_usuario)
@@ -968,7 +968,7 @@ else:
                     contexto_base = f"Time: {time_principal} | Competição: {opcao_liga} | Gols Feitos (Média): {stats_t1.get('gols_feitos_media', 0):.2f}"
                     
                     if "poisson" in pergunta_lower:
-                        resposta_ia = f"O modelo v21 de Distribuição de Poisson avalia a taxa de gols esperados ($\lambda$) de cada equipe com base no histórico em casa e fora, calculando a probabilidade estatística exata para mercados de gols, BTTS e vencedor de forma isenta. ({contexto_base})"
+                        resposta_ia = f"O modelo v21 de Distribuição de Poisson avalia a taxa de gols esperados de cada equipe com base no histórico em casa e fora, calculando a probabilidade estatística exata para mercados de gols, BTTS e vencedor de forma isenta. ({contexto_base})"
                     elif "gols" in pergunta_lower or "over" in pergunta_lower or "btts" in pergunta_lower:
                         resposta_ia = f"Para **{time_principal}**, a média atual de gols marcados é de `{stats_t1.get('gols_feitos_media', 0):.2f}` e sofridos de `{stats_t1.get('gols_sofridos_media', 0):.2f}`. O motor dinâmico evita travar em linhas fixas, avaliando se o cenário pede Over, Under ou Ambas Marcam."
                     elif "escanteio" in pergunta_lower or "cantos" in pergunta_lower:
@@ -984,7 +984,7 @@ else:
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 📢 Canal & Automação Telegram")
 
-if st.sidebar.button("🚀 Disparar Análise Pré-Live (IA v21)"):
+if st.sidebar.button("🚀 Disparar Análise Pré-Live (IA v21)", key="btn_disparar_prelive"):
     if id_time1 and 'usar_comparacao' in locals() and usar_comparacao and 'adversario' in locals() and adversario:
         g_t1 = (stats_t1['gf_home'] + stats_t2['ga_away']) / 2
         g_t2 = (stats_t2['gf_away'] + stats_t1['ga_home']) / 2
@@ -1010,8 +1010,7 @@ if st.sidebar.button("🚀 Disparar Análise Pré-Live (IA v21)"):
     else: 
         st.sidebar.error("❌ Falha ao enviar.")
 
-# BOTÃO: BILHETE DO DIA (SMART TIPSTER COM IA v21)
-if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v21)"):
+if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v21)", key="btn_bilhete_dia"):
     with st.spinner("Varrendo partidas de hoje com motor de Poisson corrigido e calibrando fuso horário..."):
         jogos_monitorados_hoje = buscar_jogos_ligas_monitoradas_por_data(DATA_HOJE_STR, API_KEY_FIXA, CHAVE_ATUALIZACAO)
         
@@ -1033,7 +1032,7 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v21)"):
             c_a_data = buscar_medias_escanteios(a_id, l_id, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
             
             g_h_calc = (s_h['gf_home'] + s_a['ga_away']) / 2 if s_h['jogos'] > 0 and s_a['jogos'] > 0 else 1.3
-            g_a_calc = (s_a['gf_away'] + s_h['ga_home']) / 2 if s_a['jogos'] > 0 and s_h['jogos'] > 0 else 1.2
+            g_a_calc = (s_a['gf_away'] + s_h['ga_home']) / 2 if s_a['jogos'] > 0 and s_a['jogos'] > 0 else 1.2
             
             p_res = calcular_probabilidades_poisson(g_h_calc, g_a_calc)
             tot_gols_calc = g_h_calc + g_a_calc
@@ -1042,15 +1041,13 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v21)"):
             c_proj_a = (c_a_data['corners_for_away'] + c_h_data['corners_ag_home']) / 2
             tot_c_calc = c_proj_h + c_proj_a
             
-            # Bônus de intensidade de cantos por liga no bilhete do dia
-            if l_id == 128:  # Campeonato Argentino
+            if l_id == 128:
                 tot_c_calc += 3.0
             elif l_id in [71, 39, 13]: 
                 tot_c_calc += 2.0
             else:
                 tot_c_calc += 1.5
 
-            # SELEÇÃO DINÂMICA DE GOLS NO BILHETE
             if tot_gols_calc >= 2.8 and p_res['over_2_5'] >= 50:
                 sel_gols = "Mais de 2.5 Gols 🔥"
             elif p_res['btts'] >= 55 and tot_gols_calc >= 2.3:
@@ -1060,7 +1057,6 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v21)"):
             else:
                 sel_gols = "Menos de 2.5 Gols 🛡️"
             
-            # SELEÇÃO DINÂMICA DE ESCANTEIOS CORRIGIDA (VARIABILIDADE REAL)
             if tot_c_calc >= 11.5:
                 sel_cantos = "Mais de 10.5 Escanteios 🔥"
             elif tot_c_calc >= 10.0:
@@ -1072,7 +1068,6 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v21)"):
             else:
                 sel_cantos = "Menos de 8.5 Escanteios 🛡️"
 
-            # SELEÇÃO NEUTRA DE CHANCE DUPLA / DNB NO BILHETE
             vh_b = p_res['vitoria_home']
             va_b = p_res['vitoria_away']
             
