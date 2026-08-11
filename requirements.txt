@@ -2,5 +2,5 @@ streamlit
 pandas
 requests
 google-genai
-gemini-2.5-flash
+
 
