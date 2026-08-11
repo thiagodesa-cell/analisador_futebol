@@ -165,7 +165,6 @@ def buscar_times_global(termo, season, key, data_cache):
                 if any(p in t_name_lower for p in filtro_ruido):
                     continue
                 
-                # Exigir exclusividade para termos muito genéricos como Flamengo
                 if 'flamengo' in termo_lower and t_name_lower not in ['flamengo', 'cr flamengo']:
                     continue
                 if 'botafogo' in termo_lower and t_name_lower not in ['botafogo', 'botafogo fr']:
@@ -873,10 +872,14 @@ else:
                 tip_c1, tip_c2 = st.columns(2)
                 
                 with tip_c1:
+                    # Cartão de Gols Otimizado
                     with st.container(border=True):
                         st.markdown("#### ⚽ Mercado de Gols Dinâmico")
-                        st.markdown(f"- **Expectativa Modelada:** `{total_gols:.2f}` gols")
-                        st.markdown(f"- **Probabilidade BTTS (Ambas Marcam):** `{probs_poisson['btts']:.1f}%`")
+                        g_subcol1, g_subcol2 = st.columns(2)
+                        with g_subcol1:
+                            st.metric("Expectativa", f"{total_gols:.2f} Gols")
+                        with g_subcol2:
+                            st.metric("Prob. BTTS", f"{probs_poisson['btts']:.1f}%")
                         
                         if total_gols >= 2.8 and probs_poisson['over_2_5'] >= 50:
                             sel_gols_sim = "Mais de 2.5 Gols 🔥"
@@ -889,11 +892,11 @@ else:
                         else:
                             sel_gols_sim = "Mais de 1.5 Gols ⚽"
                             
-                        st.markdown(f"- **Sugestão Otimizada:** `{sel_gols_sim}`")
+                        st.markdown(f"**Sugestão Otimizada:** `{sel_gols_sim}`")
                     
+                    # Cartão de Segurança Otimizado
                     with st.container(border=True):
-                        st.markdown("#### 🛡️ Mercado de Segurança & Dupla Chance (Neutro v21)")
-                        
+                        st.markdown("#### 🛡️ Mercado de Segurança & Dupla Chance")
                         vh = probs_poisson['vitoria_home']
                         va = probs_poisson['vitoria_away']
                         
@@ -912,12 +915,17 @@ else:
                                 dupla_sug = f"Chance Dupla: {adversario} ou Empate (X2) 🛡️"
 
                         st.markdown(f"- **Sugestão DNB:** `{dnb_sug}`")
-                        st.markdown(f"- **Chance Dupla Sugerida:** `{dupla_sug}`")
+                        st.markdown(f"- **Chance Dupla:** `{dupla_sug}`")
 
                 with tip_c2:
+                    # Cartão de Escanteios Otimizado
                     with st.container(border=True):
-                        st.markdown("#### 🚩 Escanteios Dinâmicos Calibrados (v21)")
-                        st.markdown(f"- **Total Estimado:** `{escanteios_jogo:.1f}` cantos")
+                        st.markdown("#### 🚩 Escanteios Dinâmicos Calibrados")
+                        e_subcol1, e_subcol2 = st.columns(2)
+                        with e_subcol1:
+                            st.metric("Total Estimado", f"{escanteios_jogo:.1f} Cantos")
+                        with e_subcol2:
+                            st.metric("Calibragem", f"v21 Global")
                         
                         if escanteios_jogo >= 11.5:
                             sel_cantos_sim = "Mais de 10.5 Escanteios 🔥"
@@ -930,11 +938,17 @@ else:
                         else:
                             sel_cantos_sim = "Menos de 8.5 Escanteios 🛡️"
                             
-                        st.markdown(f"- **Sugestão de Cantos:** `{sel_cantos_sim}`")
+                        st.markdown(f"**Sugestão de Cantos:** `{sel_cantos_sim}`")
 
+                    # Cartão de Cartões & Bilhete Pro Otimizado
                     with st.container(border=True):
                         st.markdown("#### 🟨 Cartões & Bilhete Pro")
-                        st.markdown(f"- **Total Estimado Cartões:** `{total_cartoes:.2f}`")
+                        c_subcol1, c_subcol2 = st.columns(2)
+                        with c_subcol1:
+                            st.metric("Média Cartões", f"{total_cartoes:.2f}")
+                        with c_subcol2:
+                            st.metric("Perfil Disciplinar", "Moderado/Alto" if total_cartoes >= 3.5 else "Controlado")
+
                         sel_cart_sim = "Mais de 4.5 Cartões 🟨" if total_cartoes >= 4.2 else "Mais de 3.5 Cartões 🟨" if total_cartoes >= 3.2 else "Menos de 4.5 Cartões 🛡️"
                         st.markdown(f"- **Sugestão de Cartões:** `{sel_cart_sim}`")
                         st.markdown(f"- **Combo IA Recomendado:** `{sel_gols_sim} + {sel_cart_sim}`")
@@ -1094,4 +1108,4 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v21)", key="b
         else:
             st.sidebar.error("❌ Falha ao enviar ao Telegram.")
     else:
-        st.sidebar.warning(f"⚠️ Não há jogos cadastrados para hoje ({DATA_HOJE_STR}) nas ligas monitoradas.")
+        st.sidebar.warning(f"⚠️ Não hay jogos cadastrados para hoje ({DATA_HOJE_STR}) nas ligas monitoradas.")
