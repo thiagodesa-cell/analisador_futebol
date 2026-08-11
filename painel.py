@@ -17,7 +17,7 @@ st.set_page_config(page_title="Painel Pro - Global Trading & IA Preditiva v22.2"
 
 # --- CONFIGURAÇÃO DA API E TELEGRAM ---
 # Compatível com chaves antigas (AIza) ou novas (HAQ)
-API_KEY_FIXA = "E89cc081ecbaaf1a7074e878c1cae0ff" 
+API_KEY_FIXA = "AQ.Ab8RN6L-h6_cjeQe4v9pSwQq8tzG-N407YZY4ixRGurNuX6yJA" 
 SEASON = datetime.now().year 
 
 TELEGRAM_TOKEN = "8281259090:AAEggXJKpCMxRbhhrcCZymcmNUKWNoOPFfY"
