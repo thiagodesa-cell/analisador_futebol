@@ -32,7 +32,7 @@ LIGAS_MONITORADAS = {
     11: "Copa Sudamericana"
 }
 
-# --- SISTEMA DE HISTÓRICO E RASTREIO DE BILHETES (NOVO RECURSO) ---
+# --- SISTEMA DE HISTÓRICO E RASTREIO DE BILHETES ---
 ARQUIVO_BILHETES = "historico_bilhetes.json"
 
 def salvar_bilhete_historico(data_str, bilhete_dados):
@@ -566,7 +566,6 @@ def buscar_medias_escanteios(team_id, league_id, season, key, data_cache):
         todas_cartoes_pro = cartoes_pro_casa + cartoes_pro_fora
         todas_cartoes_contra = cartoes_contra_casa_list + cartoes_contra_fora
         
-        # Garantindo baseline mínimo robusto se a API retornar vazio/zero
         cf_geral = (sum(cantos_pro_casa+cantos_pro_fora)/max(len(cantos_pro_casa+cantos_pro_fora),1))
         ca_geral = (sum(cantos_contra_casa+cantos_contra_fora)/max(len(cantos_contra_casa+cantos_contra_fora),1))
         cf_home = sum(cantos_pro_casa)/max(len(cantos_pro_casa),1)
@@ -873,11 +872,9 @@ else:
                 stats_t2 = buscar_estatisticas_time(id_time2, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
                 corners_t2 = buscar_medias_escanteios(id_time2, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
                 
-                # Expectativa de gols com Poisson
                 gols_t1 = (stats_t1['gf_home'] + stats_t2['ga_away']) / 2
                 gols_t2 = (stats_t2['gf_away'] + stats_t1['ga_home']) / 2
                 
-                # Cálculo via Poisson
                 probs_poisson = calcular_probabilidades_poisson(gols_t1, gols_t2)
                 total_gols = gols_t1 + gols_t2
                 
@@ -885,17 +882,14 @@ else:
                 c_proj_t2 = (corners_t2['corners_for_away'] + corners_t1['corners_ag_home']) / 2
                 escanteios_jogo = c_proj_t1 + c_proj_t2
                 
-                # Bônus de intensidade por liga
-                if LEAGUE_ID == 128:  # Campeonato Argentino (muitos cantos)
+                if LEAGUE_ID == 128:
                     escanteios_jogo += 3.0
-                elif LEAGUE_ID in [71, 39, 13]: # Brasileirão, Premier League, Libertadores
+                elif LEAGUE_ID in [71, 39, 13]:
                     escanteios_jogo += 2.0
                 else:
                     escanteios_jogo += 1.5
                 
                 total_cartoes = corners_t1['media_cartoes_pro'] + corners_t2['media_cartoes_pro']
-                
-                # Índice de Confiança da IA (0 a 100%)
                 confianca_ia = min(95, max(55, int(50 + abs(probs_poisson['vitoria_home'] - probs_poisson['vitoria_away']) * 0.7)))
 
                 sc1, sc2, sc3, sc4 = st.columns(4)
@@ -955,7 +949,6 @@ else:
                         st.markdown("#### 🚩 Escanteios Dinâmicos Calibrados (v21)")
                         st.markdown(f"- **Total Estimado:** `{escanteios_jogo:.1f}` cantos")
                         
-                        # CORREÇÃO DEFINITIVA DA VARIABILIDADE DE ESCANTEIOS
                         if escanteios_jogo >= 11.5:
                             sel_cantos_sim = "Mais de 10.5 Escanteios 🔥"
                         elif escanteios_jogo >= 10.0:
@@ -1017,7 +1010,7 @@ else:
                     st.markdown(resposta_ia)
                     st.session_state.messages.append({"role": "assistant", "content": resposta_ia})
 
-# --- DISPARADORES DO TELEGRAM ---
+# --- DISPARADORES E CONSULTAS NA BARRA LATERAL ---
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 📢 Canal & Automação Telegram")
 
@@ -1047,7 +1040,6 @@ if st.sidebar.button("🚀 Disparar Análise Pré-Live (IA v21)"):
     else: 
         st.sidebar.error("❌ Falha ao enviar.")
 
-# BOTÃO: BILHETE DO DIA (SMART TIPSTER COM IA v21)
 if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v21)"):
     with st.spinner("Varrendo partidas de hoje com motor de Poisson corrigido e calibrando fuso horário..."):
         jogos_monitorados_hoje = buscar_jogos_ligas_monitoradas_por_data(DATA_HOJE_STR, API_KEY_FIXA, CHAVE_ATUALIZACAO)
@@ -1080,15 +1072,13 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v21)"):
             c_proj_a = (c_a_data['corners_for_away'] + c_h_data['corners_ag_home']) / 2
             tot_c_calc = c_proj_h + c_proj_a
             
-            # Bônus de intensidade de cantos por liga no bilhete do dia
-            if l_id == 128:  # Campeonato Argentino
+            if l_id == 128:
                 tot_c_calc += 3.0
             elif l_id in [71, 39, 13]: 
                 tot_c_calc += 2.0
             else:
                 tot_c_calc += 1.5
 
-            # SELEÇÃO DINÂMICA DE GOLS NO BILHETE
             if tot_gols_calc >= 2.8 and p_res['over_2_5'] >= 50:
                 sel_gols = "Mais de 2.5 Gols 🔥"
             elif p_res['btts'] >= 55 and tot_gols_calc >= 2.3:
@@ -1098,7 +1088,6 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v21)"):
             else:
                 sel_gols = "Menos de 2.5 Gols 🛡️"
             
-            # SELEÇÃO DINÂMICA DE ESCANTEIOS CORRIGIDA (VARIABILIDADE REAL)
             if tot_c_calc >= 11.5:
                 sel_cantos = "Mais de 10.5 Escanteios 🔥"
             elif tot_c_calc >= 10.0:
@@ -1110,7 +1099,6 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v21)"):
             else:
                 sel_cantos = "Menos de 8.5 Escanteios 🛡️"
 
-            # SELEÇÃO NEUTRA DE CHANCE DUPLA / DNB NO BILHETE
             vh_b = p_res['vitoria_home']
             va_b = p_res['vitoria_away']
             
@@ -1140,7 +1128,7 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v21)"):
                 "Horario": j['Horário']
             })
         
-        msg_bilhete += f"🧠 <i>Smart Tipster IA v21: Análises corrigidas com linhas de escanteios dinâmicas e reais.</i>"
+        msg_bilhete += f"🧠 <i>Smart Tipster IA v21: Análises corrigidas com linhas de escanteios dinâmicos e reais.</i>"
         
         bilhete_registro = {
             "data": DATA_HOJE_STR,
@@ -1154,3 +1142,17 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v21)"):
             st.sidebar.error("❌ Falha ao enviar ao Telegram.")
     else:
         st.sidebar.warning(f"⚠️ Não há jogos cadastrados para hoje ({DATA_HOJE_STR}) nas ligas monitoradas.")
+
+# --- NOVO: CONSULTAR HISTÓRICO DE BILHETES DIRETO NA BARRA LATERAL ---
+st.sidebar.markdown("---")
+with st.sidebar.expander("📋 Conferir Bilhetes Salvos"):
+    hist_bilhetes = carregar_historico_bilhetes()
+    if hist_bilhetes:
+        for data_b, info_b in sorted(hist_bilhetes.items(), reverse=True):
+            st.markdown(f"**📅 Data: {data_b}**")
+            for j_item in info_b.get("jogos", []):
+                st.markdown(f"• **{j_item.get('Mandante')} x {j_item.get('Visitante')}**")
+                st.markdown(f"  `{j_item.get('SugestaoGols')}` | `{j_item.get('SugestaoCantos')}`")
+            st.markdown("---")
+    else:
+        st.info("Nenhum bilhete salvo no histórico ainda.")
