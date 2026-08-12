@@ -1079,78 +1079,86 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v22)", key="b
         
         msg_bilhete = f"""💎 <b>SMART TIPSTER: BILHETE DO DIA (IA MARKET ULTIMATE v22)</b> 💎\n📅 <i>Data: {data_formatada_exibicao}</i>\n\nAnálises com tabelas de cartões e escanteios detalhadas:\n\n"""
         
+        contador_sucesso = 0
         for idx, j in enumerate(amostra_monitorada, 1):
-            h_id = j['HomeID']
-            a_id = j['AwayID']
-            l_id = j['LeagueID']
-            
-            s_h = buscar_estatisticas_time(h_id, l_id, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-            s_a = buscar_estatisticas_time(a_id, l_id, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-            
-            c_h_data = buscar_medias_escanteios(h_id, l_id, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-            c_a_data = buscar_medias_escanteios(a_id, l_id, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-            
-            g_h_calc = (s_h['gf_home'] + s_a['ga_away']) / 2 if s_h['jogos'] > 0 and s_a['jogos'] > 0 else 1.3
-            g_a_calc = (s_a['gf_away'] + s_h['ga_home']) / 2 if s_a['jogos'] > 0 and s_a['jogos'] > 0 else 1.2
-            
-            p_res = calcular_probabilidades_poisson(g_h_calc, g_a_calc)
-            tot_gols_calc = g_h_calc + g_a_calc
-            
-            c_proj_h = (c_h_data['corners_for_home'] + c_a_data['corners_ag_away']) / 2
-            c_proj_a = (c_a_data['corners_for_away'] + c_h_data['corners_ag_home']) / 2
-            tot_c_calc = c_proj_h + c_proj_a
-            
-            if l_id == 128:
-                tot_c_calc += 3.0
-            elif l_id in [71, 39, 13]: 
-                tot_c_calc += 2.0
-            else:
-                tot_c_calc += 1.5
-
-            if tot_gols_calc >= 2.8 and p_res['over_2_5'] >= 50:
-                sel_gols = "Mais de 2.5 Gols 🔥"
-            elif p_res['btts'] >= 55 and tot_gols_calc >= 2.3:
-                sel_gols = "Ambas Marcam (BTTS) Sim ⚡"
-            elif tot_gols_calc >= 2.0:
-                sel_gols = "Mais de 1.5 Gols ⚽"
-            else:
-                sel_gols = "Menos de 2.5 Gols 🛡️"
-            
-            if tot_c_calc >= 11.5:
-                sel_cantos = "Mais de 10.5 Escanteios 🔥"
-            elif tot_c_calc >= 10.0:
-                sel_cantos = "Mais de 9.5 Escanteios 🚩"
-            elif tot_c_calc >= 8.5:
-                sel_cantos = "Mais de 8.5 Escanteios ⚡"
-            elif tot_c_calc >= 7.5:
-                sel_cantos = "Mais de 7.5 Escanteios ⚽"
-            else:
-                sel_cantos = "Menos de 8.5 Escanteios 🛡️"
-
-            vh_b = p_res['vitoria_home']
-            va_b = p_res['vitoria_away']
-            
-            if vh_b >= va_b + 5.0:
-                sel_seg = f"Empate Anula: {j['Mandante']} 🟢" if vh_b > 45 else f"Chance Dupla: {j['Mandante']} ou Empate (1X) 🛡️"
-            elif va_b >= vh_b + 5.0:
-                sel_seg = f"Empate Anula: {j['Visitante']} 🟢" if va_b > 45 else f"Chance Dupla: {j['Visitante']} ou Empate (X2) 🛡️"
-            else:
-                if vh_b >= va_b:
-                    sel_seg = f"Chance Dupla: {j['Mandante']} ou Empate (1X) [Equilibrado]"
-                else:
-                    sel_seg = f"Chance Dupla: {j['Visitante']} ou Empate (X2) [Equilibrado]"
+            try:
+                h_id = j['HomeID']
+                a_id = j['AwayID']
+                l_id = j['LeagueID']
                 
-            msg_bilhete += f"<b>{idx}. {j['Mandante']} x {j['Visitante']}</b>\n"
-            msg_bilhete += f"   • 🏆 <i>Liga:</i> {j['Liga']}\n"
-            msg_bilhete += f"   • 🎯 <i>IA Tips:</i> {sel_gols} | {sel_cantos}\n"
-            msg_bilhete += f"   • 🛡️ <i>Segurança:</i> {sel_seg}\n"
-            msg_bilhete += f"   • ⏰ <i>Horário (BR):</i> {j['Horário']}\n\n"
+                s_h = buscar_estatisticas_time(h_id, l_id, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+                s_a = buscar_estatisticas_time(a_id, l_id, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+                
+                c_h_data = buscar_medias_escanteios(h_id, l_id, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+                c_a_data = buscar_medias_escanteios(a_id, l_id, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+                
+                g_h_calc = (s_h.get('gf_home', 1.2) + s_a.get('ga_away', 1.2)) / 2 if s_h.get('jogos', 0) > 0 and s_a.get('jogos', 0) > 0 else 1.3
+                g_a_calc = (s_a.get('gf_away', 1.2) + s_h.get('ga_home', 1.2)) / 2 if s_a.get('jogos', 0) > 0 and s_a.get('jogos', 0) > 0 else 1.2
+                
+                p_res = calcular_probabilidades_poisson(g_h_calc, g_a_calc)
+                tot_gols_calc = g_h_calc + g_a_calc
+                
+                c_proj_h = (c_h_data.get('corners_for_home', 4.5) + c_a_data.get('corners_ag_away', 4.5)) / 2
+                c_proj_a = (c_a_data.get('corners_for_away', 4.5) + c_h_data.get('corners_ag_home', 4.5)) / 2
+                tot_c_calc = c_proj_h + c_proj_a
+                
+                if l_id == 128:
+                    tot_c_calc += 3.0
+                elif l_id in [71, 39, 13]: 
+                    tot_c_calc += 2.0
+                else:
+                    tot_c_calc += 1.5
+
+                if tot_gols_calc >= 2.8 and p_res['over_2_5'] >= 50:
+                    sel_gols = "Mais de 2.5 Gols 🔥"
+                elif p_res['btts'] >= 55 and tot_gols_calc >= 2.3:
+                    sel_gols = "Ambas Marcam (BTTS) Sim ⚡"
+                elif tot_gols_calc >= 2.0:
+                    sel_gols = "Mais de 1.5 Gols ⚽"
+                else:
+                    sel_gols = "Menos de 2.5 Gols 🛡️"
+                
+                if tot_c_calc >= 11.5:
+                    sel_cantos = "Mais de 10.5 Escanteios 🔥"
+                elif tot_c_calc >= 10.0:
+                    sel_cantos = "Mais de 9.5 Escanteios 🚩"
+                elif tot_c_calc >= 8.5:
+                    sel_cantos = "Mais de 8.5 Escanteios ⚡"
+                elif tot_c_calc >= 7.5:
+                    sel_cantos = "Mais de 7.5 Escanteios ⚽"
+                else:
+                    sel_cantos = "Menos de 8.5 Escanteios 🛡️"
+
+                vh_b = p_res['vitoria_home']
+                va_b = p_res['vitoria_away']
+                
+                if vh_b >= va_b + 5.0:
+                    sel_seg = f"Empate Anula: {j['Mandante']} 🟢" if vh_b > 45 else f"Chance Dupla: {j['Mandante']} ou Empate (1X) 🛡️"
+                elif va_b >= vh_b + 5.0:
+                    sel_seg = f"Empate Anula: {j['Visitante']} 🟢" if va_b > 45 else f"Chance Dupla: {j['Visitante']} ou Empate (X2) 🛡️"
+                else:
+                    if vh_b >= va_b:
+                        sel_seg = f"Chance Dupla: {j['Mandante']} ou Empate (1X) [Equilibrado]"
+                    else:
+                        sel_seg = f"Chance Dupla: {j['Visitante']} ou Empate (X2) [Equilibrado]"
+                    
+                contador_sucesso += 1
+                msg_bilhete += f"<b>{contador_sucesso}. {j['Mandante']} x {j['Visitante']}</b>\n"
+                msg_bilhete += f"   • 🏆 <i>Liga:</i> {j['Liga']}\n"
+                msg_bilhete += f"   • 🎯 <i>IA Tips:</i> {sel_gols} | {sel_cantos}\n"
+                msg_bilhete += f"   • 🛡️ <i>Segurança:</i> {sel_seg}\n"
+                msg_bilhete += f"   • ⏰ <i>Horário (BR):</i> {j['Horário']}\n\n"
+            except Exception:
+                continue
         
         msg_bilhete += f"🧠 <i>Smart Tipster IA v22: Relatórios otimizados e precisos.</i>"
         
-        if enviar_alerta_telegram(msg_bilhete):
-            st.sidebar.success("🔥 Bilhete IA v22 enviado com sucesso!")
+        if contador_sucesso > 0:
+            if enviar_alerta_telegram(msg_bilhete):
+                st.sidebar.success("🔥 Bilhete IA v22 enviado com sucesso!")
+            else:
+                st.sidebar.error("❌ Falha ao enviar ao Telegram.")
         else:
-            st.sidebar.error("❌ Falha ao enviar ao Telegram.")
+            st.sidebar.warning("⚠️ Não foi possível processar estatísticas das partidas de hoje.")
     else:
         st.sidebar.warning(f"⚠️ Não há jogos cadastrados para hoje ({DATA_HOJE_STR}) nas ligas monitoradas.")
