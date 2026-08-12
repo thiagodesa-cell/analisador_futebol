@@ -11,7 +11,7 @@ st.set_page_config(page_title="Painel Pro - Global Trading & IA Preditiva v22.1"
 
 # --- CONFIGURAÇÃO DA API E TELEGRAM ---
 API_KEY_FIXA = "E89cc081ecbaaf1a7074e878c1cae0ff"
-OPENAI_API_KEY_USER = "SUA_CHAVE_OPENAI_AQUI"  # Substitua pela sua chave da OpenAI
+OPENAI_API_KEY_USER = "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"  # Substitua pela sua chave da OpenAI
 SEASON = datetime.now().year 
 
 TELEGRAM_TOKEN = "8281259090:AAEggXJKpCMxRbhhrcCZymcmNUKWNoOPFfY"
