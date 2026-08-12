@@ -35,7 +35,6 @@ LIGAS_MONITORADAS = {
 
 # --- VERSÃO 22 COM TABELA DETALHADA DE CARTÕES JOGO A JOGO ---
 def obter_chave_atualizacao():
-    # O datetime agora usa FUSO_BR garantindo que a data seja a do Brasil.
     agora = datetime.now(FUSO_BR)
     # Atualização a cada hora ("%H") para forçar a renovação do cache e atualizar os status dos jogos.
     return agora.strftime("%Y-%m-%d_%H")
@@ -393,7 +392,8 @@ def buscar_jogos_liga(league_id, season, key, data_cache):
             jogos_lista = []
             for f in fixtures:
                 date_str = f['fixture']['date']
-                _, match_date_fmt, match_time = converter_para_horario_brasilia(date_str)
+                # Puxamos o formato ISO (AAAA-MM-DD) para fazer o filtro matemático na exibição
+                iso_date_local, match_date_fmt, match_time = converter_para_horario_brasilia(date_str)
                 
                 status = f['fixture']['status']['short']
                 home_name = f['teams']['home']['name']
@@ -405,6 +405,7 @@ def buscar_jogos_liga(league_id, season, key, data_cache):
                 round_name = f['league'].get('round', 'Rodada')
                 
                 jogos_lista.append({
+                    'DataISO': iso_date_local, 
                     'Data': match_date_fmt, 'Horário': match_time, 'Rodada': round_name,
                     'Mandante': home_name, 'Placar': placar_str, 'Visitante': away_name, 'Status': status
                 })
@@ -766,9 +767,20 @@ else:
             df_agenda_time = df_jogos_liga[
                 (df_jogos_liga['Mandante'] == time_principal) | 
                 (df_jogos_liga['Visitante'] == time_principal)
-            ]
+            ].copy()
             if not df_agenda_time.empty:
-                st.dataframe(df_agenda_time[['Data', 'Horário', 'Rodada', 'Mandante', 'Placar', 'Visitante', 'Status']].head(8), use_container_width=True, hide_index=True)
+                hoje_str = datetime.now(FUSO_BR).strftime("%Y-%m-%d")
+                
+                # Filtra e agrupa os jogos recentes e futuros com base na data real
+                jogos_passados = df_agenda_time[df_agenda_time['DataISO'] < hoje_str].tail(3)
+                jogos_futuros = df_agenda_time[df_agenda_time['DataISO'] >= hoje_str].head(5)
+                
+                df_exibir_agenda = pd.concat([jogos_passados, jogos_futuros])
+                
+                if df_exibir_agenda.empty or len(jogos_futuros) == 0:
+                    df_exibir_agenda = df_agenda_time.tail(8)
+                    
+                st.dataframe(df_exibir_agenda[['Data', 'Horário', 'Rodada', 'Mandante', 'Placar', 'Visitante', 'Status']], use_container_width=True, hide_index=True)
             else:
                 st.info(f"Nenhum jogo localizado diretamente para {time_principal} na base.")
         else:
@@ -1058,7 +1070,6 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v22)", key="b
         
     if jogos_monitorados_hoje:
         amostra_monitorada = jogos_monitorados_hoje[:6]
-        # O fuso horário do Brasil também foi aplicado aqui para a emissão do bilhete
         data_formatada_exibicao = datetime.now(FUSO_BR).strftime("%d/%m/%Y")
         
         msg_bilhete = f"""💎 <b>SMART TIPSTER: BILHETE DO DIA (IA MARKET ULTIMATE v22)</b> 💎\n📅 <i>Data: {data_formatada_exibicao}</i>\n\nAnálises com tabelas de cartões e escanteios detalhadas:\n\n"""
