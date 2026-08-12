@@ -829,7 +829,7 @@ if st.sidebar.button("🚀 Disparar Análise Pré-Live (IA v22)", key="btn_dispa
     else: st.sidebar.error("❌ Falha ao enviar.")
 
 if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v22)", key="btn_bilhete_dia"):
-    with st.spinner("Varrendo e priorizando apenas ligas de elite (Libertadores, Sul-Americana, Nacionais)..."):
+    with st.spinner("Varrendo e calculando estatísticas reais (Ligas de Elite)..."):
         headers_geral = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': API_KEY_FIXA}
         jogos_candidatos = []
         
@@ -839,7 +839,6 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v22)", key="b
             'youth', 'academy', 'reserves', 'sub 17', 'sub 20', 'friendlies', 'cup'
         ]
 
-        # Lista de IDs de ligas de elite aceitas obrigatoriamente
         ids_elite_permitidos = [71, 72, 73, 128, 39, 140, 78, 2, 3, 848, 13, 11]
 
         for data_busca in [DATA_HOJE_STR, DATA_AMANHA_STR]:
@@ -856,7 +855,6 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v22)", key="b
                             home_name = f['teams']['home']['name']
                             away_name = f['teams']['away']['name']
                             
-                            # Filtro estrito: Garante que apenas ligas de elite passem
                             if liga_id not in ids_elite_permitidos:
                                 continue
                                 
@@ -900,11 +898,12 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v22)", key="b
                 p_res = calcular_probabilidades_poisson(g_h_calc, g_a_calc)
                 tot_gols_calc = g_h_calc + g_a_calc
                 
-                c_proj_h = (c_h_data.get('corners_for_home', 4.5) + c_a_data.get('corners_ag_away', 4.5)) / 2
-                c_proj_a = (c_a_data.get('corners_for_away', 4.5) + c_h_data.get('corners_ag_home', 4.5)) / 2
-                tot_c_calc = c_proj_h + c_proj_a + 2.0
+                # Cálculo de escanteios refinado com base real das médias de cantos pró/contra
+                c_proj_h = (c_h_data.get('corners_for_home', 4.8) + c_a_data.get('corners_ag_away', 4.5)) / 2
+                c_proj_a = (c_a_data.get('corners_for_away', 4.2) + c_h_data.get('corners_ag_home', 4.5)) / 2
+                tot_c_calc = c_proj_h + c_proj_a
                 
-                score_interesse = abs(tot_gols_calc - 2.5) + (tot_c_calc * 0.15)
+                score_interesse = abs(tot_gols_calc - 2.5) + (abs(tot_c_calc - 9.5) * 0.1)
                 
                 jogos_analisados.append({
                     'j_info': j,
@@ -928,7 +927,7 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v22)", key="b
                 tot_gols_calc = item['tot_gols']
                 tot_c_calc = item['tot_c']
                 
-                # Seleção dinâmica de Gols baseada na projeção real
+                # Seleção dinâmica de Gols
                 if tot_gols_calc >= 2.8 and p_res['over_2_5'] >= 50:
                     sel_gols = "Mais de 2.5 Gols 🔥"
                 elif p_res['btts'] >= 52:
@@ -938,26 +937,30 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v22)", key="b
                 else:
                     sel_gols = "Menos de 3.5 Gols 🛡️"
                 
-                # Correção matemática dinâmica para os escanteios (Evitando repetição robótica de 9.5)
-                if tot_c_calc >= 10.5:
-                    sel_cantos = "Mais de 9.5 Escanteios 🔥"
-                elif tot_c_calc >= 9.2:
+                # Matemática de escanteios totalmente descentralizada e realista
+                if tot_c_calc >= 11.2:
+                    sel_cantos = "Mais de 10.5 Escanteios 🔥"
+                elif tot_c_calc >= 9.8:
+                    sel_cantos = "Mais de 9.5 Escanteios 📈"
+                elif tot_c_calc >= 8.5:
                     sel_cantos = "Mais de 8.5 Escanteios 🚩"
-                elif tot_c_calc >= 8.0:
+                elif tot_c_calc >= 7.2:
                     sel_cantos = "Mais de 7.5 Escanteios ⚽"
                 else:
-                    sel_cantos = "Menos de 11.5 Escanteios 🛡️"
+                    sel_cantos = "Menos de 10.5 Escanteios 🛡️"
 
                 vh_b = p_res['vitoria_home']
                 va_b = p_res['vitoria_away']
                 
-                # Correção dinâmica de Chance Dupla / Probabilidade
-                if vh_b >= va_b + 6.0:
+                # Distribuição equilibrada e dinâmica de Chance Dupla
+                if vh_b >= va_b + 8.0:
                     sel_seg = f"Chance Dupla: {j['Mandante']} ou Empate (1X) 🛡️"
-                elif va_b >= vh_b + 6.0:
+                elif va_b >= vh_b + 8.0:
                     sel_seg = f"Chance Dupla: {j['Visitante']} ou Empate (X2) 🛡️"
-                else:
+                elif abs(vh_b - va_b) <= 4.0:
                     sel_seg = f"Empate Anula (DNB): Jogo Equilibrado ⚖️"
+                else:
+                    sel_seg = f"Dupla Hipótese / Jogo Seguro ⚡"
                     
                 msg_bilhete += f"<b>{idx}. {j['Mandante']} x {j['Visitante']}</b>\n"
                 msg_bilhete += f"   • 🏆 <i>Liga:</i> {j['Liga']} ({j['Data']})\n"
