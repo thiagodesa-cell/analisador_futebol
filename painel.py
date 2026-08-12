@@ -4,6 +4,7 @@ import requests
 import time
 import math
 from datetime import datetime, timedelta, timezone
+import os
 
 # --- IMPORTAÇÃO DO SDK OFICIAL DO GEMINI ---
 from google import genai
@@ -17,9 +18,6 @@ SEASON = datetime.now().year
 
 TELEGRAM_TOKEN = "8281259090:AAEggXJKpCMxRbhhrcCZymcmNUKWNoOPFfY"
 TELEGRAM_CHAT_ID = "-1004464226419"
-
-import os
-from google import genai
 
 # Força o sistema a usar a chave de API comum do AI Studio e ignora o Vertex AI
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "false"
@@ -1084,8 +1082,8 @@ else:
                     """
                     
                     try:
-                        if gemini_client:
-                            response_gemini = gemini_client.models.generate_content(
+                        if client:
+                            response_gemini = client.models.generate_content(
                                 model='gemini-2.5-flash',
                                 contents=contexto_prompt,
                             )
