@@ -6,10 +6,13 @@ import math
 from datetime import datetime, timedelta, timezone
 import os
 
+
+
 st.set_page_config(page_title="Painel Pro - Global Trading & IA Preditiva v22.1", layout="wide")
 
 # --- CONFIGURAÇÃO DA API E TELEGRAM ---
 API_KEY_FIXA = "E89cc081ecbaaf1a7074e878c1cae0ff"
+GEMINI_API_KEY_USER = "AQ.Ab8RN6L-h6_cjeQe4v9pSwQq8tzG-N407YZY4ixRGurNuX6yJA"
 SEASON = datetime.now().year 
 
 TELEGRAM_TOKEN = "8281259090:AAEggXJKpCMxRbhhrcCZymcmNUKWNoOPFfY"
@@ -18,18 +21,16 @@ TELEGRAM_CHAT_ID = "-1004464226419"
 from openai import OpenAI
 
 client = OpenAI(
-  api_key="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"
+  api_key="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"
 )
 
-# Teste inicial utilizando o Chat Completions correto da OpenAI
-try:
-    test_response = client.chat.completions.create(
-      model="gpt-4o-mini",
-      messages=[{"role": "user", "content": "write a haiku about ai"}]
-    )
-    print(test_response.choices[0].message.content)
-except Exception as e:
-    print(f"Erro no teste inicial da OpenAI: {e}")
+response = client.responses.create(
+  model="gpt-5.4-mini",
+  input="write a haiku about ai",
+  store=True,
+)
+
+print(response.output_text);
 
 
 # --- DICIONÁRIO DE LIGAS MONITORADAS ---
@@ -1052,24 +1053,24 @@ else:
 
     with aba_chat:
         st.subheader("🤖 Chat com a Inteligência Artificial Preditiva (U6)")
-        st.markdown("Faça perguntas livres para o modelo **ChatGPT (OpenAI)** sobre as estatísticas dos últimos 6 jogos, projeções via Poisson e tendências de mercado.")
+        st.markdown("Faça perguntas livres para o modelo **Gemini 2.5 Flash** sobre as estatísticas dos últimos 6 jogos, projeções via Poisson e tendências de mercado.")
         
         if "messages" not in st.session_state:
             st.session_state.messages = [
-                {"role": "assistant", "content": f"Olá! Sou a IA Preditiva v22.1 Market Ultimate integrada com o ChatGPT. Atualmente o time em foco é **{time_principal or 'Nenhum selecionado'}** na competição **{opcao_liga or 'Geral'}**. Como posso ajudar nas suas análises hoje?"}
+                {"role": "assistant", "content": f"Olá! Sou a IA Preditiva v22.1 Market Ultimate integrada com o Gemini. Atualmente o time em foco é **{time_principal or 'Nenhum selecionado'}** na competição **{opcao_liga or 'Geral'}**. Como posso ajudar nas suas análises hoje?"}
             ]
             
         for message in st.session_state.messages:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
                 
-        if prompt_usuario := st.chat_input("Digite sua dúvida para o ChatGPT...", key="chat_input_user"):
+        if prompt_usuario := st.chat_input("Digite sua dúvida para o Gemini...", key="chat_input_user"):
             st.session_state.messages.append({"role": "user", "content": prompt_usuario})
             with st.chat_message("user"):
                 st.markdown(prompt_usuario)
                 
             with st.chat_message("assistant"):
-                with st.spinner("O ChatGPT está analisando os dados do mercado..."):
+                with st.spinner("O Gemini está analisando os dados do mercado..."):
                     contexto_prompt = f"""
                     Você é um analista especialista em apostas esportivas e trading quantitativo integrando o painel Smart Tipster Pro v22.1.
                     Contexto atual:
@@ -1087,18 +1088,15 @@ else:
                     
                     try:
                         if client:
-                            response_openai = client.chat.completions.create(
-                                model="gpt-4o-mini",
-                                messages=[
-                                    {"role": "system", "content": "Você é um analista especialista em apostas esportivas e trading quantitativo integrando o painel Smart Tipster Pro v22.1."},
-                                    {"role": "user", "content": contexto_prompt}
-                                ]
+                            response_gemini = client.models.generate_content(
+                                model='gemini-2.5-flash',
+                                contents=contexto_prompt,
                             )
-                            resposta_ia = response_openai.choices[0].message.content
+                            resposta_ia = response_gemini.text
                         else:
-                            resposta_ia = "⚠️ Cliente OpenAI não inicializado corretamente. Verifique sua chave API."
+                            resposta_ia = "⚠️ Cliente Gemini não inicializado corretamente. Verifique sua chave API."
                     except Exception as e:
-                        resposta_ia = f"⚠️ Erro ao consultar o modelo ChatGPT: {str(e)}"
+                        resposta_ia = f"⚠️ Erro ao consultar o modelo Gemini: {str(e)}"
                     
                     st.markdown(resposta_ia)
                     st.session_state.messages.append({"role": "assistant", "content": resposta_ia})
