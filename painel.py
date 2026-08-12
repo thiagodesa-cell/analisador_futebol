@@ -350,9 +350,9 @@ def buscar_jogos_liga(league_id, season, key, data_cache):
     try:
         res = requests.get(url, headers=headers)
         data = res.json()
+        jogos_lista = []
         if data.get('results', 0) > 0:
             fixtures = data['response']
-            jogos_lista = []
             for f in fixtures:
                 date_str = f['fixture']['date']
                 iso_date_local, match_date_fmt, match_time = converter_para_horario_brasilia(date_str)
@@ -367,7 +367,28 @@ def buscar_jogos_liga(league_id, season, key, data_cache):
                     'DataISO': iso_date_local, 'Data': match_date_fmt, 'Horário': match_time, 'Rodada': round_name,
                     'Mandante': home_name, 'Placar': placar_str, 'Visitante': away_name, 'Status': status
                 })
-            return pd.DataFrame(jogos_lista)
+        
+        # Fallback de segurança para copas de mata-mata (Libertadores/Sula) onde a API pode exigir filtro por rodada/fase
+        if not jogos_lista and league_id in [13, 11, 73]:
+            url_fase = f"https://v3.football.api-sports.io/fixtures?league={league_id}&season={season}&round=Round of 16"
+            res_f = requests.get(url_fase, headers=headers)
+            data_f = res_f.json()
+            if data_f.get('results', 0) > 0:
+                for f in data_f['response']:
+                    date_str = f['fixture']['date']
+                    iso_date_local, match_date_fmt, match_time = converter_para_horario_brasilia(date_str)
+                    status = f['fixture']['status']['short']
+                    home_name = f['teams']['home']['name']
+                    away_name = f['teams']['away']['name']
+                    goals_home = f['goals']['home']
+                    goals_away = f['goals']['away']
+                    placar_str = f"{goals_home} x {goals_away}" if goals_home is not None else "vs"
+                    round_name = f['league'].get('round', 'Round of 16')
+                    jogos_lista.append({
+                        'DataISO': iso_date_local, 'Data': match_date_fmt, 'Horário': match_time, 'Rodada': round_name,
+                        'Mandante': home_name, 'Placar': placar_str, 'Visitante': away_name, 'Status': status
+                    })
+        return pd.DataFrame(jogos_lista)
     except:
         pass
     return pd.DataFrame()
@@ -383,7 +404,7 @@ def buscar_rodada_atual(league_id, season, key, data_cache):
             return data['response'][0]
     except:
         pass
-    return None
+    return "Round of 16" if league_id in [13, 11] else None
 
 @st.cache_data(persist="disk")
 def buscar_dados_arbitros(league_id, season, key, data_cache):
@@ -813,14 +834,12 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v22)", key="b
         headers_geral = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': API_KEY_FIXA}
         jogos_candidatos = []
         
-        # Termos de ruído para bloquear estritamente categorias femininas e de base
         termos_proibidos = [
             'women', 'feminino', 'fem', 'wom', 'w - ', ' (w)', 
             'sub-15', 'sub-17', 'sub-20', 'sub-23', 'u17', 'u19', 'u20', 'u21', 'u23', 'under', 
             'youth', 'academy', 'reserves', 'sub 17', 'sub 20'
         ]
 
-        # Varre tanto hoje quanto amanhã para garantir que torneios de peso (como Libertadores) entrem no bilhete
         for data_busca in [DATA_HOJE_STR, DATA_AMANHA_STR]:
             url_geral = f"https://v3.football.api-sports.io/fixtures?date={data_busca}"
             try:
@@ -856,7 +875,6 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v22)", key="b
         data_formatada_exibicao = datetime.now(FUSO_BR).strftime("%d/%m/%Y")
         jogos_analisados = []
         
-        # Super bônus de prioridade para competições continentais de elite
         prioridades = ['libertadores', 'sudamericana', 'champions', 'premier league', 'la liga', 'serie a', 'bundesliga', 'copa do brasil', 'argentino']
 
         for j in jogos_candidatos:
@@ -882,7 +900,6 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v22)", key="b
                 c_proj_a = (c_a_data.get('corners_for_away', 4.5) + c_h_data.get('corners_ag_home', 4.5)) / 2
                 tot_c_calc = c_proj_h + c_proj_a + 2.0
                 
-                # Peso muito alto para Libertadores, Sul-Americana e grandes ligas garantirem prioridade absoluta
                 bonus_competicao = 15.0 if any(p in liga_nome_lower for p in prioridades) else 0.0
                 score_interesse = abs(tot_gols_calc - 2.5) + (tot_c_calc * 0.1) + bonus_competicao
                 
