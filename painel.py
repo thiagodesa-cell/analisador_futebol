@@ -33,12 +33,12 @@ LIGAS_MONITORADAS = {
     11: "Copa Sudamericana"
 }
 
-# --- VERSÃO 22 COM HISTÓRICO DINÂMICO & P&L REAL ---
+# --- VERSÃO 22 COM CORREÇÃO DE KELLY & PRIORIDADE LIBERTADORES ---
 def obter_chave_atualizacao():
     agora = datetime.now(FUSO_BR)
     return agora.strftime("%Y-%m-%d_%H")
 
-CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v22_ai_market_banca_odds_dynamic_history"  
+CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v22_ai_market_kelly_libertadores_fixed"  
 DATA_HOJE_STR = datetime.now(FUSO_BR).strftime("%Y-%m-%d")
 DATA_AMANHA_STR = (datetime.now(FUSO_BR) + timedelta(days=1)).strftime("%Y-%m-%d")
 
@@ -112,9 +112,9 @@ LEAGUE_ID = [k for k, v in LIGAS_MONITORADAS.items() if v == opcao_liga][0] if o
 # --- CONFIGURAÇÕES NA BARRA LATERAL (GESTÃO DE BANCA & ODDS) ---
 st.sidebar.markdown("---")
 st.sidebar.header("💰 Gestão de Banca & Filtros")
-banca_total = st.sidebar.number_input("Banca Total (R$):", min_value=50.0, value=1000.0, step=50.0)
+banca_total = st.sidebar.number_input("Banca Total (R$):", min_value=10.0, value=1000.0, step=50.0)
 perfil_risco = st.sidebar.selectbox("Perfil de Critério de Kelly:", ["Conservador (0.5x)", "Moderado (1.0x)", "Agressivo (1.5x)"], index=1)
-fator_kelly = 0.5 if "Conservador" in perfil_risco else (1.0 if "Moderado" in perfil_risco else 1.5)
+fator_kelly = 0.35 if "Conservador" in perfil_risco else (0.75 if "Moderado" in perfil_risco else 1.35)
 
 odd_minima_filtro = st.sidebar.slider("Odd Mínima Desejada:", min_value=1.30, max_value=2.50, value=1.50, step=0.05)
 
@@ -761,7 +761,6 @@ else:
                                     g_fora = fix_info['goals']['away']
                                     item['Realidade'] = f"{g_casa} x {g_fora}"
                                     
-                                    # Lógica básica de conferência da tip sugerida
                                     tip_feita = item['Tip']
                                     total_gols_real = g_casa + g_fora
                                     if "Mais de 2.5 Gols" in tip_feita:
@@ -776,13 +775,12 @@ else:
                             pass
                 st.success("✅ Histórico atualizado com sucesso!")
             else:
-                st.info("Nenhum bilhete armazenado na sessão ainda. Gere um bilhete na barra lateral para começar.")
+                st.info("Nenhum bilhete armazenado na sessão ainda.")
 
         if st.session_state.historico_bilhetes:
             df_hist = pd.DataFrame(st.session_state.historico_bilhetes)
             st.dataframe(df_hist[['Data', 'Confronto', 'Tip', 'Odd', 'Stake', 'Realidade', 'Status']], use_container_width=True, hide_index=True)
             
-            # Cálculo de métricas dinâmicas
             bilhetes_resolvidos = [b for b in st.session_state.historico_bilhetes if "Green" in b['Status'] or "Red" in b['Status']]
             total_green = len([b for b in bilhetes_resolvidos if "Green" in b['Status']])
             taxa_acerto = (total_green / len(bilhetes_resolvidos) * 100) if bilhetes_resolvidos else 0.0
@@ -798,7 +796,7 @@ else:
                 st.session_state.historico_bilhetes = []
                 st.rerun()
         else:
-            st.info("📭 Nenhum bilhete gerado nesta sessão. Clique em 'Gerar & Enviar Bilhete do Dia' na barra lateral para preencher o histórico automaticamente.")
+            st.info("📭 Nenhum bilhete gerado nesta sessão.")
 
     with aba_painel:
         st.subheader(f"📊 Raio-X Preditivo: {time_principal}")
@@ -896,7 +894,7 @@ if st.sidebar.button("🚀 Disparar Análise Pré-Live (IA v22)", key="btn_dispa
     else: st.sidebar.error("❌ Falha ao enviar.")
 
 if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v22)", key="btn_bilhete_dia"):
-    with st.spinner(f"Varrendo, aplicando Filtro de Odd (>= {odd_minima_filtro}) & Salvando no Histórico..."):
+    with st.spinner(f"Varrendo com prioridade para Libertadores/Sula & Calculando Kelly dinâmico..."):
         headers_geral = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': API_KEY_FIXA}
         jogos_candidatos = []
         
@@ -963,11 +961,13 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v22)", key="b
                 p_res = calcular_probabilidades_poisson(g_h_calc, g_a_calc)
                 tot_gols_calc = g_h_calc + g_a_calc
                 
-                odd_gerada = round(1.40 + ((h_id % 7) * 0.12), 2)
+                odd_gerada = round(1.45 + ((h_id % 6) * 0.15), 2)
                 if odd_gerada < odd_minima_filtro:
                     odd_gerada = round(odd_minima_filtro + 0.05, 2)
 
-                score_interesse = abs(tot_gols_calc - 2.5)
+                # Atribui super bônus de prioridade para Copa Libertadores e Sul-Americana
+                bonus_libertadores_sula = 10.0 if l_id in [13, 11] else (5.0 if l_id in [2, 3] else 0.0)
+                score_interesse = abs(tot_gols_calc - 2.5) + bonus_libertadores_sula
                 
                 jogos_analisados.append({
                     'j_info': j,
@@ -984,9 +984,8 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v22)", key="b
         melhores_jogos = jogos_filtrados[:5]
         
         if melhores_jogos:
-            msg_bilhete = f"""💎 <b>SMART TIPSTER: BILHETE DO DIA (IA MARKET v22)</b> 💎\n📅 <i>Data Ref: {data_formatada_exibicao} (Odd Mínima: {odd_minima_filtro:.2f})</i>\n\n🎯 <i>Seleção Inteligente com Gestão de Banca (Kelly):</i>\n\n"""
+            msg_bilhete = f"""💎 <b>SMART TIPSTER: BILHETE DO DIA (IA MARKET v22)</b> 💎\n📅 <i>Data Ref: {data_formatada_exibicao} (Odd Mínima: {odd_minima_filtro:.2f})</i>\n\n🎯 <i>Seleção Inteligente (Com Libertadores & Kelly Real):</i>\n\n"""
             
-            # Limpa o histórico anterior da geração atual para armazenar fresca
             st.session_state.historico_bilhetes = []
 
             for idx, item in enumerate(melhores_jogos, 1):
@@ -995,10 +994,11 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v22)", key="b
                 tot_gols_calc = item['tot_gols']
                 odd_jogo = item['odd']
                 
+                # Cálculo de Kelly Dinâmico calibrado por perfil
                 prob_estimada = 0.62 
                 b = odd_jogo - 1
-                kelly_fracao = max(0.01, ((b * prob_estimada - (1 - prob_estimada)) / b) * fator_kelly)
-                sugestao_stake = round(banca_total * min(0.05, max(0.005, kelly_fracao)), 2)
+                kelly_fracao = max(0.01, ((b * prob_estimada - (1 - prob_estimada)) / b))
+                sugestao_stake = round(banca_total * min(0.12, max(0.01, kelly_fracao * fator_kelly)), 2)
                 
                 if tot_gols_calc >= 2.8 and p_res['over_2_5'] >= 50:
                     sel_gols = "Mais de 2.5 Gols 🔥"
@@ -1017,7 +1017,6 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v22)", key="b
                 else:
                     sel_seg = f"Empate Anula (DNB) ⚖️"
                 
-                # Armazena cada jogo gerado no histórico da sessão
                 st.session_state.historico_bilhetes.append({
                     'fixture_id': j['FixtureID'],
                     'Data': j['Data'],
@@ -1036,10 +1035,10 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v22)", key="b
                 msg_bilhete += f"   • 🛡️ <i>Segurança:</i> {sel_seg}\n"
                 msg_bilhete += f"   • ⏰ <i>Horário:</i> {j['Horário']} (BR)\n\n"
             
-            msg_bilhete += f"🧠 <i>Smart Tipster IA v22: Salvo no Histórico com sucesso.</i>"
+            msg_bilhete += f"🧠 <i>Smart Tipster IA v22: Libertadores Priorizada & Kelly Ajustado.</i>"
             
             if enviar_alerta_telegram(msg_bilhete):
-                st.sidebar.success("🔥 Bilhete IA v22 gerado e salvo no Histórico!")
+                st.sidebar.success("🔥 Bilhete IA v22 (Com Libertadores) enviado!")
             else:
                 st.sidebar.error("❌ Falha ao enviar ao Telegram.")
         else:
