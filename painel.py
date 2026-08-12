@@ -368,7 +368,6 @@ def buscar_jogos_liga(league_id, season, key, data_cache):
                     'Mandante': home_name, 'Placar': placar_str, 'Visitante': away_name, 'Status': status
                 })
         
-        # Fallback de segurança para copas de mata-mata (Libertadores/Sula) onde a API pode exigir filtro por rodada/fase
         if not jogos_lista and league_id in [13, 11, 73]:
             url_fase = f"https://v3.football.api-sports.io/fixtures?league={league_id}&season={season}&round=Round of 16"
             res_f = requests.get(url_fase, headers=headers)
@@ -830,15 +829,18 @@ if st.sidebar.button("🚀 Disparar Análise Pré-Live (IA v22)", key="btn_dispa
     else: st.sidebar.error("❌ Falha ao enviar.")
 
 if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v22)", key="btn_bilhete_dia"):
-    with st.spinner("Varrendo e combinando a grade profissional de hoje e amanhã (Libertadores, Sula e Ligas)..."):
+    with st.spinner("Varrendo e priorizando apenas ligas de elite (Libertadores, Sul-Americana, Nacionais)..."):
         headers_geral = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': API_KEY_FIXA}
         jogos_candidatos = []
         
         termos_proibidos = [
             'women', 'feminino', 'fem', 'wom', 'w - ', ' (w)', 
             'sub-15', 'sub-17', 'sub-20', 'sub-23', 'u17', 'u19', 'u20', 'u21', 'u23', 'under', 
-            'youth', 'academy', 'reserves', 'sub 17', 'sub 20'
+            'youth', 'academy', 'reserves', 'sub 17', 'sub 20', 'friendlies', 'cup'
         ]
+
+        # Lista de IDs de ligas de elite aceitas obrigatoriamente
+        ids_elite_permitidos = [71, 72, 73, 128, 39, 140, 78, 2, 3, 848, 13, 11]
 
         for data_busca in [DATA_HOJE_STR, DATA_AMANHA_STR]:
             url_geral = f"https://v3.football.api-sports.io/fixtures?date={data_busca}"
@@ -849,17 +851,22 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v22)", key="b
                     for f in data_g['response']:
                         status = f['fixture']['status']['short']
                         if status in ['NS', 'TBD', '1H', 'HT', '2H']:
+                            liga_id = f['league']['id']
                             liga_nome = f['league']['name']
                             home_name = f['teams']['home']['name']
                             away_name = f['teams']['away']['name']
                             
+                            # Filtro estrito: Garante que apenas ligas de elite passem
+                            if liga_id not in ids_elite_permitidos:
+                                continue
+                                
                             texto_verificacao = f"{liga_nome} {home_name} {away_name}".lower()
                             if any(termo in texto_verificacao for termo in termos_proibidos):
                                 continue
                                 
                             _, match_date_fmt, match_time = converter_para_horario_brasilia(f['fixture']['date'])
                             jogos_candidatos.append({
-                                'LeagueID': f['league']['id'], 
+                                'LeagueID': liga_id, 
                                 'Liga': liga_nome,
                                 'Mandante': home_name, 
                                 'Visitante': away_name,
@@ -875,14 +882,11 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v22)", key="b
         data_formatada_exibicao = datetime.now(FUSO_BR).strftime("%d/%m/%Y")
         jogos_analisados = []
         
-        prioridades = ['libertadores', 'sudamericana', 'champions', 'premier league', 'la liga', 'serie a', 'bundesliga', 'copa do brasil', 'argentino']
-
         for j in jogos_candidatos:
             try:
                 h_id = j['HomeID']
                 a_id = j['AwayID']
                 l_id = j['LeagueID']
-                liga_nome_lower = j['Liga'].lower()
                 
                 s_h = buscar_estatisticas_time(h_id, l_id, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
                 s_a = buscar_estatisticas_time(a_id, l_id, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
@@ -900,8 +904,7 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v22)", key="b
                 c_proj_a = (c_a_data.get('corners_for_away', 4.5) + c_h_data.get('corners_ag_home', 4.5)) / 2
                 tot_c_calc = c_proj_h + c_proj_a + 2.0
                 
-                bonus_competicao = 15.0 if any(p in liga_nome_lower for p in prioridades) else 0.0
-                score_interesse = abs(tot_gols_calc - 2.5) + (tot_c_calc * 0.1) + bonus_competicao
+                score_interesse = abs(tot_gols_calc - 2.5) + (tot_c_calc * 0.15)
                 
                 jogos_analisados.append({
                     'j_info': j,
@@ -914,10 +917,10 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v22)", key="b
                 continue
         
         jogos_analisados = sorted(jogos_analisados, key=lambda x: x['score'], reverse=True)
-        melhores_jogos = jogos_analisados[:8]
+        melhores_jogos = jogos_analisados[:6]
         
         if melhores_jogos:
-            msg_bilhete = f"""💎 <b>SMART TIPSTER: BILHETE DO DIA (IA MARKET ULTIMATE v22)</b> 💎\n📅 <i>Data Ref: {data_formatada_exibicao} (Inclui Jogos de Amanhã)</i>\n\n🎯 <i>Seleção Inteligente (Futebol Profissional Masculino):</i>\n\n"""
+            msg_bilhete = f"""💎 <b>SMART TIPSTER: BILHETE DO DIA (IA MARKET ULTIMATE v22)</b> 💎\n📅 <i>Data Ref: {data_formatada_exibicao} (Futebol de Elite)</i>\n\n🎯 <i>Seleção Inteligente (Ligas Principais & Oficiais):</i>\n\n"""
             
             for idx, item in enumerate(melhores_jogos, 1):
                 j = item['j_info']
@@ -925,31 +928,36 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v22)", key="b
                 tot_gols_calc = item['tot_gols']
                 tot_c_calc = item['tot_c']
                 
-                if tot_gols_calc >= 2.7 and p_res['over_2_5'] >= 48:
+                # Seleção dinâmica de Gols baseada na projeção real
+                if tot_gols_calc >= 2.8 and p_res['over_2_5'] >= 50:
                     sel_gols = "Mais de 2.5 Gols 🔥"
-                elif p_res['btts'] >= 52 and tot_gols_calc >= 2.2:
+                elif p_res['btts'] >= 52:
                     sel_gols = "Ambas Marcam (BTTS) Sim ⚡"
-                elif tot_gols_calc >= 1.9:
+                elif tot_gols_calc >= 2.3:
                     sel_gols = "Mais de 1.5 Gols ⚽"
                 else:
                     sel_gols = "Menos de 3.5 Gols 🛡️"
                 
-                if tot_c_calc >= 10.0:
+                # Correção matemática dinâmica para os escanteios (Evitando repetição robótica de 9.5)
+                if tot_c_calc >= 10.5:
                     sel_cantos = "Mais de 9.5 Escanteios 🔥"
-                elif tot_c_calc >= 8.5:
+                elif tot_c_calc >= 9.2:
                     sel_cantos = "Mais de 8.5 Escanteios 🚩"
-                else:
+                elif tot_c_calc >= 8.0:
                     sel_cantos = "Mais de 7.5 Escanteios ⚽"
+                else:
+                    sel_cantos = "Menos de 11.5 Escanteios 🛡️"
 
                 vh_b = p_res['vitoria_home']
                 va_b = p_res['vitoria_away']
                 
-                if vh_b >= va_b + 5.0:
+                # Correção dinâmica de Chance Dupla / Probabilidade
+                if vh_b >= va_b + 6.0:
                     sel_seg = f"Chance Dupla: {j['Mandante']} ou Empate (1X) 🛡️"
-                elif va_b >= vh_b + 5.0:
+                elif va_b >= vh_b + 6.0:
                     sel_seg = f"Chance Dupla: {j['Visitante']} ou Empate (X2) 🛡️"
                 else:
-                    sel_seg = f"Empate Anula / Jogo Equilibrado ⚖️"
+                    sel_seg = f"Empate Anula (DNB): Jogo Equilibrado ⚖️"
                     
                 msg_bilhete += f"<b>{idx}. {j['Mandante']} x {j['Visitante']}</b>\n"
                 msg_bilhete += f"   • 🏆 <i>Liga:</i> {j['Liga']} ({j['Data']})\n"
@@ -957,13 +965,13 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v22)", key="b
                 msg_bilhete += f"   • 🛡️ <i>Segurança:</i> {sel_seg}\n"
                 msg_bilhete += f"   • ⏰ <i>Horário:</i> {j['Horário']} (BR)\n\n"
             
-            msg_bilhete += f"🧠 <i>Smart Tipster IA v22: Seleção profissional limpa com sucesso.</i>"
+            msg_bilhete += f"🧠 <i>Smart Tipster IA v22: Seleção de elite calibrada com sucesso.</i>"
             
             if enviar_alerta_telegram(msg_bilhete):
-                st.sidebar.success("🔥 Bilhete IA v22 (Com Libertadores/Sula) enviado!")
+                st.sidebar.success("🔥 Bilhete IA v22 (Ligas de Elite) enviado!")
             else:
                 st.sidebar.error("❌ Falha ao enviar ao Telegram.")
         else:
-            st.sidebar.warning("⚠️ Não foram encontrados jogos profissionais elegíveis.")
+            st.sidebar.warning("⚠️ Não foram encontrados jogos de elite elegíveis hoje/amanhã.")
     else:
-        st.sidebar.warning(f"⚠️ Nenhum jogo localizado na API para hoje e amanhã.")
+        st.sidebar.warning(f"⚠️ Nenhum jogo de liga principal localizado para hoje e amanhã.")
