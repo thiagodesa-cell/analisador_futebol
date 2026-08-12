@@ -18,8 +18,12 @@ SEASON = datetime.now().year
 TELEGRAM_TOKEN = "8281259090:AAEggXJKpCMxRbhhrcCZymcmNUKWNoOPFfY"
 TELEGRAM_CHAT_ID = "-1004464226419"
 
-# --- INICIALIZAÇÃO DO CLIENTE GEMINI ---
+# --- INICIALIZAÇÃO DO CLIENTE GEMINI CORRIGIDA ---
+import os
+os.environ["AQ.Ab8RN6L-h6_cjeQe4v9pSwQq8tzG-N407YZY4ixRGurNuX6yJA"] = GEMINI_API_KEY_USER
+
 try:
+    # Configuração explícita para evitar o conflito de credenciais OAuth
     gemini_client = genai.Client(api_key=GEMINI_API_KEY_USER)
 except Exception as e:
     gemini_client = None
