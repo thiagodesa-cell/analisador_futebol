@@ -7,9 +7,12 @@ from datetime import datetime, timedelta, timezone
 
 st.set_page_config(page_title="Painel Pro - Global Trading & IA Preditiva v22", layout="wide")
 
+# --- CONFIGURAÇÃO DE FUSO HORÁRIO GLOBAL ---
+FUSO_BR = timezone(timedelta(hours=-3))
+
 # --- CONFIGURAÇÃO DA API E TELEGRAM ---
 API_KEY_FIXA = "E89cc081ecbaaf1a7074e878c1cae0ff"
-SEASON = datetime.now().year 
+SEASON = datetime.now(FUSO_BR).year 
 
 TELEGRAM_TOKEN = "8281259090:AAEggXJKpCMxRbhhrcCZymcmNUKWNoOPFfY"
 TELEGRAM_CHAT_ID = "-1004464226419"
@@ -32,23 +35,21 @@ LIGAS_MONITORADAS = {
 
 # --- VERSÃO 22 COM TABELA DETALHADA DE CARTÕES JOGO A JOGO ---
 def obter_chave_atualizacao():
-    agora = datetime.now()
-    if agora.hour < 8:
-        return (agora - timedelta(days=1)).strftime("%Y-%m-%d")
-    else:
-        return agora.strftime("%Y-%m-%d")
+    # O datetime agora usa FUSO_BR garantindo que a data seja a do Brasil.
+    agora = datetime.now(FUSO_BR)
+    # Atualização a cada hora ("%H") para forçar a renovação do cache e atualizar os status dos jogos.
+    return agora.strftime("%Y-%m-%d_%H")
 
 CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v22_ai_market_cards_detail"  
-DATA_HOJE_STR = datetime.now().strftime("%Y-%m-%d")
+DATA_HOJE_STR = datetime.now(FUSO_BR).strftime("%Y-%m-%d")
 
 # --- CONVERSOR INTELIGENTE DE FUSO HORÁRIO (UTC -> BRASÍLIA UTC-3) ---
 def converter_para_horario_brasilia(iso_string):
     try:
         dt_utc = datetime.fromisoformat(iso_string.replace('Z', '+00:00'))
-        fuso_br = timezone(timedelta(hours=-3))
-        dt_local = dt_utc.astimezone(fuso_br)
+        dt_local = dt_utc.astimezone(FUSO_BR)
         return dt_local.strftime("%Y-%m-%d"), dt_local.strftime("%d/%m/%Y"), dt_local.strftime("%H:%M")
-    except:
+    except Exception as e:
         return iso_string[:10], f"{iso_string[8:10]}/{iso_string[5:7]}/{iso_string[0:4]}", iso_string[11:16]
 
 # --- MOTOR DE INTELIGÊNCIA ARTIFICIAL: DISTRIBUIÇÃO DE POISSON & PROBABILIDADES ---
@@ -1057,7 +1058,8 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v22)", key="b
         
     if jogos_monitorados_hoje:
         amostra_monitorada = jogos_monitorados_hoje[:6]
-        data_formatada_exibicao = datetime.now().strftime("%d/%m/%Y")
+        # O fuso horário do Brasil também foi aplicado aqui para a emissão do bilhete
+        data_formatada_exibicao = datetime.now(FUSO_BR).strftime("%d/%m/%Y")
         
         msg_bilhete = f"""💎 <b>SMART TIPSTER: BILHETE DO DIA (IA MARKET ULTIMATE v22)</b> 💎\n📅 <i>Data: {data_formatada_exibicao}</i>\n\nAnálises com tabelas de cartões e escanteios detalhadas:\n\n"""
         
