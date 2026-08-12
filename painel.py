@@ -856,7 +856,7 @@ else:
         st.markdown("---")
         
         # =========================================================================
-        # SEÇÃO DE CARTÕES: TABELA DETALHADA JOGO A JOGO (SOLICITADA)
+        # SEÇÃO DE CARTÕES: TABELA DETALHADA JOGO A JOGO
         # =========================================================================
         st.subheader(f"🟨 Tabela Detalhada Jogo a Jogo - Cartões: {time_principal}")
         st.markdown(f"Acompanhamento analítico jogo a jogo mostrando exatamente quantos cartões **{time_principal}** recebeu em comparação com o **Adversário** em cada partida recente:")
@@ -895,6 +895,7 @@ else:
                 probs_poisson = calcular_probabilidades_poisson(gols_t1, gols_t2)
                 total_gols = gols_t1 + gols_t2
                 
+                # CORREÇÃO DO CÁLCULO DINÂMICO DE ESCANTEIOS H2H
                 c_proj_t1 = (corners_t1['corners_for_home'] + corners_t2['corners_ag_away']) / 2
                 c_proj_t2 = (corners_t2['corners_for_away'] + corners_t1['corners_ag_home']) / 2
                 escanteios_jogo = c_proj_t1 + c_proj_t2
@@ -945,7 +946,6 @@ else:
                         vh = probs_poisson['vitoria_home']
                         va = probs_poisson['vitoria_away']
                         
-                        # CORREÇÃO DA LÓGICA DE DUPLA CHANCE E DNB (DINÂMICA ENTRE TIME PRINCIPAL E ADVERSÁRIO)
                         if vh >= va + 5.0:
                             dnb_sug = f"Empate Anula: {time_principal} 🟢"
                             dupla_sug = f"Chance Dupla: {time_principal} ou Empate (1X) 🛡️"
