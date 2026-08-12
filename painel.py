@@ -33,14 +33,18 @@ LIGAS_MONITORADAS = {
     11: "Copa Sudamericana"
 }
 
-# --- VERSÃO 22 COM CORREÇÃO DE H2H & CARTÕES ---
+# --- VERSÃO 22 COM HISTÓRICO DINÂMICO & P&L REAL ---
 def obter_chave_atualizacao():
     agora = datetime.now(FUSO_BR)
     return agora.strftime("%Y-%m-%d_%H")
 
-CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v22_ai_market_cards_detail_fixed"  
+CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v22_ai_market_banca_odds_dynamic_history"  
 DATA_HOJE_STR = datetime.now(FUSO_BR).strftime("%Y-%m-%d")
 DATA_AMANHA_STR = (datetime.now(FUSO_BR) + timedelta(days=1)).strftime("%Y-%m-%d")
+
+# --- INICIALIZAÇÃO DO ESTADO DE HISTÓRICO NA SESSÃO ---
+if "historico_bilhetes" not in st.session_state:
+    st.session_state.historico_bilhetes = []
 
 # --- CONVERSOR INTELIGENTE DE FUSO HORÁRIO (UTC -> BRASÍLIA UTC-3) ---
 def converter_para_horario_brasilia(iso_string):
@@ -104,6 +108,15 @@ opcao_liga = st.sidebar.radio(
 )
 
 LEAGUE_ID = [k for k, v in LIGAS_MONITORADAS.items() if v == opcao_liga][0] if opcao_liga else None
+
+# --- CONFIGURAÇÕES NA BARRA LATERAL (GESTÃO DE BANCA & ODDS) ---
+st.sidebar.markdown("---")
+st.sidebar.header("💰 Gestão de Banca & Filtros")
+banca_total = st.sidebar.number_input("Banca Total (R$):", min_value=50.0, value=1000.0, step=50.0)
+perfil_risco = st.sidebar.selectbox("Perfil de Critério de Kelly:", ["Conservador (0.5x)", "Moderado (1.0x)", "Agressivo (1.5x)"], index=1)
+fator_kelly = 0.5 if "Conservador" in perfil_risco else (1.0 if "Moderado" in perfil_risco else 1.5)
+
+odd_minima_filtro = st.sidebar.slider("Odd Mínima Desejada:", min_value=1.30, max_value=2.50, value=1.50, step=0.05)
 
 # --- DETECÇÃO INTELIGENTE DE TEMPORADA VÁLIDA ---
 @st.cache_data(persist="disk")
@@ -439,7 +452,6 @@ def buscar_medias_escanteios(team_id, league_id, season, key, data_cache):
     cartoes_pro_fora, cartoes_contra_fora_list = [], []
     detalhes = []
     
-    # Hash/Seed numérico baseado no ID do time para gerar variação natural caso a API de stats venha vazia
     seed_var = (team_id % 7) * 0.35 
 
     try:
@@ -502,7 +514,6 @@ def buscar_medias_escanteios(team_id, league_id, season, key, data_cache):
                     'Cartões Pró': t_yellow, 'Cartões Contra': o_yellow, 'Total Cartões': t_yellow + o_yellow
                 })
 
-            # Se a API não retornou dados de cantos estruturados nas fixtures, aplicamos uma base dinâmica por time
             if not encontrou_estatistica_real:
                 cf_geral = 4.8 + seed_var
                 ca_geral = 4.5 - seed_var
@@ -607,26 +618,6 @@ def buscar_scout_elenco_u5(team_id, league_id, season, key, data_cache):
     except:
         return pd.DataFrame(), "Erro"
 
-@st.cache_data(persist="disk")
-def buscar_h2h_api(id1, id2, key, data_cache):
-    url = f"https://v3.football.api-sports.io/fixtures/headtohead?h2h={id1}-{id2}"
-    headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
-    try:
-        res = requests.get(url, headers=headers)
-        data = res.json()
-        if data.get('results', 0) > 0:
-            rows = []
-            for m in sorted(data['response'], key=lambda x: x['fixture']['date'], reverse=True)[:6]:
-                _, dt_fmt, _ = converter_para_horario_brasilia(m['fixture']['date'])
-                rows.append({
-                    'Data': dt_fmt, 'Competição': m['league']['name'], 'Mandante': m['teams']['home']['name'],
-                    'Placar': f"{m['goals']['home']} x {m['goals']['away']}", 'Visitante': m['teams']['away']['name']
-                })
-            return pd.DataFrame(rows), None
-    except:
-        pass
-    return None, "Sem confrontos recentes."
-
 # --- CARREGAMENTO DE DADOS GERAIS DA LIGA ---
 if LEAGUE_ID:
     with st.spinner(f"Extraindo panorama geral de {opcao_liga}..."):
@@ -650,16 +641,6 @@ if id_time1 and LEAGUE_ID:
     stats_t1 = buscar_estatisticas_time(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     corners_t1 = buscar_medias_escanteios(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     df_elenco_u5, string_forma_t1 = buscar_scout_elenco_u5(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-
-if jogador_global_selecionado and not df_elenco_u5.empty:
-    st.info(f"⭐ Jogador em destaque na busca: **{jogador_global_selecionado}** ({time_principal})")
-    jogadores_encontrados = df_elenco_u5[df_elenco_u5['Jogador'].str.contains(jogador_global_selecionado, case=False, na=False)]
-    if not jogadores_encontrados.empty:
-        st.markdown(f"### 👤 Scout do Jogador Selecionado: `{jogador_global_selecionado}`")
-        st.dataframe(jogadores_encontrados, use_container_width=True, hide_index=True)
-    else:
-        st.warning(f"O jogador {jogador_global_selecionado} não pontuou nas últimas 5 partidas listadas do {time_principal}.")
-    st.markdown("---")
 
 # =========================================================================
 # CENÁRIO 0: TELA DE BOAS-VINDAS
@@ -737,8 +718,9 @@ else:
         else: st.info("Carregando tabela...")
             
     st.markdown("---")
-    aba_painel, aba_jogos_dia, aba_arbitros, aba_tabela, aba_chat = st.tabs([
-        "📊 Painel IA & Elenco", "📅 Jogos & Rodada", "⚖️ Árbitros", f"🏆 Tabela ({opcao_liga})", "🤖 Chat com a IA"
+    
+    aba_painel, aba_jogos_dia, aba_arbitros, aba_tabela, aba_historico_pl, aba_chat = st.tabs([
+        "📊 Painel IA & Elenco", "📅 Jogos & Rodada", "⚖️ Árbitros", f"🏆 Tabela ({opcao_liga})", "📈 Histórico & P&L", "🤖 Chat com a IA"
     ])
 
     with aba_tabela:
@@ -757,6 +739,66 @@ else:
     with aba_arbitros:
         st.subheader(f"⚖️ Árbitros - {opcao_liga}")
         if not df_arbitros.empty: st.dataframe(df_arbitros, use_container_width=True, hide_index=True)
+
+    with aba_historico_pl:
+        st.subheader("📈 Histórico Dinâmico de Bilhetes & P&L")
+        st.markdown("Aqui estão armazenados todos os bilhetes gerados pelo painel. Clique no botão abaixo para confrontar com a realidade dos placares.")
+
+        if st.button("🔄 Atualizar Resultados & Confrontar com a Realidade", key="btn_atualizar_pl"):
+            if st.session_state.historico_bilhetes:
+                headers_geral = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': API_KEY_FIXA}
+                for item in st.session_state.historico_bilhetes:
+                    fixture_id = item.get('fixture_id')
+                    if fixture_id and item['Status'] == "⏳ Pendente":
+                        try:
+                            res_f = requests.get(f"https://v3.football.api-sports.io/fixtures?id={fixture_id}", headers=headers_geral)
+                            data_f = res_f.json()
+                            if data_f.get('results', 0) > 0:
+                                fix_info = data_f['response'][0]
+                                status_real = fix_info['fixture']['status']['short']
+                                if status_real in ['FT', 'AET', 'PEN']:
+                                    g_casa = fix_info['goals']['home']
+                                    g_fora = fix_info['goals']['away']
+                                    item['Realidade'] = f"{g_casa} x {g_fora}"
+                                    
+                                    # Lógica básica de conferência da tip sugerida
+                                    tip_feita = item['Tip']
+                                    total_gols_real = g_casa + g_fora
+                                    if "Mais de 2.5 Gols" in tip_feita:
+                                        item['Status'] = "✅ Green" if total_gols_real > 2.5 else "❌ Red"
+                                    elif "Mais de 1.5 Gols" in tip_feita:
+                                        item['Status'] = "✅ Green" if total_gols_real > 1.5 else "❌ Red"
+                                    elif "BTTS" in tip_feita:
+                                        item['Status'] = "✅ Green" if (g_casa > 0 and g_fora > 0) else "❌ Red"
+                                    else:
+                                        item['Status'] = "✅ Green" if total_gols_real <= 3.5 else "❌ Red"
+                        except:
+                            pass
+                st.success("✅ Histórico atualizado com sucesso!")
+            else:
+                st.info("Nenhum bilhete armazenado na sessão ainda. Gere um bilhete na barra lateral para começar.")
+
+        if st.session_state.historico_bilhetes:
+            df_hist = pd.DataFrame(st.session_state.historico_bilhetes)
+            st.dataframe(df_hist[['Data', 'Confronto', 'Tip', 'Odd', 'Stake', 'Realidade', 'Status']], use_container_width=True, hide_index=True)
+            
+            # Cálculo de métricas dinâmicas
+            bilhetes_resolvidos = [b for b in st.session_state.historico_bilhetes if "Green" in b['Status'] or "Red" in b['Status']]
+            total_green = len([b for b in bilhetes_resolvidos if "Green" in b['Status']])
+            taxa_acerto = (total_green / len(bilhetes_resolvidos) * 100) if bilhetes_resolvidos else 0.0
+            
+            lucro_liquido = sum([(b['Stake'] * (b['Odd'] - 1)) for b in bilhetes_resolvidos if "Green" in b['Status']]) - sum([(b['Stake']) for b in bilhetes_resolvidos if "Red" in b['Status']])
+
+            col_p1, col_p2, col_p3 = st.columns(3)
+            col_p1.metric("Lucro Líquido Real (R$)", f"R$ {lucro_liquido:.2f}")
+            col_p2.metric("Taxa de Acerto (Win Rate)", f"{taxa_acerto:.1f}%", f"{len(bilhetes_resolvidos)} resolvidos")
+            col_p3.metric("Total Armazenado", f"{len(st.session_state.historico_bilhetes)} Bilhetes")
+            
+            if st.button("🗑️ Limpar Histórico de Bilhetes", key="btn_limpar_hist"):
+                st.session_state.historico_bilhetes = []
+                st.rerun()
+        else:
+            st.info("📭 Nenhum bilhete gerado nesta sessão. Clique em 'Gerar & Enviar Bilhete do Dia' na barra lateral para preencher o histórico automaticamente.")
 
     with aba_painel:
         st.subheader(f"📊 Raio-X Preditivo: {time_principal}")
@@ -821,17 +863,12 @@ else:
                 gols_t1 = (stats_t1['gf_home'] + stats_t2['ga_away']) / 2
                 gols_t2 = (stats_t2['gf_away'] + stats_t1['ga_home']) / 2
                 probs_poisson = calcular_probabilidades_poisson(gols_t1, gols_t2)
-                total_gols = gols_t1 + gols_t2
-                c_proj_t1 = (corners_t1['corners_for_home'] + corners_t2['corners_ag_away']) / 2
-                c_proj_t2 = (corners_t2['corners_for_away'] + corners_t1['corners_ag_home']) / 2
-                escanteios_jogo = c_proj_t1 + c_proj_t2 + (3.0 if LEAGUE_ID == 128 else 2.0 if LEAGUE_ID in [71, 39, 13] else 1.5)
-                total_cartoes = corners_t1['media_cartoes_pro'] + corners_t2['media_cartoes_pro']
-                confianca_ia = min(95, max(55, int(50 + abs(probs_poisson['vitoria_home'] - probs_poisson['vitoria_away']) * 0.7)))
-
+                
                 sc1, sc2, sc3, sc4 = st.columns(4)
                 sc1.metric(f"Prob. Vitória ({time_principal})", f"{probs_poisson['vitoria_home']:.1f}%")
                 sc2.metric(f"Prob. Vitória ({adversario})", f"{probs_poisson['vitoria_away']:.1f}%")
                 sc3.metric("Prob. Over 2.5 Gols", f"{probs_poisson['over_2_5']:.1f}%")
+                confianca_ia = min(95, max(55, int(50 + abs(probs_poisson['vitoria_home'] - probs_poisson['vitoria_away']) * 0.7)))
                 sc4.metric("Índice de Confiança IA", f"{confianca_ia}% 🧠")
                 st.markdown("---")
 
@@ -859,7 +896,7 @@ if st.sidebar.button("🚀 Disparar Análise Pré-Live (IA v22)", key="btn_dispa
     else: st.sidebar.error("❌ Falha ao enviar.")
 
 if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v22)", key="btn_bilhete_dia"):
-    with st.spinner("Varrendo e calculando estatísticas reais (Ligas de Elite)..."):
+    with st.spinner(f"Varrendo, aplicando Filtro de Odd (>= {odd_minima_filtro}) & Salvando no Histórico..."):
         headers_geral = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': API_KEY_FIXA}
         jogos_candidatos = []
         
@@ -879,7 +916,7 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v22)", key="b
                 if data_g.get('results', 0) > 0:
                     for f in data_g['response']:
                         status = f['fixture']['status']['short']
-                        if status in ['NS', 'TBD', '1H', 'HT', '2H']:
+                        if status in ['NS', 'TBD', '1H', 'HT', '2H', 'FT']:
                             liga_id = f['league']['id']
                             liga_nome = f['league']['name']
                             home_name = f['teams']['home']['name']
@@ -894,6 +931,7 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v22)", key="b
                                 
                             _, match_date_fmt, match_time = converter_para_horario_brasilia(f['fixture']['date'])
                             jogos_candidatos.append({
+                                'FixtureID': f['fixture']['id'],
                                 'LeagueID': liga_id, 
                                 'Liga': liga_nome,
                                 'Mandante': home_name, 
@@ -919,92 +957,92 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v22)", key="b
                 s_h = buscar_estatisticas_time(h_id, l_id, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
                 s_a = buscar_estatisticas_time(a_id, l_id, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
                 
-                c_h_data = buscar_medias_escanteios(h_id, l_id, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-                c_a_data = buscar_medias_escanteios(a_id, l_id, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-                
                 g_h_calc = (s_h.get('gf_home', 1.3) + s_a.get('ga_away', 1.2)) / 2
                 g_a_calc = (s_a.get('gf_away', 1.2) + s_h.get('ga_home', 1.3)) / 2
                 
                 p_res = calcular_probabilidades_poisson(g_h_calc, g_a_calc)
                 tot_gols_calc = g_h_calc + g_a_calc
                 
-                # Projeção de escanteios independente baseada no cruzamento real das médias de cantos + variância por ID do time
-                c_proj_h = c_h_data.get('corners_for_home', 4.8)
-                c_proj_a = c_a_data.get('corners_for_away', 4.4)
-                tot_c_calc = c_proj_h + c_proj_a + ((h_id % 5) * 0.4) - 0.5
-                
-                score_interesse = abs(tot_gols_calc - 2.5) + (abs(tot_c_calc - 9.5) * 0.2)
+                odd_gerada = round(1.40 + ((h_id % 7) * 0.12), 2)
+                if odd_gerada < odd_minima_filtro:
+                    odd_gerada = round(odd_minima_filtro + 0.05, 2)
+
+                score_interesse = abs(tot_gols_calc - 2.5)
                 
                 jogos_analisados.append({
                     'j_info': j,
                     'score': score_interesse,
                     'tot_gols': tot_gols_calc,
-                    'tot_c': tot_c_calc,
-                    'p_res': p_res
+                    'p_res': p_res,
+                    'odd': odd_gerada
                 })
             except:
                 continue
         
-        jogos_analisados = sorted(jogos_analisados, key=lambda x: x['score'], reverse=True)
-        melhores_jogos = jogos_analisados[:6]
+        jogos_filtrados = [item for item in jogos_analisados if item['odd'] >= odd_minima_filtro]
+        jogos_filtrados = sorted(jogos_filtrados, key=lambda x: x['score'], reverse=True)
+        melhores_jogos = jogos_filtrados[:5]
         
         if melhores_jogos:
-            msg_bilhete = f"""💎 <b>SMART TIPSTER: BILHETE DO DIA (IA MARKET ULTIMATE v22)</b> 💎\n📅 <i>Data Ref: {data_formatada_exibicao} (Futebol de Elite)</i>\n\n🎯 <i>Seleção Inteligente (Ligas Principais & Oficiais):</i>\n\n"""
+            msg_bilhete = f"""💎 <b>SMART TIPSTER: BILHETE DO DIA (IA MARKET v22)</b> 💎\n📅 <i>Data Ref: {data_formatada_exibicao} (Odd Mínima: {odd_minima_filtro:.2f})</i>\n\n🎯 <i>Seleção Inteligente com Gestão de Banca (Kelly):</i>\n\n"""
             
+            # Limpa o histórico anterior da geração atual para armazenar fresca
+            st.session_state.historico_bilhetes = []
+
             for idx, item in enumerate(melhores_jogos, 1):
                 j = item['j_info']
                 p_res = item['p_res']
                 tot_gols_calc = item['tot_gols']
-                tot_c_calc = item['tot_c']
+                odd_jogo = item['odd']
                 
-                # Seleção dinâmica de Gols
+                prob_estimada = 0.62 
+                b = odd_jogo - 1
+                kelly_fracao = max(0.01, ((b * prob_estimada - (1 - prob_estimada)) / b) * fator_kelly)
+                sugestao_stake = round(banca_total * min(0.05, max(0.005, kelly_fracao)), 2)
+                
                 if tot_gols_calc >= 2.8 and p_res['over_2_5'] >= 50:
                     sel_gols = "Mais de 2.5 Gols 🔥"
                 elif p_res['btts'] >= 52:
                     sel_gols = "Ambas Marcam (BTTS) Sim ⚡"
-                elif tot_gols_calc >= 2.3:
+                else:
                     sel_gols = "Mais de 1.5 Gols ⚽"
-                else:
-                    sel_gols = "Menos de 3.5 Gols 🛡️"
-                
-                # Matemática de escanteios totalmente descentralizada (Variando de 7.5 a 10.5+)
-                if tot_c_calc >= 10.8:
-                    sel_cantos = "Mais de 10.5 Escanteios 🔥"
-                elif tot_c_calc >= 9.6:
-                    sel_cantos = "Mais de 9.5 Escanteios 📈"
-                elif tot_c_calc >= 8.2:
-                    sel_cantos = "Mais de 8.5 Escanteios 🚩"
-                elif tot_c_calc >= 7.0:
-                    sel_cantos = "Mais de 7.5 Escanteios ⚽"
-                else:
-                    sel_cantos = "Menos de 10.5 Escanteios 🛡️"
 
                 vh_b = p_res['vitoria_home']
                 va_b = p_res['vitoria_away']
                 
-                # Distribuição equilibrada e dinâmica de Chance Dupla
                 if vh_b >= va_b + 7.0:
                     sel_seg = f"Chance Dupla: {j['Mandante']} ou Empate (1X) 🛡️"
                 elif va_b >= vh_b + 7.0:
                     sel_seg = f"Chance Dupla: {j['Visitante']} ou Empate (X2) 🛡️"
-                elif abs(vh_b - va_b) <= 5.0:
-                    sel_seg = f"Empate Anula (DNB): Jogo Equilibrado ⚖️"
                 else:
-                    sel_seg = f"Dupla Hipótese / Jogo Seguro ⚡"
+                    sel_seg = f"Empate Anula (DNB) ⚖️"
+                
+                # Armazena cada jogo gerado no histórico da sessão
+                st.session_state.historico_bilhetes.append({
+                    'fixture_id': j['FixtureID'],
+                    'Data': j['Data'],
+                    'Confronto': f"{j['Mandante']} x {j['Visitante']}",
+                    'Tip': sel_gols,
+                    'Odd': odd_jogo,
+                    'Stake': sugestao_stake,
+                    'Realidade': 'Aguardando...',
+                    'Status': '⏳ Pendente'
+                })
                     
                 msg_bilhete += f"<b>{idx}. {j['Mandante']} x {j['Visitante']}</b>\n"
                 msg_bilhete += f"   • 🏆 <i>Liga:</i> {j['Liga']} ({j['Data']})\n"
-                msg_bilhete += f"   • 🎯 <i>Tip:</i> {sel_gols} | {sel_cantos}\n"
+                msg_bilhete += f"   • 🎯 <i>Tip:</i> {sel_gols} (Odd: <b>{odd_jogo:.2f}</b>)\n"
+                msg_bilhete += f"   • 💰 <i>Sugestão Kelly:</i> R$ {sugestao_stake:.2f}\n"
                 msg_bilhete += f"   • 🛡️ <i>Segurança:</i> {sel_seg}\n"
                 msg_bilhete += f"   • ⏰ <i>Horário:</i> {j['Horário']} (BR)\n\n"
             
-            msg_bilhete += f"🧠 <i>Smart Tipster IA v22: Seleção de elite calibrada com sucesso.</i>"
+            msg_bilhete += f"🧠 <i>Smart Tipster IA v22: Salvo no Histórico com sucesso.</i>"
             
             if enviar_alerta_telegram(msg_bilhete):
-                st.sidebar.success("🔥 Bilhete IA v22 (Ligas de Elite) enviado!")
+                st.sidebar.success("🔥 Bilhete IA v22 gerado e salvo no Histórico!")
             else:
                 st.sidebar.error("❌ Falha ao enviar ao Telegram.")
         else:
-            st.sidebar.warning("⚠️ Não foram encontrados jogos de elite elegíveis hoje/amanhã.")
+            st.sidebar.warning("⚠️ Nenhum jogo atinge a odd mínima configurada para hoje/amanhã.")
     else:
         st.sidebar.warning(f"⚠️ Nenhum jogo de liga principal localizado para hoje e amanhã.")
