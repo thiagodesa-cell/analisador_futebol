@@ -6,8 +6,7 @@ import math
 from datetime import datetime, timedelta, timezone
 import os
 
-# --- IMPORTAÇÃO DO SDK OFICIAL DO GEMINI ---
-from google import genai
+
 
 st.set_page_config(page_title="Painel Pro - Global Trading & IA Preditiva v22.1", layout="wide")
 
@@ -19,14 +18,20 @@ SEASON = datetime.now().year
 TELEGRAM_TOKEN = "8281259090:AAEggXJKpCMxRbhhrcCZymcmNUKWNoOPFfY"
 TELEGRAM_CHAT_ID = "-1004464226419"
 
-# Força o sistema a usar a chave de API comum do AI Studio e ignora o Vertex AI
-os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "false"
-os.environ["AQ.Ab8RN6L-h6_cjeQe4v9pSwQq8tzG-N407YZY4ixRGurNuX6yJA"] = GEMINI_API_KEY_USER  # Sua variável de chave
+from openai import OpenAI
 
-try:
-    client = genai.Client(api_key=GEMINI_API_KEY_USER)
-except Exception as e:
-    client = None
+client = OpenAI(
+  api_key="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"
+)
+
+response = client.responses.create(
+  model="gpt-5.4-mini",
+  input="write a haiku about ai",
+  store=True,
+)
+
+print(response.output_text);
+
 
 # --- DICIONÁRIO DE LIGAS MONITORADAS ---
 LIGAS_MONITORADAS = {
