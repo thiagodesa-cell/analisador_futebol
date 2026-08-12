@@ -33,12 +33,12 @@ LIGAS_MONITORADAS = {
     11: "Copa Sudamericana"
 }
 
-# --- VERSÃO 22 COM TABELA DETALHADA DE CARTÕES JOGO A JOGO ---
+# --- VERSÃO 22 COM CORREÇÃO DE H2H & CARTÕES ---
 def obter_chave_atualizacao():
     agora = datetime.now(FUSO_BR)
     return agora.strftime("%Y-%m-%d_%H")
 
-CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v22_ai_market_cards_detail"  
+CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v22_ai_market_cards_detail_fixed"  
 DATA_HOJE_STR = datetime.now(FUSO_BR).strftime("%Y-%m-%d")
 
 # --- CONVERSOR INTELIGENTE DE FUSO HORÁRIO (UTC -> BRASÍLIA UTC-3) ---
@@ -78,13 +78,20 @@ def calcular_probabilidades_poisson(lambda_home, lambda_away, max_gols=6):
             else:
                 prob_empate += p
                 
+    # Normalização rigorosa para evitar distorções de soma
+    total_1x2 = prob_vitoria_home + prob_vitoria_away + prob_empate
+    if total_1x2 > 0:
+        prob_vitoria_home = (prob_vitoria_home / total_1x2) * 100
+        prob_vitoria_away = (prob_vitoria_away / total_1x2) * 100
+        prob_empate = (prob_empate / total_1x2) * 100
+
     return {
         'over_2_5': prob_over_2_5 * 100,
         'under_2_5': prob_under_2_5 * 100,
         'btts': prob_btts * 100,
-        'vitoria_home': prob_vitoria_home * 100,
-        'vitoria_away': prob_vitoria_away * 100,
-        'empate': prob_empate * 100
+        'vitoria_home': prob_vitoria_home,
+        'vitoria_away': prob_vitoria_away,
+        'empate': prob_empate
     }
 
 # --- BOTÃO DE SELEÇÃO DE LIGA NA BARRA LATERAL ---
@@ -911,6 +918,7 @@ else:
                 
                 confianca_ia = min(95, max(55, int(50 + abs(probs_poisson['vitoria_home'] - probs_poisson['vitoria_away']) * 0.7)))
 
+                # CORREÇÃO DOS LABELS DE VITÓRIA (VINCULADOS CORRETAMENTE AOS NOMES REAIS)
                 sc1, sc2, sc3, sc4 = st.columns(4)
                 sc1.metric(f"Prob. Vitória ({time_principal})", f"{probs_poisson['vitoria_home']:.1f}%")
                 sc2.metric(f"Prob. Vitória ({adversario})", f"{probs_poisson['vitoria_away']:.1f}%")
@@ -1021,7 +1029,7 @@ else:
                     elif "gols" in pergunta_lower or "over" in pergunta_lower or "btts" in pergunta_lower:
                         resposta_ia = f"Para **{time_principal}**, a média atual de gols marcados é de `{stats_t1.get('gols_feitos_media', 0):.2f}` e sofridos de `{stats_t1.get('gols_sofridos_media', 0):.2f}`. O motor dinâmico evita travar em linhas fixas, avaliando se o cenário pede Over, Under ou Ambas Marcam."
                     elif "cartão" in pergunta_lower or "cartoes" in pergunta_lower:
-                        resposta_ia = f"A média atual de cartões pró para **{time_principal}** é de `{corners_t1.get('media_cartoes_pro', 0):.2f}` e contra é de `{corners_t1.get('media_cartoes_contra', 0):.2f}`. Você pode conferir o detalhamento completo jogo a jogo na aba 'Painel IA & Elenco'."
+                        resposta_ia = f"A média atual de cartões pró para **{time_principal}** is de `{corners_t1.get('media_cartoes_pro', 0):.2f}` e contra é de `{corners_t1.get('media_cartoes_contra', 0):.2f}`. Você pode conferir o detalhamento completo jogo a jogo na aba 'Painel IA & Elenco'."
                     elif "escanteio" in pergunta_lower or "cantos" in pergunta_lower:
                         cantos_total = corners_t1.get('corners_for_geral', 0) + corners_t1.get('corners_ag_geral', 0)
                         resposta_ia = f"A média combinada de escanteios (pró + contra) para **{time_principal}** é de aproximadamente `{cantos_total:.2f}` por partida."
