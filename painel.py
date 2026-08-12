@@ -36,7 +36,6 @@ LIGAS_MONITORADAS = {
 # --- VERSÃO 22 COM TABELA DETALHADA DE CARTÕES JOGO A JOGO ---
 def obter_chave_atualizacao():
     agora = datetime.now(FUSO_BR)
-    # Atualização a cada hora ("%H") para forçar a renovação do cache e atualizar os status dos jogos.
     return agora.strftime("%Y-%m-%d_%H")
 
 CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v22_ai_market_cards_detail"  
@@ -53,7 +52,6 @@ def converter_para_horario_brasilia(iso_string):
 
 # --- MOTOR DE INTELIGÊNCIA ARTIFICIAL: DISTRIBUIÇÃO DE POISSON & PROBABILIDADES ---
 def calcular_probabilidades_poisson(lambda_home, lambda_away, max_gols=6):
-    """Calcula a matriz de probabilidades de placares usando a Distribuição de Poisson."""
     def poisson_prob(lmbda, k):
         return (math.exp(-lmbda) * (lmbda ** k)) / math.factorial(k)
     
@@ -392,7 +390,6 @@ def buscar_jogos_liga(league_id, season, key, data_cache):
             jogos_lista = []
             for f in fixtures:
                 date_str = f['fixture']['date']
-                # Puxamos o formato ISO (AAAA-MM-DD) para fazer o filtro matemático na exibição
                 iso_date_local, match_date_fmt, match_time = converter_para_horario_brasilia(date_str)
                 
                 status = f['fixture']['status']['short']
@@ -771,7 +768,6 @@ else:
             if not df_agenda_time.empty:
                 hoje_str = datetime.now(FUSO_BR).strftime("%Y-%m-%d")
                 
-                # Filtra e agrupa os jogos recentes e futuros com base na data real
                 jogos_passados = df_agenda_time[df_agenda_time['DataISO'] < hoje_str].tail(3)
                 jogos_futuros = df_agenda_time[df_agenda_time['DataISO'] >= hoje_str].head(5)
                 
@@ -949,6 +945,7 @@ else:
                         vh = probs_poisson['vitoria_home']
                         va = probs_poisson['vitoria_away']
                         
+                        # CORREÇÃO DA LÓGICA DE DUPLA CHANCE E DNB (DINÂMICA ENTRE TIME PRINCIPAL E ADVERSÁRIO)
                         if vh >= va + 5.0:
                             dnb_sug = f"Empate Anula: {time_principal} 🟢"
                             dupla_sug = f"Chance Dupla: {time_principal} ou Empate (1X) 🛡️"
