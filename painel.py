@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import requests
@@ -6,12 +5,9 @@ import time
 import math
 from datetime import datetime, timedelta, timezone
 
-st.set_page_config(page_title="Painel Pro - Global Trading & IA Preditiva v24 Max Profit", layout="wide")
+st.set_page_config(page_title="Painel Pro - Global Trading & IA Preditiva v26 Smart", layout="wide")
 
-# --- CONFIGURAÇÃO DE FUSO HORÁRIO GLOBAL ---
 FUSO_BR = timezone(timedelta(hours=-3))
-
-# --- CONFIGURAÇÃO DA API E TELEGRAM ---
 API_KEY_FIXA = "E89cc081ecbaaf1a7074e878c1cae0ff"
 SEASON = datetime.now(FUSO_BR).year 
 TELEGRAM_TOKEN = "8281259090:AAEggXJKpCMxRbhhrcCZymcmNUKWNoOPFfY"
@@ -27,7 +23,7 @@ LIGAS_MONITORADAS = {
 def obter_chave_atualizacao():
     return datetime.now(FUSO_BR).strftime("%Y-%m-%d_%H")
 
-CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v24_max_profit" 
+CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v26_smart_tipster" 
 DATA_HOJE_STR = datetime.now(FUSO_BR).strftime("%Y-%m-%d")
 
 def converter_para_horario_brasilia(iso_string):
@@ -38,7 +34,6 @@ def converter_para_horario_brasilia(iso_string):
     except Exception:
         return iso_string[:10], f"{iso_string[8:10]}/{iso_string[5:7]}/{iso_string[0:4]}", iso_string[11:16]
 
-# --- MOTOR DE INTELIGÊNCIA ARTIFICIAL: POISSON REFINADO (MAX PROFIT) ---
 def calcular_probabilidades_poisson(lambda_home, lambda_away, max_gols=6):
     def poisson_prob(lmbda, k):
         return (math.exp(-lmbda) * (lmbda ** k)) / math.factorial(k)
@@ -98,7 +93,7 @@ st.sidebar.header("⚙️ Configurações de Análise IA")
 
 if LEAGUE_ID:
     times_disponiveis = sorted(list(TEAM_IDS.keys())) if TEAM_IDS else []
-    time_principal = st.sidebar.selectbox("Escolha o Time", times_disponiveis, index=None)
+    time_principal = st.sidebar.selectbox("Escolha o Time (Mandante/Favorito)", times_disponiveis, index=None)
     id_time1 = TEAM_IDS[time_principal] if time_principal else None
 else:
     time_principal = id_time1 = None
@@ -122,11 +117,12 @@ def buscar_estatisticas_time(team_id, league_id, season, key, data_cache):
     except: return {'jogos':0,'gf_home':0.0,'ga_home':0.0,'gf_away':0.0,'ga_away':0.0}
 
 @st.cache_data(persist="disk")
-def buscar_medias_escanteios(team_id, league_id, season, key, data_cache):
-    url = f"https://v3.football.api-sports.io/fixtures?league={league_id}&season={season}&team={team_id}&last=10"
+def buscar_medias_escanteios_e_chutes_inteligente(team_id, league_id, season, key, data_cache):
+    url = f"https://v3.football.api-sports.io/fixtures?league={league_id}&season={season}&team={team_id}&last=12"
     headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
-    cantos_pro_casa, cantos_contra_casa, cantos_pro_fora, cantos_contra_fora = [], [], [], []
-    cartoes_pro, cartoes_contra = [], []
+    
+    cantos_pro_casa, cantos_contra_casa, chutes_casa = [], [], []
+    cantos_pro_fora, cantos_contra_fora, chutes_fora = [], [], []
     
     try:
         data = requests.get(url, headers=headers).json()
@@ -136,35 +132,39 @@ def buscar_medias_escanteios(team_id, league_id, season, key, data_cache):
             time.sleep(0.12)
             data_s = requests.get(f"https://v3.football.api-sports.io/fixtures/statistics?fixture={f_id}", headers=headers).json()
             
-            t_corners = o_corners = t_yellow = o_yellow = 0
+            t_corners = o_corners = t_shots = 0
             if data_s.get('results', 0) > 0:
                 for item in data_s['response']:
                     for s in item['statistics']:
                         if s['type'] == 'Corner Kicks' and s['value'] is not None:
                             if item['team']['id'] == team_id: t_corners = int(s['value'])
                             else: o_corners = int(s['value'])
-                        elif s['type'] == 'Yellow Cards' and s['value'] is not None:
-                            if item['team']['id'] == team_id: t_yellow = int(s['value'])
-                            else: o_yellow = int(s['value'])
+                        elif s['type'] == 'Shots Total' and s['value'] is not None:
+                            if item['team']['id'] == team_id: t_shots = int(s['value'])
                             
             if is_home:
                 cantos_pro_casa.append(t_corners)
                 cantos_contra_casa.append(o_corners)
+                if t_shots > 0: chutes_casa.append(t_shots)
             else:
                 cantos_pro_fora.append(t_corners)
                 cantos_contra_fora.append(o_corners)
-                
-            cartoes_pro.append(t_yellow)
-            cartoes_contra.append(o_yellow)
+                if t_shots > 0: chutes_fora.append(t_shots)
 
         return {
             'corners_for_home': sum(cantos_pro_casa)/max(len(cantos_pro_casa),1), 
             'corners_ag_home': sum(cantos_contra_casa)/max(len(cantos_contra_casa),1),
             'corners_for_away': sum(cantos_pro_fora)/max(len(cantos_pro_fora),1), 
             'corners_ag_away': sum(cantos_contra_fora)/max(len(cantos_contra_fora),1),
-            'media_cartoes_pro': sum(cartoes_pro)/max(len(cartoes_pro),1)
+            'media_chutes_home': sum(chutes_casa)/max(len(chutes_casa),1),
+            'media_chutes_away': sum(chutes_fora)/max(len(chutes_fora),1)
         }
-    except: return {'corners_for_home': 4.5, 'corners_ag_home': 4.5, 'corners_for_away': 4.5, 'corners_ag_away': 4.5, 'media_cartoes_pro': 2.0}
+    except: 
+        return {
+            'corners_for_home': 4.5, 'corners_ag_home': 4.5, 
+            'corners_for_away': 4.0, 'corners_ag_away': 5.0,
+            'media_chutes_home': 13.0, 'media_chutes_away': 11.0
+        }
 
 @st.cache_data(persist="disk")
 def buscar_jogos_ligas_monitoradas_por_data(data_str, key, cache_key):
@@ -180,93 +180,107 @@ def buscar_jogos_ligas_monitoradas_por_data(data_str, key, cache_key):
     except: return []
 
 if id_time1 and LEAGUE_ID:
-    st.title(f"⚽ Painel Preditivo Pro v24 Max Profit - {opcao_liga}")
+    st.title(f"⚽ Painel Preditivo v26 Smart Tipster - {opcao_liga}")
     stats_t1 = buscar_estatisticas_time(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-    corners_t1 = buscar_medias_escanteios(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    metrics_t1 = buscar_medias_escanteios_e_chutes_inteligente(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
-    st.subheader("🤖 Simulador H2H & Motor de Alta Lucratividade (EV+)")
+    st.subheader("🤖 Simulador Inteligente H2H & Varredura Bi-direcional")
     adversario = st.selectbox("Escolha o Time Adversário", [t for t in sorted(list(TEAM_IDS.keys())) if t != time_principal])
     
     if adversario:
         id_time2 = TEAM_IDS[adversario]
         stats_t2 = buscar_estatisticas_time(id_time2, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-        corners_t2 = buscar_medias_escanteios(id_time2, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+        metrics_t2 = buscar_medias_escanteios_e_chutes_inteligente(id_time2, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
         
         gols_t1 = (stats_t1['gf_home'] + stats_t2['ga_away']) / 2
         gols_t2 = (stats_t2['gf_away'] + stats_t1['ga_home']) / 2
         probs_poisson = calcular_probabilidades_poisson(gols_t1, gols_t2)
         total_gols = gols_t1 + gols_t2
         
-        c_proj_t1 = (corners_t1['corners_for_home'] + corners_t2['corners_ag_away']) / 2
-        c_proj_t2 = (corners_t2['corners_for_away'] + corners_t1['corners_ag_home']) / 2
+        # Projeção inteligente: Avalia se o mandante em casa ou o visitante fora é o motor ofensivo
+        chutes_ht_t1 = (metrics_t1['media_chutes_home'] * 0.45)
+        chutes_ht_t2 = (metrics_t2['media_chutes_away'] * 0.45)
+        
+        c_proj_t1 = (metrics_t1['corners_for_home'] + metrics_t2['corners_ag_away']) / 2
+        c_proj_t2 = (metrics_t2['corners_for_away'] + metrics_t1['corners_ag_home']) / 2
         escanteios_jogo = c_proj_t1 + c_proj_t2
         
-        st.markdown("### 💡 Indicações de Valor Profissional (Max Profit)")
-        tip_c1, tip_c2 = st.columns(2)
+        col_res1, col_res2 = st.columns(2)
         
-        with tip_c1:
+        with col_res1:
             with st.container(border=True):
-                st.markdown("#### ⚽ Mercado de Gols")
-                if total_gols >= 2.8 and probs_poisson['over_2_5'] >= 68: sel_gols = "Mais de 2.5 Gols 🔥 (Alta Confiança)"
-                elif probs_poisson['btts'] >= 62 and total_gols >= 2.5: sel_gols = "Ambas Marcam (BTTS) Sim ⚡"
-                elif total_gols <= 1.8 and probs_poisson['under_2_5'] >= 68: sel_gols = "Menos de 2.5 Gols 🛡️"
-                else: sel_gols = "NO BET (Proteger Banca) 🚫"
-                st.markdown(f"- **Filtro Pro:** `{sel_gols}`")
+                st.markdown("#### 🎯 Alvo Principal de Chutes HT")
+                if chutes_ht_t1 >= 5.2:
+                    sel_principal = f"1º Tempo - {time_principal} (Mandante) Mais de 5.5 Chutes 🔥"
+                    chutes_val = chutes_ht_t1
+                elif chutes_ht_t2 >= 5.2:
+                    sel_principal = f"1º Tempo - {adversario} (Visitante Forte) Mais de 5.5 Chutes 🔥"
+                    chutes_val = chutes_ht_t2
+                else:
+                    sel_principal = "NO BET (Volume de Chutes Baixo) 🚫"
+                    chutes_val = max(chutes_ht_t1, chutes_ht_t2)
+                st.markdown(f"- **Sugestão Inteligente:** `{sel_principal}`")
+                st.markdown(f"- *Maior Volume Projetado HT:* **{chutes_val:.1f}**")
 
-        with tip_c2:
+        with col_res2:
             with st.container(border=True):
-                st.markdown("#### 🚩 Mercado de Escanteios")
-                if escanteios_jogo >= 11.5: sel_cantos = "Mais de 10.5 Escanteios 🔥"
-                elif escanteios_jogo >= 9.8: sel_cantos = "Mais de 8.5 Escanteios ⚡"
-                else: sel_cantos = "NO BET (Sem Padrão de Cantos) 🚫"
-                st.markdown(f"- **Filtro Pro:** `{sel_cantos}`")
+                st.markdown("#### 🍒 A Cereja do Bolo (Cantos & Pressão)")
+                if escanteios_jogo >= 10.5:
+                    cereja = "Mais de 1.5 Escanteios no 1º Tempo / Pressão HT 🚀"
+                else:
+                    cereja = "Monitorar Pressão Ao Vivo (Live 10 Min) ⏱️"
+                st.markdown(f"- **Estratégia Extra:** `{cereja}`")
+                st.markdown(f"- *Projeção de Escanteios Totais:* **{escanteios_jogo:.1f}**")
 
-# --- DISPARADOR TELEGRAM: LISTA DE VALOR MAX PROFIT ---
+# --- DISPARADOR TELEGRAM: VARREDURA INTELIGENTE BI-DIRECIONAL ---
 st.sidebar.markdown("---")
-if st.sidebar.button("💎 Enviar 'Lista de Valor Max Profit' (Telegram)", key="btn_bilhete_dia_max"):
-    with st.spinner("Varrendo partidas de hoje com filtro profissional de alta assertividade..."):
+if st.sidebar.button("💎 Enviar Varredura Inteligente (Telegram)", key="btn_bilhete_smart"):
+    with st.spinner("Analisando ambos os lados (mandante e visitante)..."):
         jogos_hoje = buscar_jogos_ligas_monitoradas_por_data(DATA_HOJE_STR, API_KEY_FIXA, CHAVE_ATUALIZACAO)
         
         if jogos_hoje:
-            msg_bilhete = f"💎 <b>SMART TIPSTER: LISTA MAX PROFIT (EV+)</b> 💎\n📅 <i>{datetime.now(FUSO_BR).strftime('%d/%m/%Y')}</i>\n\n🎯 <i>Dica de Ouro: Apostas simples focadas em valor estatístico. Proteja sua banca!</i>\n\n"
+            msg_bilhete = f"💎 <b>SMART TIPSTER: VARREDURA INTELIGENTE</b> 💎\n📅 <i>{datetime.now(FUSO_BR).strftime('%d/%m/%Y')}</i>\n\n🎯 <i>Análise cruzada de Mandante (Casa) x Visitante (Fora)!</i>\n\n"
             contador = 0
             
-            for j in jogos_hoje[:12]: 
+            for j in jogos_hoje[:14]: 
                 try:
                     s_h = buscar_estatisticas_time(j['HomeID'], j['LeagueID'], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
                     s_a = buscar_estatisticas_time(j['AwayID'], j['LeagueID'], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-                    c_h = buscar_medias_escanteios(j['HomeID'], j['LeagueID'], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-                    c_a = buscar_medias_escanteios(j['AwayID'], j['LeagueID'], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+                    m_h = buscar_medias_escanteios_e_chutes_inteligente(j['HomeID'], j['LeagueID'], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+                    m_a = buscar_medias_escanteios_e_chutes_inteligente(j['AwayID'], j['LeagueID'], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
                     
                     g_h_calc = (s_h.get('gf_home', 1.2) + s_a.get('ga_away', 1.2)) / 2
                     g_a_calc = (s_a.get('gf_away', 1.2) + s_h.get('ga_home', 1.2)) / 2
-                    p_res = calcular_probabilidades_poisson(g_h_calc, g_a_calc)
                     
-                    tot_gols = g_h_calc + g_a_calc
-                    tot_c_calc = ((c_h.get('corners_for_home', 4.5) + c_a.get('corners_ag_away', 4.5)) / 2) + ((c_a.get('corners_for_away', 4.5) + c_h.get('corners_ag_home', 4.5)) / 2)
+                    chutes_ht_mandante = m_h['media_chutes_home'] * 0.45
+                    chutes_ht_visitante = m_a['media_chutes_away'] * 0.45
+                    tot_c_calc = ((m_h['corners_for_home'] + m_a['corners_ag_away']) / 2) + ((m_a['corners_for_away'] + m_h['corners_ag_home']) / 2)
                     
-                    sel_gols = sel_cantos = None
+                    sel_chutes = sel_cereja = None
                     
-                    # Critérios altamente seletivos idênticos aos grandes tipsters
-                    if tot_gols >= 2.8 and p_res['over_2_5'] >= 68: sel_gols = "Mais de 2.5 Gols (Confiança Alta 🔥)"
-                    elif p_res['btts'] >= 62 and tot_gols >= 2.5: sel_gols = "Ambas Marcam (BTTS) Sim ⚡"
+                    # Varredura inteligente: Identifica quem é o motor de finalizações da partida
+                    if chutes_ht_mandante >= 5.0:
+                        sel_chutes = f"1º Tempo - {j['Mandante']} (Casa) Mais de 5.5 Chutes 🔥"
+                    elif chutes_ht_visitante >= 5.0:
+                        sel_chutes = f"1º Tempo - {j['Visitante']} (Fora de Casa) Mais de 5.5 Chutes 🔥"
                     
-                    if tot_c_calc >= 11.5: sel_cantos = "Mais de 10.5 Escanteios"
-                    elif tot_c_calc >= 10.0: sel_cantos = "Mais de 8.5 Escanteios"
+                    if tot_c_calc >= 10.2:
+                        sel_cereja = "🍒 Cereja do Bolo: Mais de 1.5 Escanteios no 1º Tempo / Pressão HT"
                     
-                    if sel_gols or sel_cantos:
+                    if sel_chutes or sel_cereja:
                         contador += 1
                         msg_bilhete += f"⚽ <b>{j['Mandante']} x {j['Visitante']}</b> [{j['Horário']}]\n"
                         msg_bilhete += f"   • 🏆 {j['Liga']}\n"
-                        if sel_gols: msg_bilhete += f"   • 🎯 {sel_gols}\n"
-                        if sel_cantos: msg_bilhete += f"   • 🚩 {sel_cantos}\n\n"
+                        if sel_chutes: msg_bilhete += f"   • 🎯 {sel_chutes}\n"
+                        if sel_cereja: msg_bilhete += f"   • {sel_cereja}\n"
+                        msg_bilhete += "\n"
                         
                 except Exception: continue
                 
             if contador > 0:
-                if enviar_alerta_telegram(msg_bilhete): st.sidebar.success("🔥 Lista Max Profit enviada com sucesso!")
+                if enviar_alerta_telegram(msg_bilhete): st.sidebar.success("🔥 Varredura Inteligente enviada ao Telegram!")
                 else: st.sidebar.error("❌ Erro ao enviar para o Telegram.")
             else:
-                st.sidebar.warning("⚠️ O motor operou com rigor máximo e não encontrou entradas com +68% de segurança hoje. Poupar a banca é ganhar dinheiro!")
+                st.sidebar.warning("⚠️ O motor não encontrou oportunidades filtradas com rigor hoje.")
         else:
             st.sidebar.warning("⚠️ Não há jogos hoje nas ligas monitoradas.")
