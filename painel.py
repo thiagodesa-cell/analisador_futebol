@@ -5,7 +5,7 @@ import time
 import math
 from datetime import datetime, timedelta, timezone
 
-st.set_page_config(page_title="Painel Pro - Tipster Elite v28", layout="wide")
+st.set_page_config(page_title="Painel Pro - Tipster Full Analytics v29", layout="wide")
 
 FUSO_BR = timezone(timedelta(hours=-3))
 API_KEY_FIXA = "E89cc081ecbaaf1a7074e878c1cae0ff"
@@ -23,7 +23,7 @@ LIGAS_MONITORADAS = {
 def obter_chave_atualizacao():
     return datetime.now(FUSO_BR).strftime("%Y-%m-%d_%H")
 
-CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v28_tipster_elite" 
+CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v29_full_analytics" 
 DATA_HOJE_STR = datetime.now(FUSO_BR).strftime("%Y-%m-%d")
 
 def converter_para_horario_brasilia(iso_string):
@@ -117,12 +117,11 @@ def buscar_estatisticas_time(team_id, league_id, season, key, data_cache):
     except: return {'jogos':0,'gf_home':0.0,'ga_home':0.0,'gf_away':0.0,'ga_away':0.0}
 
 @st.cache_data(persist="disk")
-def buscar_medias_escanteios_e_chutes_inteligente(team_id, league_id, season, key, data_cache):
+def buscar_metricas_completas_avancadas(team_id, league_id, season, key, data_cache):
     url = f"https://v3.football.api-sports.io/fixtures?league={league_id}&season={season}&team={team_id}&last=12"
     headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
     
-    cantos_pro_casa, cantos_contra_casa, chutes_casa = [], [], []
-    cantos_pro_fora, cantos_contra_fora, chutes_fora = [], [], []
+    c_pro, c_contra, s_tot, s_gol, faltas_lista = [], [], [], [], []
     
     try:
         data = requests.get(url, headers=headers).json()
@@ -132,39 +131,37 @@ def buscar_medias_escanteios_e_chutes_inteligente(team_id, league_id, season, ke
             time.sleep(0.12)
             data_s = requests.get(f"https://v3.football.api-sports.io/fixtures/statistics?fixture={f_id}", headers=headers).json()
             
-            t_corners = o_corners = t_shots = 0
+            t_c = o_c = t_st = t_sg = t_f = 0
             if data_s.get('results', 0) > 0:
                 for item in data_s['response']:
                     for s in item['statistics']:
-                        if s['type'] == 'Corner Kicks' and s['value'] is not None:
-                            if item['team']['id'] == team_id: t_corners = int(s['value'])
-                            else: o_corners = int(s['value'])
-                        elif s['type'] == 'Shots Total' and s['value'] is not None:
-                            if item['team']['id'] == team_id: t_shots = int(s['value'])
+                        val = s['value']
+                        if val is not None:
+                            if s['type'] == 'Corner Kicks':
+                                if item['team']['id'] == team_id: t_c = int(val)
+                                else: o_c = int(val)
+                            elif s['type'] == 'Shots Total':
+                                if item['team']['id'] == team_id: t_st = int(val)
+                            elif s['type'] == 'Shots on Goal':
+                                if item['team']['id'] == team_id: t_sg = int(val)
+                            elif s['type'] == 'Fouls':
+                                if item['team']['id'] == team_id: t_f = int(val)
                             
-            if is_home:
-                cantos_pro_casa.append(t_corners)
-                cantos_contra_casa.append(o_corners)
-                if t_shots > 0: chutes_casa.append(t_shots)
-            else:
-                cantos_pro_fora.append(t_corners)
-                cantos_contra_fora.append(o_corners)
-                if t_shots > 0: chutes_fora.append(t_shots)
+            c_pro.append(t_c)
+            c_contra.append(o_c)
+            if t_st > 0: s_tot.append(t_st)
+            if t_sg > 0: s_gol.append(t_sg)
+            if t_f > 0: faltas_lista.append(t_f)
 
+        div = max(len(c_pro), 1)
         return {
-            'corners_for_home': sum(cantos_pro_casa)/max(len(cantos_pro_casa),1), 
-            'corners_ag_home': sum(cantos_contra_casa)/max(len(cantos_contra_casa),1),
-            'corners_for_away': sum(cantos_pro_fora)/max(len(cantos_pro_fora),1), 
-            'corners_ag_away': sum(cantos_contra_fora)/max(len(cantos_contra_fora),1),
-            'media_chutes_home': sum(chutes_casa)/max(len(chutes_casa),1),
-            'media_chutes_away': sum(chutes_fora)/max(len(chutes_fora),1)
+            'corners_for': sum(c_pro)/div, 'corners_ag': sum(c_contra)/div,
+            'shots_total': sum(s_tot)/max(len(s_tot), 1),
+            'shots_on_goal': sum(s_gol)/max(len(s_gol), 1),
+            'fouls': sum(faltas_lista)/max(len(faltas_lista), 1)
         }
     except: 
-        return {
-            'corners_for_home': 4.5, 'corners_ag_home': 4.5, 
-            'corners_for_away': 4.0, 'corners_ag_away': 5.0,
-            'media_chutes_home': 12.0, 'media_chutes_away': 11.0
-        }
+        return {'corners_for': 4.5, 'corners_ag': 4.5, 'shots_total': 12.0, 'shots_on_goal': 4.2, 'fouls': 13.5}
 
 @st.cache_data(persist="disk")
 def buscar_jogos_ligas_monitoradas_por_data(data_str, key, cache_key):
@@ -180,61 +177,44 @@ def buscar_jogos_ligas_monitoradas_por_data(data_str, key, cache_key):
     except: return []
 
 if id_time1 and LEAGUE_ID:
-    st.title(f"⚽ Painel Preditivo v28 Tipster Elite - {opcao_liga}")
+    st.title(f"⚽ Painel Full Analytics v29 - {opcao_liga}")
     stats_t1 = buscar_estatisticas_time(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-    metrics_t1 = buscar_medias_escanteios_e_chutes_inteligente(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    metrics_t1 = buscar_metricas_completas_avancadas(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
-    st.subheader("🤖 Simulador Tipster Pro (H2H & Chutes HT)")
+    st.subheader("🤖 Simulador Completo (Chutes, Chutes ao Gol, Cantos e Faltas)")
     adversario = st.selectbox("Escolha o Time Adversário", [t for t in sorted(list(TEAM_IDS.keys())) if t != time_principal])
     
     if adversario:
         id_time2 = TEAM_IDS[adversario]
         stats_t2 = buscar_estatisticas_time(id_time2, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-        metrics_t2 = buscar_medias_escanteios_e_chutes_inteligente(id_time2, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+        metrics_t2 = buscar_metricas_completas_avancadas(id_time2, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
         
         gols_t1 = (stats_t1['gf_home'] + stats_t2['ga_away']) / 2
         gols_t2 = (stats_t2['gf_away'] + stats_t1['ga_home']) / 2
-        probs_poisson = calcular_probabilidades_poisson(gols_t1, gols_t2)
         total_gols = gols_t1 + gols_t2
         
-        chutes_ht_t1 = (metrics_t1['media_chutes_home'] * 0.45)
-        chutes_ht_t2 = (metrics_t2['media_chutes_away'] * 0.45)
+        chutes_ht_t1 = metrics_t1['shots_total'] * 0.45
+        chutes_alvo_t1 = metrics_t1['shots_on_goal']
+        cantos_jogo = metrics_t1['corners_for'] + metrics_t2['corners_for']
+        faltas_jogo = metrics_t1['fouls'] + metrics_t2['fouls']
         
-        c_proj_t1 = (metrics_t1['corners_for_home'] + metrics_t2['corners_ag_away']) / 2
-        c_proj_t2 = (metrics_t2['corners_for_away'] + metrics_t1['corners_ag_home']) / 2
-        escanteios_jogo = c_proj_t1 + c_proj_t2
-        
-        nota_jogo = 0
-        destaques = []
-        if chutes_ht_t1 >= 5.2 or chutes_ht_t2 >= 5.2:
-            nota_jogo += 3
-            time_alvo = time_principal if chutes_ht_t1 >= chutes_ht_t2 else adversario
-            destaques.append(f"🎯 1º Tempo - {time_alvo} Mais de 5.5 Chutes 🔥")
-        if escanteios_jogo >= 11.5:
-            nota_jogo += 2
-            destaques.append("🍒 Cereja do Bolo: Pressão Alta / Mais de 2.5 Escanteios HT")
-        if total_gols >= 2.5:
-            nota_jogo += 2
-            destaques.append("⚡ Tendência de Gols (Over 2.5 / Asiático)")
-
         col_res1, col_res2 = st.columns(2)
-        
         with col_res1:
             with st.container(border=True):
-                st.markdown(f"#### 📊 Nota de Oportunidade: `{nota_jogo} / 7 pts`")
-                for d in destaques:
-                    st.markdown(f"- {d}")
-
+                st.markdown("#### 🎯 Projeção de Finalizações")
+                st.markdown(f"- *Chutes Totais HT (1º T):* **{chutes_ht_t1:.1f}**")
+                st.markdown(f"- *Chutes no Alvo Médios:* **{chutes_alvo_t1:.1f}**")
+                st.markdown(f"- *Expectativa de Gols (Poisson):* **{total_gols:.2f}**")
         with col_res2:
             with st.container(border=True):
-                st.markdown("#### 📈 Métricas de Volume")
-                st.markdown(f"- *Maior Volume de Chutes HT:* **{max(chutes_ht_t1, chutes_ht_t2):.1f}**")
-                st.markdown(f"- *Projeção Total de Cantos:* **{escanteios_jogo:.1f}**")
+                st.markdown("#### 🚩 Cantos & Faltas")
+                st.markdown(f"- *Projeção de Escanteios:* **{cantos_jogo:.1f}**")
+                st.markdown(f"- *Média Estimada de Faltas:* **{faltas_jogo:.1f}**")
 
-# --- DISPARADOR TELEGRAM: TOP 5 RANKING COM FILTROS DE TIPSTER ELITE ---
+# --- DISPARADOR TELEGRAM COM DADOS COMPLETOS E FLUXO RICO ---
 st.sidebar.markdown("---")
-if st.sidebar.button("💎 Enviar Top 5 Melhores Entradas (Telegram)", key="btn_bilhete_ranking"):
-    with st.spinner("Varrendo e pontuando as melhores oportunidades do dia..."):
+if st.sidebar.button("💎 Enviar Top 6 Melhores Entradas (Telegram)", key="btn_bilhete_full"):
+    with st.spinner("Varrendo todos os jogos do dia com métricas completas..."):
         jogos_hoje = buscar_jogos_ligas_monitoradas_por_data(DATA_HOJE_STR, API_KEY_FIXA, CHAVE_ATUALIZACAO)
         
         if jogos_hoje:
@@ -244,59 +224,57 @@ if st.sidebar.button("💎 Enviar Top 5 Melhores Entradas (Telegram)", key="btn_
                 try:
                     s_h = buscar_estatisticas_time(j['HomeID'], j['LeagueID'], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
                     s_a = buscar_estatisticas_time(j['AwayID'], j['LeagueID'], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-                    m_h = buscar_medias_escanteios_e_chutes_inteligente(j['HomeID'], j['LeagueID'], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-                    m_a = buscar_medias_escanteios_e_chutes_inteligente(j['AwayID'], j['LeagueID'], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+                    m_h = buscar_metricas_completas_avancadas(j['HomeID'], j['LeagueID'], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+                    m_a = buscar_metricas_completas_avancadas(j['AwayID'], j['LeagueID'], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
                     
-                    g_h_calc = (s_h.get('gf_home', 1.2) + s_a.get('ga_away', 1.2)) / 2
-                    g_a_calc = (s_a.get('gf_away', 1.2) + s_h.get('ga_home', 1.2)) / 2
+                    tot_gols = ((s_h.get('gf_home', 1.2) + s_a.get('ga_away', 1.2)) / 2) + ((s_a.get('gf_away', 1.2) + s_h.get('ga_home', 1.2)) / 2)
+                    c_tot = m_h['corners_for'] + m_a['corners_for']
+                    s_tot_game = m_h['shots_total'] + m_a['shots_total']
+                    s_gol_game = m_h['shots_on_goal'] + m_a['shots_on_goal']
+                    f_tot_game = m_h['fouls'] + m_a['fouls']
                     
-                    chutes_ht_mandante = m_h['media_chutes_home'] * 0.45
-                    chutes_ht_visitante = m_a['media_chutes_away'] * 0.45
-                    tot_c_calc = ((m_h['corners_for_home'] + m_a['corners_ag_away']) / 2) + ((m_a['corners_for_away'] + m_h['corners_ag_home']) / 2)
-                    tot_gols = g_h_calc + g_a_calc
+                    chutes_ht_h = m_h['shots_total'] * 0.45
+                    chutes_ht_a = m_a['shots_total'] * 0.45
                     
-                    pontos = 0
-                    sugestoes_jogo = []
+                    # Sistema de Pontuação flexível para garantir que nenhum jogo bom fique de fora
+                    score = 2
+                    if c_tot >= 9.0: score += 1
+                    if s_tot_game >= 22.0: score += 1
+                    if s_gol_game >= 7.0: score += 1
+                    if tot_gols >= 2.2: score += 1
                     
-                    if chutes_ht_mandante >= 5.2:
-                        pontos += 3
-                        sugestoes_jogo.append(f"🎯 1º T - {j['Mandante']} (Casa) Mais de 5.5 Chutes 🔥")
-                    elif chutes_ht_visitante >= 5.2:
-                        pontos += 3
-                        sugestoes_jogo.append(f"🎯 1º T - {j['Visitante']} (Fora) Mais de 5.5 Chutes 🔥")
-                        
-                    if tot_c_calc >= 11.5:
-                        pontos += 2
-                        sugestoes_jogo.append("🍒 Cereja do Bolo: Pressão Alta / Mais de 2.5 Escanteios HT")
-                        
-                    if tot_gols >= 2.5:
-                        pontos += 2
-                        sugestoes_jogo.append("⚡ Tendência de Gols (Over 2.5 / Linhas Asiáticas)")
-                        
-                    if pontos > 0:
-                        lista_pontuada.append({
-                            'score': pontos,
-                            'jogo': f"⚽ <b>{j['Mandante']} x {j['Visitante']}</b> [{j['Horário']}]",
-                            'liga': f"🏆 {j['Liga']}",
-                            'sugestoes': sugestoes_jogo
-                        })
+                    lista_pontuada.append({
+                        'score': score,
+                        'jogo': f"⚽ <b>{j['Mandante']} x {j['Visitante']}</b> [{j['Horário']}]",
+                        'liga': f"🏆 {j['Liga']}",
+                        'cantos': f"{c_tot:.1f}",
+                        'chutes_tot': f"{s_tot_game:.1f}",
+                        'chutes_gol': f"{s_gol_game:.1f}",
+                        'faltas': f"{f_tot_game:.1f}",
+                        'chutes_ht': f"{max(chutes_ht_h, chutes_ht_a):.1f}"
+                    })
                 except Exception: continue
             
-            lista_pontuada = sorted(lista_pontuada, key=lambda x: x['score'], reverse=True)[:5]
+            # Pega os TOP 6 melhores jogos do dia
+            lista_pontuada = sorted(lista_pontuada, key=lambda x: x['score'], reverse=True)[:6]
             
             if lista_pontuada:
-                msg_bilhete = f"💎 <b>SMART TIPSTER: TOP 5 OPORTUNIDADES ELITE</b> 💎\n📅 <i>{datetime.now(FUSO_BR).strftime('%d/%m/%Y')}</i>\n\n🎯 <i>Varredura baseada em volume de finalizações e pressão inicial!</i>\n\n"
+                msg = f"💎 <b>SMART TIPSTER: RAIO-X COMPLETO DO DIA</b> 💎\n📅 <i>{datetime.now(FUSO_BR).strftime('%d/%m/%Y')}</i>\n\n🎯 <i>Métricas de Chutes, Chutes ao Gol, Cantos e Faltas:</i>\n\n"
                 
                 for item in lista_pontuada:
-                    msg_bilhete += f"{item['jogo']}\n"
-                    msg_bilhete += f"   • {item['liga']} (Score: {item['score']} pts)\n"
-                    for s in item['sugestoes']:
-                        msg_bilhete += f"   • {s}\n"
-                    msg_bilhete += "\n"
+                    msg += f"{item['jogo']}\n"
+                    msg += f"   • {item['liga']} (Score: {item['score']} pts)\n"
+                    msg += f"   🔥 <b>1º Tempo (Chutes):</b> ~{item['chutes_ht']} finalizações\n"
+                    msg += f"   🎯 <b>Chutes no Alvo:</b> ~{item['chutes_gol']} no gol\n"
+                    msg += f"   📊 <b>Chutes Totais:</b> ~{item['chutes_tot']}\n"
+                    msg += f"   🚩 <b>Escanteios:</b> ~{item['cantos']} cantos\n"
+                    msg += f"   ⚠️ <b>Faltas Estimadas:</b> ~{item['faltas']} faltas\n\n"
                 
-                if enviar_alerta_telegram(msg_bilhete): st.sidebar.success("🔥 Top 5 Melhores Entradas enviadas ao Telegram!")
-                else: st.sidebar.error("❌ Erro ao enviar para o Telegram.")
+                if enviar_alerta_telegram(msg): 
+                    st.sidebar.success("🔥 Raio-X completo enviado ao Telegram com sucesso!")
+                else: 
+                    st.sidebar.error("❌ Erro ao enviar para o Telegram.")
             else:
-                st.sidebar.warning("⚠️ Nenhuma oportunidade atingiu o rigor necessário hoje.")
+                st.sidebar.warning("⚠️ Nenhum jogo encontrado para hoje.")
         else:
-            st.sidebar.warning("⚠️ Não há jogos hoje nas ligas monitoradas.")
+            st.sidebar.warning("⚠️ Não há partidas agendadas nas ligas monitoradas.")
