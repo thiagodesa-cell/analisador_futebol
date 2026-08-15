@@ -5,7 +5,7 @@ import time
 import math
 from datetime import datetime, timedelta, timezone
 
-st.set_page_config(page_title="Painel Pro - Global Trading & IA Preditiva v26 Smart", layout="wide")
+st.set_page_config(page_title="Painel Pro - Global Trading & IA Preditiva v27 Ranking", layout="wide")
 
 FUSO_BR = timezone(timedelta(hours=-3))
 API_KEY_FIXA = "E89cc081ecbaaf1a7074e878c1cae0ff"
@@ -23,7 +23,7 @@ LIGAS_MONITORADAS = {
 def obter_chave_atualizacao():
     return datetime.now(FUSO_BR).strftime("%Y-%m-%d_%H")
 
-CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v26_smart_tipster" 
+CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v27_ranking_tipster" 
 DATA_HOJE_STR = datetime.now(FUSO_BR).strftime("%Y-%m-%d")
 
 def converter_para_horario_brasilia(iso_string):
@@ -163,7 +163,7 @@ def buscar_medias_escanteios_e_chutes_inteligente(team_id, league_id, season, ke
         return {
             'corners_for_home': 4.5, 'corners_ag_home': 4.5, 
             'corners_for_away': 4.0, 'corners_ag_away': 5.0,
-            'media_chutes_home': 13.0, 'media_chutes_away': 11.0
+            'media_chutes_home': 12.0, 'media_chutes_away': 11.0
         }
 
 @st.cache_data(persist="disk")
@@ -180,11 +180,11 @@ def buscar_jogos_ligas_monitoradas_por_data(data_str, key, cache_key):
     except: return []
 
 if id_time1 and LEAGUE_ID:
-    st.title(f"⚽ Painel Preditivo v26 Smart Tipster - {opcao_liga}")
+    st.title(f"⚽ Painel Preditivo v27 Smart Ranking - {opcao_liga}")
     stats_t1 = buscar_estatisticas_time(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     metrics_t1 = buscar_medias_escanteios_e_chutes_inteligente(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
-    st.subheader("🤖 Simulador Inteligente H2H & Varredura Bi-direcional")
+    st.subheader("🤖 Simulador Inteligente com Sistema de Notas H2H")
     adversario = st.selectbox("Escolha o Time Adversário", [t for t in sorted(list(TEAM_IDS.keys())) if t != time_principal])
     
     if adversario:
@@ -197,7 +197,6 @@ if id_time1 and LEAGUE_ID:
         probs_poisson = calcular_probabilidades_poisson(gols_t1, gols_t2)
         total_gols = gols_t1 + gols_t2
         
-        # Projeção inteligente: Avalia se o mandante em casa ou o visitante fora é o motor ofensivo
         chutes_ht_t1 = (metrics_t1['media_chutes_home'] * 0.45)
         chutes_ht_t2 = (metrics_t2['media_chutes_away'] * 0.45)
         
@@ -205,44 +204,44 @@ if id_time1 and LEAGUE_ID:
         c_proj_t2 = (metrics_t2['corners_for_away'] + metrics_t1['corners_ag_home']) / 2
         escanteios_jogo = c_proj_t1 + c_proj_t2
         
+        # Sistema de Pontuação (Ranking Individual)
+        nota_jogo = 0
+        destaques = []
+        if chutes_ht_t1 >= 4.5 or chutes_ht_t2 >= 4.5:
+            nota_jogo += 3
+            time_alvo = time_principal if chutes_ht_t1 >= chutes_ht_t2 else adversario
+            destaques.append(f"🎯 1º Tempo - {time_alvo} Mais de 4.5/5.5 Chutes")
+        if escanteios_jogo >= 9.5:
+            nota_jogo += 2
+            destaques.append("🍒 Cereja do Bolo: Mais de 1.5 Escanteios no 1º Tempo / Pressão HT")
+        if total_gols >= 2.5:
+            nota_jogo += 2
+            destaques.append("⚡ Projeção Over 2.5 Gols / Linhas Asiáticas")
+
         col_res1, col_res2 = st.columns(2)
         
         with col_res1:
             with st.container(border=True):
-                st.markdown("#### 🎯 Alvo Principal de Chutes HT")
-                if chutes_ht_t1 >= 5.2:
-                    sel_principal = f"1º Tempo - {time_principal} (Mandante) Mais de 5.5 Chutes 🔥"
-                    chutes_val = chutes_ht_t1
-                elif chutes_ht_t2 >= 5.2:
-                    sel_principal = f"1º Tempo - {adversario} (Visitante Forte) Mais de 5.5 Chutes 🔥"
-                    chutes_val = chutes_ht_t2
-                else:
-                    sel_principal = "NO BET (Volume de Chutes Baixo) 🚫"
-                    chutes_val = max(chutes_ht_t1, chutes_ht_t2)
-                st.markdown(f"- **Sugestão Inteligente:** `{sel_principal}`")
-                st.markdown(f"- *Maior Volume Projetado HT:* **{chutes_val:.1f}**")
+                st.markdown(f"#### 📊 Nota de Oportunidade: `{nota_jogo} / 7 pts`")
+                for d in destaques:
+                    st.markdown(f"- {d}")
 
         with col_res2:
             with st.container(border=True):
-                st.markdown("#### 🍒 A Cereja do Bolo (Cantos & Pressão)")
-                if escanteios_jogo >= 10.5:
-                    cereja = "Mais de 1.5 Escanteios no 1º Tempo / Pressão HT 🚀"
-                else:
-                    cereja = "Monitorar Pressão Ao Vivo (Live 10 Min) ⏱️"
-                st.markdown(f"- **Estratégia Extra:** `{cereja}`")
-                st.markdown(f"- *Projeção de Escanteios Totais:* **{escanteios_jogo:.1f}**")
+                st.markdown("#### 📈 Métricas de Volume")
+                st.markdown(f"- *Chutes HT Mandante/Visitante:* **{max(chutes_ht_t1, chutes_ht_t2):.1f}**")
+                st.markdown(f"- *Projeção de Cantos:* **{escanteios_jogo:.1f}**")
 
-# --- DISPARADOR TELEGRAM: VARREDURA INTELIGENTE BI-DIRECIONAL ---
+# --- DISPARADOR TELEGRAM: RANKING DOS MELHORES 4-5 JOGOS DO DIA ---
 st.sidebar.markdown("---")
-if st.sidebar.button("💎 Enviar Varredura Inteligente (Telegram)", key="btn_bilhete_smart"):
-    with st.spinner("Analisando ambos os lados (mandante e visitante)..."):
+if st.sidebar.button("💎 Enviar Top 5 Melhores Entradas (Telegram)", key="btn_bilhete_ranking"):
+    with st.spinner("Varrendo e pontuando as melhores oportunidades do dia..."):
         jogos_hoje = buscar_jogos_ligas_monitoradas_por_data(DATA_HOJE_STR, API_KEY_FIXA, CHAVE_ATUALIZACAO)
         
         if jogos_hoje:
-            msg_bilhete = f"💎 <b>SMART TIPSTER: VARREDURA INTELIGENTE</b> 💎\n📅 <i>{datetime.now(FUSO_BR).strftime('%d/%m/%Y')}</i>\n\n🎯 <i>Análise cruzada de Mandante (Casa) x Visitante (Fora)!</i>\n\n"
-            contador = 0
+            lista_pontuada = []
             
-            for j in jogos_hoje[:14]: 
+            for j in jogos_hoje: 
                 try:
                     s_h = buscar_estatisticas_time(j['HomeID'], j['LeagueID'], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
                     s_a = buscar_estatisticas_time(j['AwayID'], j['LeagueID'], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
@@ -255,32 +254,51 @@ if st.sidebar.button("💎 Enviar Varredura Inteligente (Telegram)", key="btn_bi
                     chutes_ht_mandante = m_h['media_chutes_home'] * 0.45
                     chutes_ht_visitante = m_a['media_chutes_away'] * 0.45
                     tot_c_calc = ((m_h['corners_for_home'] + m_a['corners_ag_away']) / 2) + ((m_a['corners_for_away'] + m_h['corners_ag_home']) / 2)
+                    tot_gols = g_h_calc + g_a_calc
                     
-                    sel_chutes = sel_cereja = None
+                    pontos = 0
+                    sugestoes_jogo = []
                     
-                    # Varredura inteligente: Identifica quem é o motor de finalizações da partida
-                    if chutes_ht_mandante >= 5.0:
-                        sel_chutes = f"1º Tempo - {j['Mandante']} (Casa) Mais de 5.5 Chutes 🔥"
-                    elif chutes_ht_visitante >= 5.0:
-                        sel_chutes = f"1º Tempo - {j['Visitante']} (Fora de Casa) Mais de 5.5 Chutes 🔥"
-                    
-                    if tot_c_calc >= 10.2:
-                        sel_cereja = "🍒 Cereja do Bolo: Mais de 1.5 Escanteios no 1º Tempo / Pressão HT"
-                    
-                    if sel_chutes or sel_cereja:
-                        contador += 1
-                        msg_bilhete += f"⚽ <b>{j['Mandante']} x {j['Visitante']}</b> [{j['Horário']}]\n"
-                        msg_bilhete += f"   • 🏆 {j['Liga']}\n"
-                        if sel_chutes: msg_bilhete += f"   • 🎯 {sel_chutes}\n"
-                        if sel_cereja: msg_bilhete += f"   • {sel_cereja}\n"
-                        msg_bilhete += "\n"
+                    if chutes_ht_mandante >= 4.5:
+                        pontos += 3
+                        sugestoes_jogo.append(f"🎯 1º T - {j['Mandante']} (Casa) Mais de 4.5/5.5 Chutes 🔥")
+                    elif chutes_ht_visitante >= 4.5:
+                        pontos += 3
+                        sugestoes_jogo.append(f"🎯 1º T - {j['Visitante']} (Fora) Mais de 4.5/5.5 Chutes 🔥")
                         
+                    if tot_c_calc >= 9.5:
+                        pontos += 2
+                        sugestoes_jogo.append("🍒 Cereja do Bolo: Mais de 1.5 Escanteios HT / Pressão")
+                        
+                    if tot_gols >= 2.4:
+                        pontos += 1
+                        sugestoes_jogo.append("⚡ Tendência de Gols (Over 2.5)")
+                        
+                    if pontos > 0:
+                        lista_pontuada.append({
+                            'score': pontos,
+                            'jogo': f"⚽ <b>{j['Mandante']} x {j['Visitante']}</b> [{j['Horário']}]",
+                            'liga': f"🏆 {j['Liga']}",
+                            'sugestoes': sugestoes_jogo
+                        })
                 except Exception: continue
+            
+            # Ordena do maior score para o menor e pega os TOP 5 para garantir volume saudável
+            lista_pontuada = sorted(lista_pontuada, key=lambda x: x['score'], reverse=True)[:5]
+            
+            if lista_pontuada:
+                msg_bilhete = f"💎 <b>SMART TIPSTER: TOP 5 OPORTUNIDADES DO DIA</b> 💎\n📅 <i>{datetime.now(FUSO_BR).strftime('%d/%m/%Y')}</i>\n\n🎯 <i>Ranking inteligente baseado em volume e pressão!</i>\n\n"
                 
-            if contador > 0:
-                if enviar_alerta_telegram(msg_bilhete): st.sidebar.success("🔥 Varredura Inteligente enviada ao Telegram!")
+                for item in lista_pontuada:
+                    msg_bilhete += f"{item['jogo']}\n"
+                    msg_bilhete += f"   • {item['liga']} (Score: {item['score']} pts)\n"
+                    for s in item['sugestoes']:
+                        msg_bilhete += f"   • {s}\n"
+                    msg_bilhete += "\n"
+                
+                if enviar_alerta_telegram(msg_bilhete): st.sidebar.success("🔥 Top 5 Melhores Entradas enviadas ao Telegram!")
                 else: st.sidebar.error("❌ Erro ao enviar para o Telegram.")
             else:
-                st.sidebar.warning("⚠️ O motor não encontrou oportunidades filtradas com rigor hoje.")
+                st.sidebar.warning("⚠️ Nenhuma oportunidade pontuou o suficiente hoje.")
         else:
             st.sidebar.warning("⚠️ Não há jogos hoje nas ligas monitoradas.")
