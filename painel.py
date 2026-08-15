@@ -5,7 +5,7 @@ import time
 import math
 from datetime import datetime, timedelta, timezone
 
-st.set_page_config(page_title="Painel Pro - Tipster Ultimate Radar v30", layout="wide")
+st.set_page_config(page_title="Painel Pro - Tipster Ultimate Radar v31", layout="wide")
 
 FUSO_BR = timezone(timedelta(hours=-3))
 API_KEY_FIXA = "E89cc081ecbaaf1a7074e878c1cae0ff"
@@ -23,7 +23,7 @@ LIGAS_MONITORADAS = {
 def obter_chave_atualizacao():
     return datetime.now(FUSO_BR).strftime("%Y-%m-%d_%H")
 
-CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v30_ultimate_radar" 
+CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v31_bugfix_chutes" 
 DATA_HOJE_STR = datetime.now(FUSO_BR).strftime("%Y-%m-%d")
 
 def converter_para_horario_brasilia(iso_string):
@@ -140,7 +140,7 @@ def buscar_metricas_completas_avancadas(team_id, league_id, season, key, data_ca
                             if s['type'] == 'Corner Kicks':
                                 if item['team']['id'] == team_id: t_c = int(val)
                                 else: o_c = int(val)
-                            elif s['type'] == 'Shots Total':
+                            elif s['type'] == 'Total Shots':  # <--- CORREÇÃO: Nome exato da API
                                 if item['team']['id'] == team_id: t_st = int(val)
                             elif s['type'] == 'Shots on Goal':
                                 if item['team']['id'] == team_id: t_sg = int(val)
@@ -177,7 +177,7 @@ def buscar_jogos_ligas_monitoradas_por_data(data_str, key, cache_key):
     except: return []
 
 if id_time1 and LEAGUE_ID:
-    st.title(f"⚽ Painel Ultimate Radar v30 - {opcao_liga}")
+    st.title(f"⚽ Painel Ultimate Radar v31 - {opcao_liga}")
     stats_t1 = buscar_estatisticas_time(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     metrics_t1 = buscar_metricas_completas_avancadas(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
