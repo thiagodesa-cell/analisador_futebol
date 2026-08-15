@@ -81,7 +81,6 @@ def calcular_probabilidades_poisson(lambda_home, lambda_away, max_gols=6):
             else:
                 prob_empate += p
                 
-    # Normalização rigorosa para evitar distorções de soma
     total_1x2 = prob_vitoria_home + prob_vitoria_away + prob_empate
     if total_1x2 > 0:
         prob_vitoria_home = (prob_vitoria_home / total_1x2) * 100
@@ -369,7 +368,6 @@ def enviar_alerta_instagram(mensagem):
         "access_token": INSTAGRAM_ACCESS_TOKEN
     }
     try:
-        # Integração via Graph API do Instagram para publicação/alertas
         # res = requests.post(url, data=payload)
         # return res.status_code == 200
         return True
@@ -919,7 +917,6 @@ else:
                 probs_poisson = calcular_probabilidades_poisson(gols_t1, gols_t2)
                 total_gols = gols_t1 + gols_t2
                 
-                # CORREÇÃO DO CÁLCULO DINÂMICO DE ESCANTEIOS H2H
                 c_proj_t1 = (corners_t1['corners_for_home'] + corners_t2['corners_ag_away']) / 2
                 c_proj_t2 = (corners_t2['corners_for_away'] + corners_t1['corners_ag_home']) / 2
                 escanteios_jogo = c_proj_t1 + c_proj_t2
@@ -935,7 +932,6 @@ else:
                 
                 confianca_ia = min(95, max(55, int(50 + abs(probs_poisson['vitoria_home'] - probs_poisson['vitoria_away']) * 0.7)))
 
-                # CORREÇÃO DOS LABELS DE VITÓRIA (VINCULADOS CORRETAMENTE AOS NOMES REAIS)
                 sc1, sc2, sc3, sc4 = st.columns(4)
                 sc1.metric(f"Prob. Vitória ({time_principal})", f"{probs_poisson['vitoria_home']:.1f}%")
                 sc2.metric(f"Prob. Vitória ({adversario})", f"{probs_poisson['vitoria_away']:.1f}%")
@@ -1046,7 +1042,7 @@ else:
                     elif "gols" in pergunta_lower or "over" in pergunta_lower or "btts" in pergunta_lower:
                         resposta_ia = f"Para **{time_principal}**, a média atual de gols marcados é de `{stats_t1.get('gols_feitos_media', 0):.2f}` e sofridos de `{stats_t1.get('gols_sofridos_media', 0):.2f}`. O motor dinâmico evita travar em linhas fixas, avaliando se o cenário pede Over, Under ou Ambas Marcam."
                     elif "cartão" in pergunta_lower or "cartoes" in pergunta_lower:
-                        resposta_ia = f"A média atual de cartões pró para **{time_principal}** is de `{corners_t1.get('media_cartoes_pro', 0):.2f}` e contra é de `{corners_t1.get('media_cartoes_contra', 0):.2f}`. Você pode conferir o detalhamento completo jogo a jogo na aba 'Painel IA & Elenco'."
+                        resposta_ia = f"A média atual de cartões pró para **{time_principal}** é de `{corners_t1.get('media_cartoes_pro', 0):.2f}` e contra é de `{corners_t1.get('media_cartoes_contra', 0):.2f}`. Você pode conferir o detalhamento completo jogo a jogo na aba 'Painel IA & Elenco'."
                     elif "escanteio" in pergunta_lower or "cantos" in pergunta_lower:
                         cantos_total = corners_t1.get('corners_for_geral', 0) + corners_t1.get('corners_ag_geral', 0)
                         resposta_ia = f"A média combinada de escanteios (pró + contra) para **{time_principal}** é de aproximadamente `{cantos_total:.2f}` por partida."
@@ -1056,11 +1052,16 @@ else:
                     st.markdown(resposta_ia)
                     st.session_state.messages.append({"role": "assistant", "content": resposta_ia})
 
-# --- DISPARADORES DO TELEGRAM ---
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 📢 Canal & Automação Telegram")
+# =========================================================================
+# SEÇÃO SEPARADA E CORRIGIDA: BOTÕES DE AUTOMAÇÃO (TELEGRAM & INSTAGRAM)
+# =========================================================================
 
-if st.sidebar.button("🚀 Disparar Análise Pré-Live (IA v22)", key="btn_disparar_prelive"):
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 📢 Automação de Canais & Redes Sociais")
+
+# --- BLOCO TELEGRAM ---
+st.sidebar.markdown("#### 📱 Telegram")
+if st.sidebar.button("🚀 Disparar Pré-Live (Telegram)", key="btn_disparar_prelive_telegram_fixed"):
     if id_time1 and 'usar_comparacao' in locals() and usar_comparacao and 'adversario' in locals() and adversario:
         g_t1 = (stats_t1['gf_home'] + stats_t2['ga_away']) / 2
         g_t2 = (stats_t2['gf_away'] + stats_t1['ga_home']) / 2
@@ -1075,28 +1076,28 @@ if st.sidebar.button("🚀 Disparar Análise Pré-Live (IA v22)", key="btn_dispa
         else: escanteios_jogo += 1.5
         total_cartoes = corners_t1['media_cartoes_pro'] + corners_t2['media_cartoes_pro']
 
-        msg = f"""🧠 <b>RELATÓRIO PRÉ-LIVE INTELIGENTE (IA v22)</b> 🧠\n\n⚽ <b>{time_principal} x {adversario}</b>\n🏆 Competição: {opcao_liga} ({SEASON_EFETIVA})\n\n📊 <b>MODELAGEM POISSON / GOLS:</b>\n• Expectativa Gols: {total_gols:.2f} ({p_res['over_2_5']:.1f}% Over 2.5)\n• BTTS: {p_res['btts']:.1f}%\n\n🚩 <b>ESCANTEIOS:</b>\n• Projeção Total: {escanteios_jogo:.1f} cantos\n\n🟨 <b>CARTÕES (Média Pró):</b>\n• {time_principal}: {corners_t1['media_cartoes_pro']:.2f}\n• {adversario}: {corners_t2['media_cartoes_pro']:.2f}"""
+        msg_tg = f"""🧠 <b>RELATÓRIO PRÉ-LIVE (TELEGRAM)</b> 🧠\n\n⚽ <b>{time_principal} x {adversario}</b>\n🏆 Competição: {opcao_liga} ({SEASON_EFETIVA})\n\n📊 <b>POISSON / GOLS:</b>\n• Expectativa Gols: {total_gols:.2f} ({p_res['over_2_5']:.1f}% Over 2.5)\n• BTTS: {p_res['btts']:.1f}%\n\n🚩 <b>ESCANTEIOS:</b>\n• Projeção Total: {escanteios_jogo:.1f} cantos\n\n🟨 <b>CARTÕES (Pró):</b>\n• {time_principal}: {corners_t1['media_cartoes_pro']:.2f}\n• {adversario}: {corners_t2['media_cartoes_pro']:.2f}"""
     elif id_time1:
-        msg = f"""🧠 <b>RAIO-X INDIVIDUAL (IA)</b> 🧠\n\n⚽ <b>Time: {time_principal}</b>\n🏆 Competição: {opcao_liga} ({SEASON_EFETIVA})\n\n📊 <b>Gols Feitos (Média):</b> {stats_t1['gols_feitos_media']:.2f}\n🟨 <b>Cartões Pró (Média):</b> {corners_t1['media_cartoes_pro']:.2f}"""
+        msg_tg = f"""🧠 <b>RAIO-X INDIVIDUAL (TELEGRAM)</b> 🧠\n\n⚽ <b>Time: {time_principal}</b>\n🏆 Competição: {opcao_liga} ({SEASON_EFETIVA})\n\n📊 <b>Gols Feitos (Média):</b> {stats_t1['gols_feitos_media']:.2f}\n🟨 <b>Cartões Pró (Média):</b> {corners_t1['media_cartoes_pro']:.2f}"""
     else:
-        msg = f"""🧠 <b>SMART MULTI: PAINEL GERAL</b> 🧠\n\nNenhuma partida ou time selecionado."""
+        msg_tg = f"""🧠 <b>SMART MULTI: PAINEL GERAL (TELEGRAM)</b> 🧠\n\nNenhuma partida ou time selecionado."""
     
-    if enviar_alerta_telegram(msg): 
-        st.sidebar.success("🎉 Alerta IA enviado!")
+    if enviar_alerta_telegram(msg_tg): 
+        st.sidebar.success("🎉 Alerta enviado para o Telegram!")
     else: 
-        st.sidebar.error("❌ Falha ao enviar.")
+        st.sidebar.error("❌ Falha ao enviar para o Telegram.")
 
-if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v22)", key="btn_bilhete_dia"):
-    with st.spinner("Varrendo partidas de hoje com motor de Poisson corrigido e calibrando fuso horário..."):
+if st.sidebar.button("💎 Bilhete do Dia (Telegram)", key="btn_bilhete_dia_telegram_fixed"):
+    with st.spinner("Varrendo partidas de hoje para o Telegram..."):
         jogos_monitorados_hoje = buscar_jogos_ligas_monitoradas_por_data(DATA_HOJE_STR, API_KEY_FIXA, CHAVE_ATUALIZACAO)
         
     if jogos_monitorados_hoje:
         amostra_monitorada = jogos_monitorados_hoje[:6]
         data_formatada_exibicao = datetime.now(FUSO_BR).strftime("%d/%m/%Y")
         
-        msg_bilhete = f"""💎 <b>SMART TIPSTER: BILHETE DO DIA (IA MARKET ULTIMATE v22)</b> 💎\n📅 <i>Data: {data_formatada_exibicao}</i>\n\nAnálises com tabelas de cartões e escanteios detalhadas:\n\n"""
+        msg_bilhete_tg = f"""💎 <b>SMART TIPSTER: BILHETE DO DIA (TELEGRAM)</b> 💎\n📅 <i>Data: {data_formatada_exibicao}</i>\n\n"""
         
-        contador_sucesso = 0
+        contador_sucesso_tg = 0
         for idx, j in enumerate(amostra_monitorada, 1):
             try:
                 h_id = j['HomeID']
@@ -1105,7 +1106,6 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v22)", key="b
                 
                 s_h = buscar_estatisticas_time(h_id, l_id, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
                 s_a = buscar_estatisticas_time(a_id, l_id, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-                
                 c_h_data = buscar_medias_escanteios(h_id, l_id, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
                 c_a_data = buscar_medias_escanteios(a_id, l_id, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
                 
@@ -1119,72 +1119,32 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (IA Pro v22)", key="b
                 c_proj_a = (c_a_data.get('corners_for_away', 4.5) + c_h_data.get('corners_ag_home', 4.5)) / 2
                 tot_c_calc = c_proj_h + c_proj_a
                 
-                if l_id == 128:
-                    tot_c_calc += 3.0
-                elif l_id in [71, 39, 13]: 
-                    tot_c_calc += 2.0
-                else:
-                    tot_c_calc += 1.5
+                if l_id == 128: tot_c_calc += 3.0
+                elif l_id in [71, 39, 13]: tot_c_calc += 2.0
+                else: tot_c_calc += 1.5
 
-                if tot_gols_calc >= 2.8 and p_res['over_2_5'] >= 50:
-                    sel_gols = "Mais de 2.5 Gols 🔥"
-                elif p_res['btts'] >= 55 and tot_gols_calc >= 2.3:
-                    sel_gols = "Ambas Marcam (BTTS) Sim ⚡"
-                elif tot_gols_calc >= 2.0:
-                    sel_gols = "Mais de 1.5 Gols ⚽"
-                else:
-                    sel_gols = "Menos de 2.5 Gols 🛡️"
+                sel_gols = "Mais de 2.5 Gols 🔥" if tot_gols_calc >= 2.8 and p_res['over_2_5'] >= 50 else "Ambas Marcam (BTTS) Sim ⚡" if p_res['btts'] >= 55 else "Mais de 1.5 Gols ⚽"
+                sel_cantos = "Mais de 9.5 Escanteios 🚩" if tot_c_calc >= 10.0 else "Mais de 8.5 Escanteios ⚡" if tot_c_calc >= 8.5 else "Mais de 7.5 Escanteios ⚽"
                 
-                if tot_c_calc >= 11.5:
-                    sel_cantos = "Mais de 10.5 Escanteios 🔥"
-                elif tot_c_calc >= 10.0:
-                    sel_cantos = "Mais de 9.5 Escanteios 🚩"
-                elif tot_c_calc >= 8.5:
-                    sel_cantos = "Mais de 8.5 Escanteios ⚡"
-                elif tot_c_calc >= 7.5:
-                    sel_cantos = "Mais de 7.5 Escanteios ⚽"
-                else:
-                    sel_cantos = "Menos de 8.5 Escanteios 🛡️"
-
-                vh_b = p_res['vitoria_home']
-                va_b = p_res['vitoria_away']
-                
-                if vh_b >= va_b + 5.0:
-                    sel_seg = f"Empate Anula: {j['Mandante']} 🟢" if vh_b > 45 else f"Chance Dupla: {j['Mandante']} ou Empate (1X) 🛡️"
-                elif va_b >= vh_b + 5.0:
-                    sel_seg = f"Empate Anula: {j['Visitante']} 🟢" if va_b > 45 else f"Chance Dupla: {j['Visitante']} ou Empate (X2) 🛡️"
-                else:
-                    if vh_b >= va_b:
-                        sel_seg = f"Chance Dupla: {j['Mandante']} ou Empate (1X) [Equilibrado]"
-                    else:
-                        sel_seg = f"Chance Dupla: {j['Visitante']} ou Empate (X2) [Equilibrado]"
-                    
-                contador_sucesso += 1
-                msg_bilhete += f"<b>{contador_sucesso}. {j['Mandante']} x {j['Visitante']}</b>\n"
-                msg_bilhete += f"   • 🏆 <i>Liga:</i> {j['Liga']}\n"
-                msg_bilhete += f"   • 🎯 <i>IA Tips:</i> {sel_gols} | {sel_cantos}\n"
-                msg_bilhete += f"   • 🛡️ <i>Segurança:</i> {sel_seg}\n"
-                msg_bilhete += f"   • ⏰ <i>Horário (BR):</i> {j['Horário']}\n\n"
-            except Exception:
+                contador_sucesso_tg += 1
+                msg_bilhete_tg += f"<b>{contador_sucesso_tg}. {j['Mandante']} x {j['Visitante']}</b>\n"
+                msg_bilhete_tg += f"   • 🏆 {j['Liga']} | ⏰ {j['Horário']}\n"
+                msg_bilhete_tg += f"   • 🎯 {sel_gols} | {sel_cantos}\n\n"
+            except:
                 continue
         
-        msg_bilhete += f"🧠 <i>Smart Tipster IA v22: Relatórios otimizados e precisos.</i>"
-        
-        if contador_sucesso > 0:
-            if enviar_alerta_telegram(msg_bilhete):
-                st.sidebar.success("🔥 Bilhete IA v22 enviado com sucesso!")
-            else:
-                st.sidebar.error("❌ Falha ao enviar ao Telegram.")
+        if contador_sucesso_tg > 0 and enviar_alerta_telegram(msg_bilhete_tg):
+            st.sidebar.success("🔥 Bilhete do Telegram enviado!")
         else:
-            st.sidebar.warning("⚠️ Não foi possível processar estatísticas das partidas de hoje.")
+            st.sidebar.error("❌ Falha no envio do Telegram.")
     else:
-        st.sidebar.warning(f"⚠️ Não há jogos cadastrados para hoje ({DATA_HOJE_STR}) nas ligas monitoradas.")
+        st.sidebar.warning("⚠️ Sem jogos para hoje.")
 
-# --- DISPARADORES DO INSTAGRAM ---
 st.sidebar.markdown("---")
-st.sidebar.markdown("### 📸 Canal & Automação Instagram")
 
-if st.sidebar.button("📸 Disparar Análise Pré-Live (Instagram)", key="btn_disparar_prelive_ig"):
+# --- BLOCO INSTAGRAM ---
+st.sidebar.markdown("#### 📸 Instagram")
+if st.sidebar.button("📸 Disparar Pré-Live (Instagram)", key="btn_disparar_prelive_instagram_fixed"):
     if id_time1 and 'usar_comparacao' in locals() and usar_comparacao and 'adversario' in locals() and adversario:
         g_t1 = (stats_t1['gf_home'] + stats_t2['ga_away']) / 2
         g_t2 = (stats_t2['gf_away'] + stats_t1['ga_home']) / 2
@@ -1197,20 +1157,19 @@ if st.sidebar.button("📸 Disparar Análise Pré-Live (Instagram)", key="btn_di
         if LEAGUE_ID == 128: escanteios_jogo += 3.0
         elif LEAGUE_ID in [71, 39, 13]: escanteios_jogo += 2.0
         else: escanteios_jogo += 1.5
-        total_cartoes = corners_t1['media_cartoes_pro'] + corners_t2['media_cartoes_pro']
 
-        msg_ig = f"🧠 RELATÓRIO PRÉ-LIVE INTELIGENTE (IA v22) 🧠\n\n⚽ {time_principal} x {adversario}\n🏆 Competição: {opcao_liga} ({SEASON_EFETIVA})\n\n📊 MODELAGEM POISSON / GOLS:\n• Expectativa Gols: {total_gols:.2f} ({p_res['over_2_5']:.1f}% Over 2.5)\n• BTTS: {p_res['btts']:.1f}%\n\n🚩 ESCANTEIOS:\n• Projeção Total: {escanteios_jogo:.1f} cantos\n\n🟨 CARTÕES (Média Pró):\n• {time_principal}: {corners_t1['media_cartoes_pro']:.2f}\n• {adversario}: {corners_t2['media_cartoes_pro']:.2f}"
+        msg_ig = f"🧠 ANÁLISE PRÉ-LIVE (INSTAGRAM) 🧠\n\n⚽ {time_principal} x {adversario}\n🏆 Competição: {opcao_liga} ({SEASON_EFETIVA})\n\n📊 Gols Esperados: {total_gols:.2f} ({p_res['over_2_5']:.1f}% Over 2.5)\n🚩 Escanteios: {escanteios_jogo:.1f} cantos\n🟨 Cartões Pró: {time_principal} ({corners_t1['media_cartoes_pro']:.2f})"
     elif id_time1:
-        msg_ig = f"🧠 RAIO-X INDIVIDUAL (IA) 🧠\n\n⚽ Time: {time_principal}\n🏆 Competição: {opcao_liga} ({SEASON_EFETIVA})\n\n📊 Gols Feitos (Média): {stats_t1['gols_feitos_media']:.2f}\n🟨 Cartões Pró (Média): {corners_t1['media_cartoes_pro']:.2f}"
+        msg_ig = f"🧠 RAIO-X INDIVIDUAL (INSTAGRAM) 🧠\n\n⚽ Time: {time_principal}\n🏆 Competição: {opcao_liga} ({SEASON_EFETIVA})\n📊 Média Gols: {stats_t1['gols_feitos_media']:.2f}\n🟨 Média Cartões: {corners_t1['media_cartoes_pro']:.2f}"
     else:
-        msg_ig = f"🧠 SMART MULTI: PAINEL GERAL 🧠\n\nNenhuma partida ou time selecionado."
+        msg_ig = f"🧠 SMART MULTI (INSTAGRAM) 🧠\nNenhum time selecionado."
     
     if enviar_alerta_instagram(msg_ig): 
-        st.sidebar.success("🎉 Alerta Instagram enviado!")
+        st.sidebar.success("🎉 Alerta enviado para o Instagram!")
     else: 
         st.sidebar.error("❌ Falha ao enviar para o Instagram.")
 
-if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (Instagram)", key="btn_bilhete_dia_ig"):
+if st.sidebar.button("💎 Bilhete do Dia (Instagram)", key="btn_bilhete_dia_instagram_fixed"):
     with st.spinner("Varrendo partidas de hoje para o Instagram..."):
         jogos_monitorados_hoje = buscar_jogos_ligas_monitoradas_por_data(DATA_HOJE_STR, API_KEY_FIXA, CHAVE_ATUALIZACAO)
         
@@ -1218,7 +1177,7 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (Instagram)", key="bt
         amostra_monitorada = jogos_monitorados_hoje[:6]
         data_formatada_exibicao = datetime.now(FUSO_BR).strftime("%d/%m/%Y")
         
-        msg_bilhete_ig = f"💎 SMART TIPSTER: BILHETE DO DIA (IA MARKET ULTIMATE v22) 💎\n📅 Data: {data_formatada_exibicao}\n\nAnálises detalhadas:\n\n"
+        msg_bilhete_ig = f"💎 BILHETE DO DIA - INSTAGRAM 💎\n📅 Data: {data_formatada_exibicao}\n\n"
         
         contador_sucesso_ig = 0
         for idx, j in enumerate(amostra_monitorada, 1):
@@ -1230,62 +1189,24 @@ if st.sidebar.button("💎 Gerar & Enviar 'Bilhete do Dia' (Instagram)", key="bt
                 s_h = buscar_estatisticas_time(h_id, l_id, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
                 s_a = buscar_estatisticas_time(a_id, l_id, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
                 
-                c_h_data = buscar_medias_escanteios(h_id, l_id, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-                c_a_data = buscar_medias_escanteios(a_id, l_id, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-                
                 g_h_calc = (s_h.get('gf_home', 1.2) + s_a.get('ga_away', 1.2)) / 2 if s_h.get('jogos', 0) > 0 and s_a.get('jogos', 0) > 0 else 1.3
                 g_a_calc = (s_a.get('gf_away', 1.2) + s_h.get('ga_home', 1.2)) / 2 if s_a.get('jogos', 0) > 0 and s_a.get('jogos', 0) > 0 else 1.2
                 
                 p_res = calcular_probabilidades_poisson(g_h_calc, g_a_calc)
                 tot_gols_calc = g_h_calc + g_a_calc
                 
-                c_proj_h = (c_h_data.get('corners_for_home', 4.5) + c_a_data.get('corners_ag_away', 4.5)) / 2
-                c_proj_a = (c_a_data.get('corners_for_away', 4.5) + c_h_data.get('corners_ag_home', 4.5)) / 2
-                tot_c_calc = c_proj_h + c_proj_a
+                sel_gols = "Mais de 2.5 Gols 🔥" if tot_gols_calc >= 2.8 and p_res['over_2_5'] >= 50 else "Mais de 1.5 Gols ⚽"
                 
-                if l_id == 128:
-                    tot_c_calc += 3.0
-                elif l_id in [71, 39, 13]: 
-                    tot_c_calc += 2.0
-                else:
-                    tot_c_calc += 1.5
-
-                if tot_gols_calc >= 2.8 and p_res['over_2_5'] >= 50:
-                    sel_gols = "Mais de 2.5 Gols 🔥"
-                elif p_res['btts'] >= 55 and tot_gols_calc >= 2.3:
-                    sel_gols = "Ambas Marcam (BTTS) Sim ⚡"
-                elif tot_gols_calc >= 2.0:
-                    sel_gols = "Mais de 1.5 Gols ⚽"
-                else:
-                    sel_gols = "Menos de 2.5 Gols 🛡️"
-                
-                if tot_c_calc >= 11.5:
-                    sel_cantos = "Mais de 10.5 Escanteios 🔥"
-                elif tot_c_calc >= 10.0:
-                    sel_cantos = "Mais de 9.5 Escanteios 🚩"
-                elif tot_c_calc >= 8.5:
-                    sel_cantos = "Mais de 8.5 Escanteios ⚡"
-                elif tot_c_calc >= 7.5:
-                    sel_cantos = "Mais de 7.5 Escanteios ⚽"
-                else:
-                    sel_cantos = "Menos de 8.5 Escanteios 🛡️"
-
                 contador_sucesso_ig += 1
                 msg_bilhete_ig += f"{contador_sucesso_ig}. {j['Mandante']} x {j['Visitante']}\n"
-                msg_bilhete_ig += f"   • Liga: {j['Liga']}\n"
-                msg_bilhete_ig += f"   • IA Tips: {sel_gols} | {sel_cantos}\n"
-                msg_bilhete_ig += f"   • Horário (BR): {j['Horário']}\n\n"
-            except Exception:
+                msg_bilhete_ig += f"   • Liga: {j['Liga']} | ⏰ {j['Horário']}\n"
+                msg_bilhete_ig += f"   • Sugestão: {sel_gols}\n\n"
+            except:
                 continue
         
-        msg_bilhete_ig += f"Smart Tipster IA v22"
-        
-        if contador_sucesso_ig > 0:
-            if enviar_alerta_instagram(msg_bilhete_ig):
-                st.sidebar.success("🔥 Bilhete Instagram enviado com sucesso!")
-            else:
-                st.sidebar.error("❌ Falha ao enviar ao Instagram.")
+        if contador_sucesso_ig > 0 and enviar_alerta_instagram(msg_bilhete_ig):
+            st.sidebar.success("🔥 Bilhete do Instagram enviado!")
         else:
-            st.sidebar.warning("⚠️ Não foi possível processar estatísticas das partidas de hoje.")
+            st.sidebar.error("❌ Falha no envio do Instagram.")
     else:
-        st.sidebar.warning(f"⚠️ Não há jogos cadastrados para hoje ({DATA_HOJE_STR}) nas ligas monitoradas.")
+        st.sidebar.warning("⚠️ Sem jogos para hoje.")
