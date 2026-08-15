@@ -5,7 +5,7 @@ import time
 import math
 from datetime import datetime, timedelta, timezone
 
-st.set_page_config(page_title="Painel Pro - Tipster Full Analytics v29", layout="wide")
+st.set_page_config(page_title="Painel Pro - Tipster Ultimate Radar v30", layout="wide")
 
 FUSO_BR = timezone(timedelta(hours=-3))
 API_KEY_FIXA = "E89cc081ecbaaf1a7074e878c1cae0ff"
@@ -23,7 +23,7 @@ LIGAS_MONITORADAS = {
 def obter_chave_atualizacao():
     return datetime.now(FUSO_BR).strftime("%Y-%m-%d_%H")
 
-CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v29_full_analytics" 
+CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v30_ultimate_radar" 
 DATA_HOJE_STR = datetime.now(FUSO_BR).strftime("%Y-%m-%d")
 
 def converter_para_horario_brasilia(iso_string):
@@ -177,11 +177,11 @@ def buscar_jogos_ligas_monitoradas_por_data(data_str, key, cache_key):
     except: return []
 
 if id_time1 and LEAGUE_ID:
-    st.title(f"⚽ Painel Full Analytics v29 - {opcao_liga}")
+    st.title(f"⚽ Painel Ultimate Radar v30 - {opcao_liga}")
     stats_t1 = buscar_estatisticas_time(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     metrics_t1 = buscar_metricas_completas_avancadas(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
-    st.subheader("🤖 Simulador Completo (Chutes, Chutes ao Gol, Cantos e Faltas)")
+    st.subheader("🤖 Simulador Completo (Chutes, Cantos e Mercado de Faltas)")
     adversario = st.selectbox("Escolha o Time Adversário", [t for t in sorted(list(TEAM_IDS.keys())) if t != time_principal])
     
     if adversario:
@@ -210,11 +210,13 @@ if id_time1 and LEAGUE_ID:
                 st.markdown("#### 🚩 Cantos & Faltas")
                 st.markdown(f"- *Projeção de Escanteios:* **{cantos_jogo:.1f}**")
                 st.markdown(f"- *Média Estimada de Faltas:* **{faltas_jogo:.1f}**")
+                if faltas_jogo >= 26.5:
+                    st.success("🪓 **Radar Ativado:** Cenário de Guerra! Ideal para apostar em faltas de zagueiros/volantes.")
 
-# --- DISPARADOR TELEGRAM COM DADOS COMPLETOS E FLUXO RICO ---
+# --- DISPARADOR TELEGRAM COM RADAR DE AGRESSIVIDADE ---
 st.sidebar.markdown("---")
 if st.sidebar.button("💎 Enviar Top 6 Melhores Entradas (Telegram)", key="btn_bilhete_full"):
-    with st.spinner("Varrendo todos os jogos do dia com métricas completas..."):
+    with st.spinner("Varrendo todos os jogos e ativando Radares de Faltas..."):
         jogos_hoje = buscar_jogos_ligas_monitoradas_por_data(DATA_HOJE_STR, API_KEY_FIXA, CHAVE_ATUALIZACAO)
         
         if jogos_hoje:
@@ -236,12 +238,13 @@ if st.sidebar.button("💎 Enviar Top 6 Melhores Entradas (Telegram)", key="btn_
                     chutes_ht_h = m_h['shots_total'] * 0.45
                     chutes_ht_a = m_a['shots_total'] * 0.45
                     
-                    # Sistema de Pontuação flexível para garantir que nenhum jogo bom fique de fora
+                    # Sistema de Pontuação atualizado (Faltas ganham peso)
                     score = 2
                     if c_tot >= 9.0: score += 1
                     if s_tot_game >= 22.0: score += 1
                     if s_gol_game >= 7.0: score += 1
                     if tot_gols >= 2.2: score += 1
+                    if f_tot_game >= 26.5: score += 1 # Ponto extra se o jogo for muito agressivo
                     
                     lista_pontuada.append({
                         'score': score,
@@ -255,11 +258,11 @@ if st.sidebar.button("💎 Enviar Top 6 Melhores Entradas (Telegram)", key="btn_
                     })
                 except Exception: continue
             
-            # Pega os TOP 6 melhores jogos do dia
+            # Pega os TOP 6 melhores jogos
             lista_pontuada = sorted(lista_pontuada, key=lambda x: x['score'], reverse=True)[:6]
             
             if lista_pontuada:
-                msg = f"💎 <b>SMART TIPSTER: RAIO-X COMPLETO DO DIA</b> 💎\n📅 <i>{datetime.now(FUSO_BR).strftime('%d/%m/%Y')}</i>\n\n🎯 <i>Métricas de Chutes, Chutes ao Gol, Cantos e Faltas:</i>\n\n"
+                msg = f"💎 <b>SMART TIPSTER: RAIO-X COMPLETO DO DIA</b> 💎\n📅 <i>{datetime.now(FUSO_BR).strftime('%d/%m/%Y')}</i>\n\n🎯 <i>Métricas de Chutes, Cantos e Radar de Faltas:</i>\n\n"
                 
                 for item in lista_pontuada:
                     msg += f"{item['jogo']}\n"
@@ -268,10 +271,15 @@ if st.sidebar.button("💎 Enviar Top 6 Melhores Entradas (Telegram)", key="btn_
                     msg += f"   🎯 <b>Chutes no Alvo:</b> ~{item['chutes_gol']} no gol\n"
                     msg += f"   📊 <b>Chutes Totais:</b> ~{item['chutes_tot']}\n"
                     msg += f"   🚩 <b>Escanteios:</b> ~{item['cantos']} cantos\n"
-                    msg += f"   ⚠️ <b>Faltas Estimadas:</b> ~{item['faltas']} faltas\n\n"
+                    
+                    # O Gatilho de Faltas formatado no Telegram
+                    if float(item['faltas']) >= 26.5:
+                        msg += f"   🪓 <b>Cenário de Guerra:</b> ~{item['faltas']} faltas! Excelente para buscar 'Mais de 1.5 Faltas' em Zagueiros/Volantes.\n\n"
+                    else:
+                        msg += f"   ⚠️ <b>Faltas Estimadas:</b> ~{item['faltas']} faltas\n\n"
                 
                 if enviar_alerta_telegram(msg): 
-                    st.sidebar.success("🔥 Raio-X completo enviado ao Telegram com sucesso!")
+                    st.sidebar.success("🔥 Raio-X completo e Radares enviados ao Telegram com sucesso!")
                 else: 
                     st.sidebar.error("❌ Erro ao enviar para o Telegram.")
             else:
