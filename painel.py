@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import requests
@@ -5,7 +6,7 @@ import time
 import math
 from datetime import datetime, timedelta, timezone
 
-st.set_page_config(page_title="Painel Pro - Global Trading & IA Preditiva v23", layout="wide")
+st.set_page_config(page_title="Painel Pro - Global Trading & IA Preditiva v24 Max Profit", layout="wide")
 
 # --- CONFIGURAÇÃO DE FUSO HORÁRIO GLOBAL ---
 FUSO_BR = timezone(timedelta(hours=-3))
@@ -26,7 +27,7 @@ LIGAS_MONITORADAS = {
 def obter_chave_atualizacao():
     return datetime.now(FUSO_BR).strftime("%Y-%m-%d_%H")
 
-CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v23_pro_tipster" 
+CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v24_max_profit" 
 DATA_HOJE_STR = datetime.now(FUSO_BR).strftime("%Y-%m-%d")
 
 def converter_para_horario_brasilia(iso_string):
@@ -37,7 +38,7 @@ def converter_para_horario_brasilia(iso_string):
     except Exception:
         return iso_string[:10], f"{iso_string[8:10]}/{iso_string[5:7]}/{iso_string[0:4]}", iso_string[11:16]
 
-# --- MOTOR DE INTELIGÊNCIA ARTIFICIAL: POISSON REFINADO ---
+# --- MOTOR DE INTELIGÊNCIA ARTIFICIAL: POISSON REFINADO (MAX PROFIT) ---
 def calcular_probabilidades_poisson(lambda_home, lambda_away, max_gols=6):
     def poisson_prob(lmbda, k):
         return (math.exp(-lmbda) * (lmbda ** k)) / math.factorial(k)
@@ -132,7 +133,7 @@ def buscar_medias_escanteios(team_id, league_id, season, key, data_cache):
         for f in data.get('response', []):
             f_id = f['fixture']['id']
             is_home = (f['teams']['home']['id'] == team_id)
-            time.sleep(0.15)
+            time.sleep(0.12)
             data_s = requests.get(f"https://v3.football.api-sports.io/fixtures/statistics?fixture={f_id}", headers=headers).json()
             
             t_corners = o_corners = t_yellow = o_yellow = 0
@@ -179,11 +180,11 @@ def buscar_jogos_ligas_monitoradas_por_data(data_str, key, cache_key):
     except: return []
 
 if id_time1 and LEAGUE_ID:
-    st.title(f"⚽ Painel Preditivo Pro v23 - {opcao_liga}")
+    st.title(f"⚽ Painel Preditivo Pro v24 Max Profit - {opcao_liga}")
     stats_t1 = buscar_estatisticas_time(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     corners_t1 = buscar_medias_escanteios(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
-    st.subheader("🤖 Simulador H2H & Motor de Probabilidade de Valor (EV+)")
+    st.subheader("🤖 Simulador H2H & Motor de Alta Lucratividade (EV+)")
     adversario = st.selectbox("Escolha o Time Adversário", [t for t in sorted(list(TEAM_IDS.keys())) if t != time_principal])
     
     if adversario:
@@ -196,44 +197,41 @@ if id_time1 and LEAGUE_ID:
         probs_poisson = calcular_probabilidades_poisson(gols_t1, gols_t2)
         total_gols = gols_t1 + gols_t2
         
-        # CORREÇÃO CRÍTICA: Escanteios Baseados Apenas na Matemática (Sem Adição Arbitrária)
         c_proj_t1 = (corners_t1['corners_for_home'] + corners_t2['corners_ag_away']) / 2
         c_proj_t2 = (corners_t2['corners_for_away'] + corners_t1['corners_ag_home']) / 2
         escanteios_jogo = c_proj_t1 + c_proj_t2
         
-        st.markdown("### 💡 Indicações de Valor (Filtro Profissional)")
+        st.markdown("### 💡 Indicações de Valor Profissional (Max Profit)")
         tip_c1, tip_c2 = st.columns(2)
         
         with tip_c1:
             with st.container(border=True):
                 st.markdown("#### ⚽ Mercado de Gols")
-                # Filtros Rigorosos de Probabilidade
-                if total_gols >= 2.8 and probs_poisson['over_2_5'] >= 65: sel_gols = "Mais de 2.5 Gols 🔥"
-                elif probs_poisson['btts'] >= 60 and total_gols >= 2.5: sel_gols = "Ambas Marcam (BTTS) Sim ⚡"
-                elif total_gols <= 1.8 and probs_poisson['under_2_5'] >= 65: sel_gols = "Menos de 2.5 Gols 🛡️"
-                else: sel_gols = "NO BET (Sem Padrão Claro) 🚫"
-                st.markdown(f"- **Sugestão Rigorosa:** `{sel_gols}`")
+                if total_gols >= 2.8 and probs_poisson['over_2_5'] >= 68: sel_gols = "Mais de 2.5 Gols 🔥 (Alta Confiança)"
+                elif probs_poisson['btts'] >= 62 and total_gols >= 2.5: sel_gols = "Ambas Marcam (BTTS) Sim ⚡"
+                elif total_gols <= 1.8 and probs_poisson['under_2_5'] >= 68: sel_gols = "Menos de 2.5 Gols 🛡️"
+                else: sel_gols = "NO BET (Proteger Banca) 🚫"
+                st.markdown(f"- **Filtro Pro:** `{sel_gols}`")
 
         with tip_c2:
             with st.container(border=True):
                 st.markdown("#### 🚩 Mercado de Escanteios")
-                # Indicação Estrita Baseada no Cálculo Limpo
                 if escanteios_jogo >= 11.5: sel_cantos = "Mais de 10.5 Escanteios 🔥"
-                elif escanteios_jogo >= 9.5: sel_cantos = "Mais de 8.5 Escanteios ⚡"
+                elif escanteios_jogo >= 9.8: sel_cantos = "Mais de 8.5 Escanteios ⚡"
                 else: sel_cantos = "NO BET (Sem Padrão de Cantos) 🚫"
-                st.markdown(f"- **Sugestão Calculada:** `{sel_cantos}`")
+                st.markdown(f"- **Filtro Pro:** `{sel_cantos}`")
 
-# --- DISPARADOR TELEGRAM: LISTA DE APOSTAS SIMPLES ---
+# --- DISPARADOR TELEGRAM: LISTA DE VALOR MAX PROFIT ---
 st.sidebar.markdown("---")
-if st.sidebar.button("💎 Enviar 'Lista de Valor' para Telegram (Simples)", key="btn_bilhete_dia"):
-    with st.spinner("Varrendo partidas de hoje com motor estrito..."):
+if st.sidebar.button("💎 Enviar 'Lista de Valor Max Profit' (Telegram)", key="btn_bilhete_dia_max"):
+    with st.spinner("Varrendo partidas de hoje com filtro profissional de alta assertividade..."):
         jogos_hoje = buscar_jogos_ligas_monitoradas_por_data(DATA_HOJE_STR, API_KEY_FIXA, CHAVE_ATUALIZACAO)
         
         if jogos_hoje:
-            msg_bilhete = f"💎 <b>SMART TIPSTER: LISTA DE APOSTAS SIMPLES</b> 💎\n📅 <i>{datetime.now(FUSO_BR).strftime('%d/%m/%Y')}</i>\n\n⚠️ Operar com stake fixa (Apostas Simples):\n\n"
+            msg_bilhete = f"💎 <b>SMART TIPSTER: LISTA MAX PROFIT (EV+)</b> 💎\n📅 <i>{datetime.now(FUSO_BR).strftime('%d/%m/%Y')}</i>\n\n🎯 <i>Dica de Ouro: Apostas simples focadas em valor estatístico. Proteja sua banca!</i>\n\n"
             contador = 0
             
-            for j in jogos_hoje[:10]: # Analisa até 10 jogos
+            for j in jogos_hoje[:12]: 
                 try:
                     s_h = buscar_estatisticas_time(j['HomeID'], j['LeagueID'], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
                     s_a = buscar_estatisticas_time(j['AwayID'], j['LeagueID'], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
@@ -249,25 +247,26 @@ if st.sidebar.button("💎 Enviar 'Lista de Valor' para Telegram (Simples)", key
                     
                     sel_gols = sel_cantos = None
                     
-                    # Só aprova jogos com altíssimo valor esperado
-                    if tot_gols >= 2.8 and p_res['over_2_5'] >= 65: sel_gols = "Mais de 2.5 Gols"
-                    elif p_res['btts'] >= 60 and tot_gols >= 2.5: sel_gols = "Ambas Marcam"
+                    # Critérios altamente seletivos idênticos aos grandes tipsters
+                    if tot_gols >= 2.8 and p_res['over_2_5'] >= 68: sel_gols = "Mais de 2.5 Gols (Confiança Alta 🔥)"
+                    elif p_res['btts'] >= 62 and tot_gols >= 2.5: sel_gols = "Ambas Marcam (BTTS) Sim ⚡"
                     
                     if tot_c_calc >= 11.5: sel_cantos = "Mais de 10.5 Escanteios"
                     elif tot_c_calc >= 10.0: sel_cantos = "Mais de 8.5 Escanteios"
                     
                     if sel_gols or sel_cantos:
                         contador += 1
-                        msg_bilhete += f"⚽ <b>{j['Mandante']} x {j['Visitante']}</b> ({j['Horário']})\n"
-                        if sel_gols: msg_bilhete += f"🎯 Gols: {sel_gols}\n"
-                        if sel_cantos: msg_bilhete += f"🚩 Cantos: {sel_cantos}\n\n"
+                        msg_bilhete += f"⚽ <b>{j['Mandante']} x {j['Visitante']}</b> [{j['Horário']}]\n"
+                        msg_bilhete += f"   • 🏆 {j['Liga']}\n"
+                        if sel_gols: msg_bilhete += f"   • 🎯 {sel_gols}\n"
+                        if sel_cantos: msg_bilhete += f"   • 🚩 {sel_cantos}\n\n"
                         
                 except Exception: continue
                 
             if contador > 0:
-                if enviar_alerta_telegram(msg_bilhete): st.sidebar.success("🔥 Lista enviada!")
-                else: st.sidebar.error("❌ Erro no Telegram.")
+                if enviar_alerta_telegram(msg_bilhete): st.sidebar.success("🔥 Lista Max Profit enviada com sucesso!")
+                else: st.sidebar.error("❌ Erro ao enviar para o Telegram.")
             else:
-                st.sidebar.warning("⚠️ O Motor não encontrou nenhuma entrada com +65% de confiança hoje. O melhor a fazer é proteger a banca.")
+                st.sidebar.warning("⚠️ O motor operou com rigor máximo e não encontrou entradas com +68% de segurança hoje. Poupar a banca é ganhar dinheiro!")
         else:
             st.sidebar.warning("⚠️ Não há jogos hoje nas ligas monitoradas.")
