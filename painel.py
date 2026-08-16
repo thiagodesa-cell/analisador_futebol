@@ -5,7 +5,7 @@ import time
 import math
 from datetime import datetime, timedelta, timezone
 
-st.set_page_config(page_title="Painel Pro - Tipster Ultimate Radar v32", layout="wide")
+st.set_page_config(page_title="Painel Pro - Tipster Ultimate Radar v33", layout="wide")
 
 FUSO_BR = timezone(timedelta(hours=-3))
 API_KEY_FIXA = "E89cc081ecbaaf1a7074e878c1cae0ff"
@@ -23,7 +23,7 @@ LIGAS_MONITORADAS = {
 def obter_chave_atualizacao():
     return datetime.now(FUSO_BR).strftime("%Y-%m-%d_%H")
 
-CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v32_full_breakdown" 
+CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v33_anti_travamento" 
 DATA_HOJE_STR = datetime.now(FUSO_BR).strftime("%Y-%m-%d")
 
 def converter_para_horario_brasilia(iso_string):
@@ -124,12 +124,11 @@ def buscar_metricas_completas_avancadas(team_id, league_id, season, key, data_ca
     c_pro, c_contra, s_tot, s_gol, faltas_lista = [], [], [], [], []
     
     try:
-        data = requests.get(url, headers=headers).json()
+        data = requests.get(url, headers=headers, timeout=10).json() # Timeout adicionado para evitar travamento
         for f in data.get('response', []):
             f_id = f['fixture']['id']
-            is_home = (f['teams']['home']['id'] == team_id)
-            time.sleep(0.12)
-            data_s = requests.get(f"https://v3.football.api-sports.io/fixtures/statistics?fixture={f_id}", headers=headers).json()
+            time.sleep(0.1) # Respiro super rápido para a API
+            data_s = requests.get(f"https://v3.football.api-sports.io/fixtures/statistics?fixture={f_id}", headers=headers, timeout=10).json()
             
             t_c = o_c = t_st = t_sg = t_f = 0
             if data_s.get('results', 0) > 0:
@@ -177,7 +176,7 @@ def buscar_jogos_ligas_monitoradas_por_data(data_str, key, cache_key):
     except: return []
 
 if id_time1 and LEAGUE_ID:
-    st.title(f"⚽ Painel Ultimate Radar v32 - {opcao_liga}")
+    st.title(f"⚽ Painel Ultimate Radar v33 - {opcao_liga}")
     stats_t1 = buscar_estatisticas_time(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     metrics_t1 = buscar_metricas_completas_avancadas(id_time1, LEAGUE_ID, SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
@@ -213,91 +212,108 @@ if id_time1 and LEAGUE_ID:
                 if faltas_jogo >= 26.5:
                     st.success("🪓 **Radar Ativado:** Cenário de Guerra! Ideal para apostar em faltas de zagueiros/volantes.")
 
-# --- DISPARADOR TELEGRAM COM RADAR DE AGRESSIVIDADE E RAIO-X SEPARADO ---
+# --- DISPARADOR TELEGRAM COM MONITOR DE PROGRESSO ---
 st.sidebar.markdown("---")
 if st.sidebar.button("💎 Enviar Top 6 Melhores Entradas (Telegram)", key="btn_bilhete_full"):
-    with st.spinner("Varrendo todos os jogos, quebrando dados por time e ativando Radares..."):
-        jogos_hoje = buscar_jogos_ligas_monitoradas_por_data(DATA_HOJE_STR, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    jogos_hoje = buscar_jogos_ligas_monitoradas_por_data(DATA_HOJE_STR, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    
+    if jogos_hoje:
+        total_jogos = len(jogos_hoje)
+        st.sidebar.info(f"⚽ {total_jogos} jogos encontrados. Iniciando o Raio-X avançado...")
         
-        if jogos_hoje:
-            lista_pontuada = []
+        # Elementos visuais para acompanhamento do usuário
+        barra_progresso = st.sidebar.progress(0)
+        texto_status = st.sidebar.empty()
+        
+        lista_pontuada = []
+        
+        for idx, j in enumerate(jogos_hoje): 
+            # Atualiza o texto visual mostrando qual jogo está processando agora
+            texto_status.markdown(f"⏳ **Aguarde... Analisando ({idx+1}/{total_jogos}):**\n{j['Mandante']} x {j['Visitante']}")
             
-            for j in jogos_hoje: 
-                try:
-                    s_h = buscar_estatisticas_time(j['HomeID'], j['LeagueID'], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-                    s_a = buscar_estatisticas_time(j['AwayID'], j['LeagueID'], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-                    m_h = buscar_metricas_completas_avancadas(j['HomeID'], j['LeagueID'], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-                    m_a = buscar_metricas_completas_avancadas(j['AwayID'], j['LeagueID'], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
-                    
-                    tot_gols = ((s_h.get('gf_home', 1.2) + s_a.get('ga_away', 1.2)) / 2) + ((s_a.get('gf_away', 1.2) + s_h.get('ga_home', 1.2)) / 2)
-                    c_tot = m_h['corners_for'] + m_a['corners_for']
-                    s_tot_game = m_h['shots_total'] + m_a['shots_total']
-                    s_gol_game = m_h['shots_on_goal'] + m_a['shots_on_goal']
-                    f_tot_game = m_h['fouls'] + m_a['fouls']
-                    
-                    chutes_ht_h = m_h['shots_total'] * 0.45
-                    chutes_ht_a = m_a['shots_total'] * 0.45
-                    chutes_ht_tot = chutes_ht_h + chutes_ht_a # Soma do primeiro tempo
-                    
-                    score = 2
-                    if c_tot >= 9.0: score += 1
-                    if s_tot_game >= 22.0: score += 1
-                    if s_gol_game >= 7.0: score += 1
-                    if tot_gols >= 2.2: score += 1
-                    if f_tot_game >= 26.5: score += 1 
-                    
-                    lista_pontuada.append({
-                        'score': score,
-                        'jogo': f"⚽ <b>{j['Mandante']} x {j['Visitante']}</b> [{j['Horário']}]",
-                        'liga': f"🏆 {j['Liga']}",
-                        'cantos': f"{c_tot:.1f}",
-                        'chutes_tot': f"{s_tot_game:.1f}",
-                        'chutes_gol': f"{s_gol_game:.1f}",
-                        'faltas': f"{f_tot_game:.1f}",
-                        'chutes_ht_tot': f"{chutes_ht_tot:.1f}",
-                        'h_nome': j['Mandante'],
-                        'h_chutes': f"{m_h['shots_total']:.1f}",
-                        'h_alvo': f"{m_h['shots_on_goal']:.1f}",
-                        'h_cantos': f"{m_h['corners_for']:.1f}",
-                        'h_faltas': f"{m_h['fouls']:.1f}",
-                        'a_nome': j['Visitante'],
-                        'a_chutes': f"{m_a['shots_total']:.1f}",
-                        'a_alvo': f"{m_a['shots_on_goal']:.1f}",
-                        'a_cantos': f"{m_a['corners_for']:.1f}",
-                        'a_faltas': f"{m_a['fouls']:.1f}",
-                    })
-                except Exception: continue
-            
-            lista_pontuada = sorted(lista_pontuada, key=lambda x: x['score'], reverse=True)[:6]
-            
-            if lista_pontuada:
-                msg = f"💎 <b>SMART TIPSTER: RAIO-X COMPLETO DO DIA</b> 💎\n📅 <i>{datetime.now(FUSO_BR).strftime('%d/%m/%Y')}</i>\n\n🎯 <i>Métricas Analíticas por Time:</i>\n\n"
+            try:
+                s_h = buscar_estatisticas_time(j['HomeID'], j['LeagueID'], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+                s_a = buscar_estatisticas_time(j['AwayID'], j['LeagueID'], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+                m_h = buscar_metricas_completas_avancadas(j['HomeID'], j['LeagueID'], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+                m_a = buscar_metricas_completas_avancadas(j['AwayID'], j['LeagueID'], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
                 
-                for item in lista_pontuada:
-                    msg += f"{item['jogo']}\n"
-                    msg += f"   • {item['liga']} (Score: {item['score']} pts)\n\n"
-                    
-                    msg += f"   📊 <b>TOTAL DA PARTIDA:</b>\n"
-                    msg += f"   🔥 1º Tempo (Chutes Totais): ~{item['chutes_ht_tot']} finalizações\n"
-                    msg += f"   🎯 Chutes no Alvo: ~{item['chutes_gol']} no gol\n"
-                    msg += f"   📉 Chutes Totais: ~{item['chutes_tot']}\n"
-                    msg += f"   🚩 Escanteios: ~{item['cantos']} cantos\n"
-                    
-                    if float(item['faltas']) >= 26.5:
-                        msg += f"   🪓 <b>Cenário de Guerra:</b> ~{item['faltas']} faltas! (Ideal para Props de Zagueiros)\n\n"
-                    else:
-                        msg += f"   ⚠️ Faltas Estimadas: ~{item['faltas']} faltas\n\n"
-                        
-                    msg += f"   🛡️ <b>RAIO-X POR TIME:</b>\n"
-                    msg += f"   🏠 {item['h_nome']}: {item['h_chutes']} Chutes | {item['h_alvo']} no Alvo | {item['h_cantos']} Escanteios | {item['h_faltas']} Faltas\n"
-                    msg += f"   ✈️ {item['a_nome']}: {item['a_chutes']} Chutes | {item['a_alvo']} no Alvo | {item['a_cantos']} Escanteios | {item['a_faltas']} Faltas\n"
-                    msg += f"   ━━━━━━━━━━━━━━━━━━━━━\n\n"
+                tot_gols = ((s_h.get('gf_home', 1.2) + s_a.get('ga_away', 1.2)) / 2) + ((s_a.get('gf_away', 1.2) + s_h.get('ga_home', 1.2)) / 2)
+                c_tot = m_h['corners_for'] + m_a['corners_for']
+                s_tot_game = m_h['shots_total'] + m_a['shots_total']
+                s_gol_game = m_h['shots_on_goal'] + m_a['shots_on_goal']
+                f_tot_game = m_h['fouls'] + m_a['fouls']
                 
-                if enviar_alerta_telegram(msg): 
-                    st.sidebar.success("🔥 Raio-X avançado enviado ao Telegram com sucesso!")
-                else: 
-                    st.sidebar.error("❌ Erro ao enviar para o Telegram.")
-            else:
-                st.sidebar.warning("⚠️ Nenhum jogo encontrado para hoje.")
+                chutes_ht_h = m_h['shots_total'] * 0.45
+                chutes_ht_a = m_a['shots_total'] * 0.45
+                chutes_ht_tot = chutes_ht_h + chutes_ht_a 
+                
+                score = 2
+                if c_tot >= 9.0: score += 1
+                if s_tot_game >= 22.0: score += 1
+                if s_gol_game >= 7.0: score += 1
+                if tot_gols >= 2.2: score += 1
+                if f_tot_game >= 26.5: score += 1 
+                
+                lista_pontuada.append({
+                    'score': score,
+                    'jogo': f"⚽ <b>{j['Mandante']} x {j['Visitante']}</b> [{j['Horário']}]",
+                    'liga': f"🏆 {j['Liga']}",
+                    'cantos': f"{c_tot:.1f}",
+                    'chutes_tot': f"{s_tot_game:.1f}",
+                    'chutes_gol': f"{s_gol_game:.1f}",
+                    'faltas': f"{f_tot_game:.1f}",
+                    'chutes_ht_tot': f"{chutes_ht_tot:.1f}",
+                    'h_nome': j['Mandante'],
+                    'h_chutes': f"{m_h['shots_total']:.1f}",
+                    'h_alvo': f"{m_h['shots_on_goal']:.1f}",
+                    'h_cantos': f"{m_h['corners_for']:.1f}",
+                    'h_faltas': f"{m_h['fouls']:.1f}",
+                    'a_nome': j['Visitante'],
+                    'a_chutes': f"{m_a['shots_total']:.1f}",
+                    'a_alvo': f"{m_a['shots_on_goal']:.1f}",
+                    'a_cantos': f"{m_a['corners_for']:.1f}",
+                    'a_faltas': f"{m_a['fouls']:.1f}",
+                })
+            except Exception: 
+                pass
+            
+            # Atualiza a barra de progresso
+            barra_progresso.progress((idx + 1) / total_jogos)
+            
+        # Quando termina, apaga os avisos visuais
+        texto_status.empty()
+        barra_progresso.empty()
+        
+        lista_pontuada = sorted(lista_pontuada, key=lambda x: x['score'], reverse=True)[:6]
+        
+        if lista_pontuada:
+            msg = f"💎 <b>SMART TIPSTER: RAIO-X COMPLETO DO DIA</b> 💎\n📅 <i>{datetime.now(FUSO_BR).strftime('%d/%m/%Y')}</i>\n\n🎯 <i>Métricas Analíticas por Time:</i>\n\n"
+            
+            for item in lista_pontuada:
+                msg += f"{item['jogo']}\n"
+                msg += f"   • {item['liga']} (Score: {item['score']} pts)\n\n"
+                
+                msg += f"   📊 <b>TOTAL DA PARTIDA:</b>\n"
+                msg += f"   🔥 1º Tempo (Chutes Totais): ~{item['chutes_ht_tot']} finalizações\n"
+                msg += f"   🎯 Chutes no Alvo: ~{item['chutes_gol']} no gol\n"
+                msg += f"   📉 Chutes Totais: ~{item['chutes_tot']}\n"
+                msg += f"   🚩 Escanteios: ~{item['cantos']} cantos\n"
+                
+                if float(item['faltas']) >= 26.5:
+                    msg += f"   🪓 <b>Cenário de Guerra:</b> ~{item['faltas']} faltas! (Ideal para Props de Zagueiros)\n\n"
+                else:
+                    msg += f"   ⚠️ Faltas Estimadas: ~{item['faltas']} faltas\n\n"
+                    
+                msg += f"   🛡️ <b>RAIO-X POR TIME:</b>\n"
+                msg += f"   🏠 {item['h_nome']}: {item['h_chutes']} Chutes | {item['h_alvo']} no Alvo | {item['h_cantos']} Escanteios | {item['h_faltas']} Faltas\n"
+                msg += f"   ✈️ {item['a_nome']}: {item['a_chutes']} Chutes | {item['a_alvo']} no Alvo | {item['a_cantos']} Escanteios | {item['a_faltas']} Faltas\n"
+                msg += f"   ━━━━━━━━━━━━━━━━━━━━━\n\n"
+            
+            if enviar_alerta_telegram(msg): 
+                st.sidebar.success("🔥 Raio-X avançado enviado ao Telegram com sucesso!")
+            else: 
+                st.sidebar.error("❌ Erro ao enviar para o Telegram.")
         else:
-            st.sidebar.warning("⚠️ Não há partidas agendadas nas ligas monitoradas.")
+            st.sidebar.warning("⚠️ Nenhum jogo com estatísticas robustas encontrado hoje.")
+    else:
+        st.sidebar.warning("⚠️ Não há partidas agendadas nas ligas monitoradas para hoje.")
