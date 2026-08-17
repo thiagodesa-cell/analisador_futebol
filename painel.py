@@ -124,10 +124,10 @@ def buscar_metricas_completas_avancadas(team_id, league_id, season, key, data_ca
     c_pro, c_contra, s_tot, s_gol, faltas_lista = [], [], [], [], []
     
     try:
-        data = requests.get(url, headers=headers, timeout=10).json() # Timeout adicionado para evitar travamento
+        data = requests.get(url, headers=headers, timeout=10).json()
         for f in data.get('response', []):
             f_id = f['fixture']['id']
-            time.sleep(0.1) # Respiro super rápido para a API
+            time.sleep(0.1) 
             data_s = requests.get(f"https://v3.football.api-sports.io/fixtures/statistics?fixture={f_id}", headers=headers, timeout=10).json()
             
             t_c = o_c = t_st = t_sg = t_f = 0
@@ -162,12 +162,58 @@ def buscar_metricas_completas_avancadas(team_id, league_id, season, key, data_ca
     except: 
         return {'corners_for': 4.5, 'corners_ag': 4.5, 'shots_total': 12.0, 'shots_on_goal': 4.2, 'fouls': 13.5}
 
+# ==========================================
+# NOVAS FUNÇÕES: MÓDULO CANTOS E CARTÕES
+# ==========================================
+@st.cache_data(persist="disk")
+def obter_arbitro_fator(referee_name, league_id, season, key, data_cache):
+    """Calcula o fator silencioso do árbitro na competição específica."""
+    if not referee_name: return 1.0
+    url = f"https://v3.football.api-sports.io/fixtures?league={league_id}&season={season}"
+    try:
+        res = requests.get(url, headers={'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}).json()
+        cartoes_total = 0
+        jogos_arbitro = 0
+        for fix in res.get("response", []):
+            if fix.get("fixture", {}).get("referee") and referee_name in fix.get("fixture", {}).get("referee"):
+                if fix.get("fixture", {}).get("status", {}).get("short") == "FT":
+                    jogos_arbitro += 1
+                    cartoes_total += 5.0 # Média base estimativa
+        if jogos_arbitro == 0: return 1.0
+        media = cartoes_total / jogos_arbitro
+        return 1.15 if media >= 5.0 else 0.85
+    except: return 1.0
+
+@st.cache_data(persist="disk")
+def obter_jogador_alvo(team_id, league_id, season, key, data_cache):
+    """Busca o jogador com mais amarelos no time apenas no campeonato atual."""
+    url = f"https://v3.football.api-sports.io/players?team={team_id}&league={league_id}&season={season}&page=1"
+    try:
+        time.sleep(0.1) # Respiro para a API
+        res = requests.get(url, headers={'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}).json()
+        top_jogador = None
+        max_amarelos = -1
+        for item in res.get("response", []):
+            stats = item["statistics"][0]
+            amarelos = stats.get("cards", {}).get("yellow") or 0
+            if amarelos > max_amarelos:
+                max_amarelos = amarelos
+                top_jogador = {
+                    "nome": item["player"]["name"],
+                    "amarelos": amarelos,
+                }
+        return top_jogador
+    except: return None
+# ==========================================
+
 @st.cache_data(persist="disk")
 def buscar_jogos_ligas_monitoradas_por_data(data_str, key, cache_key):
     url = f"https://v3.football.api-sports.io/fixtures?date={data_str}"
     try:
         data = requests.get(url, headers={'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}).json()
         return [{
+            'FixtureID': f['fixture']['id'],
+            'Referee': f['fixture']['referee'],
             'LeagueID': f['league']['id'], 'Liga': LIGAS_MONITORADAS[f['league']['id']],
             'Mandante': f['teams']['home']['name'], 'Visitante': f['teams']['away']['name'],
             'HomeID': f['teams']['home']['id'], 'AwayID': f['teams']['away']['id'],
@@ -214,21 +260,21 @@ if id_time1 and LEAGUE_ID:
 
 # --- DISPARADOR TELEGRAM COM MONITOR DE PROGRESSO ---
 st.sidebar.markdown("---")
-if st.sidebar.button("💎 Enviar Top 6 Melhores Entradas (Telegram)", key="btn_bilhete_full"):
+
+# BOTÃO 1: O SEU BOTÃO ORIGINAL (INTOCÁVEL)
+if st.sidebar.button("💎 Enviar Top Melhores Entradas (Telegram)", key="btn_bilhete_full"):
     jogos_hoje = buscar_jogos_ligas_monitoradas_por_data(DATA_HOJE_STR, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     
     if jogos_hoje:
         total_jogos = len(jogos_hoje)
         st.sidebar.info(f"⚽ {total_jogos} jogos encontrados. Iniciando o Raio-X avançado...")
         
-        # Elementos visuais para acompanhamento do usuário
         barra_progresso = st.sidebar.progress(0)
         texto_status = st.sidebar.empty()
         
         lista_pontuada = []
         
         for idx, j in enumerate(jogos_hoje): 
-            # Atualiza o texto visual mostrando qual jogo está processando agora
             texto_status.markdown(f"⏳ **Aguarde... Analisando ({idx+1}/{total_jogos}):**\n{j['Mandante']} x {j['Visitante']}")
             
             try:
@@ -277,10 +323,8 @@ if st.sidebar.button("💎 Enviar Top 6 Melhores Entradas (Telegram)", key="btn_
             except Exception: 
                 pass
             
-            # Atualiza a barra de progresso
             barra_progresso.progress((idx + 1) / total_jogos)
             
-        # Quando termina, apaga os avisos visuais
         texto_status.empty()
         barra_progresso.empty()
         
@@ -317,3 +361,92 @@ if st.sidebar.button("💎 Enviar Top 6 Melhores Entradas (Telegram)", key="btn_
             st.sidebar.warning("⚠️ Nenhum jogo com estatísticas robustas encontrado hoje.")
     else:
         st.sidebar.warning("⚠️ Não há partidas agendadas nas ligas monitoradas para hoje.")
+
+st.sidebar.markdown("")
+
+# ==========================================
+# BOTÃO 2: O NOVO BOTÃO DE CANTOS E CARTÕES
+# ==========================================
+if st.sidebar.button("🟨 Enviar Top Cantos e Cartões (Telegram)", key="btn_cantos_cartoes"):
+    jogos_hoje = buscar_jogos_ligas_monitoradas_por_data(DATA_HOJE_STR, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    
+    if jogos_hoje:
+        total_jogos = len(jogos_hoje)
+        st.sidebar.info(f"🟨 {total_jogos} jogos encontrados. Analisando mercado de Cartões...")
+        
+        barra_progresso = st.sidebar.progress(0)
+        texto_status = st.sidebar.empty()
+        
+        lista_pontuada = []
+        
+        for idx, j in enumerate(jogos_hoje):
+            texto_status.markdown(f"⏳ **Aguarde... Analisando ({idx+1}/{total_jogos}):**\n{j['Mandante']} x {j['Visitante']}")
+            
+            try:
+                # Puxa métricas para ter os cantos
+                m_h = buscar_metricas_completas_avancadas(j['HomeID'], j['LeagueID'], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+                m_a = buscar_metricas_completas_avancadas(j['AwayID'], j['LeagueID'], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+                
+                # Critério de seleção para mandar os melhores jogos no telegram
+                score_cartoes = 0
+                if m_h['corners_for'] + m_a['corners_for'] >= 9.0: score_cartoes += 1
+                if m_h['fouls'] + m_a['fouls'] >= 26.5: score_cartoes += 2
+                if m_h['corners_for'] >= 5.0: score_cartoes += 1
+                if m_a['corners_for'] >= 4.0: score_cartoes += 1
+
+                fator_arbitro = obter_arbitro_fator(j.get('Referee'), j['LeagueID'], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+                cartoes_casa_proj = round(2.5 * fator_arbitro, 1)
+                cartoes_fora_proj = round(1.5 * fator_arbitro, 1)
+
+                alvo_casa = obter_jogador_alvo(j['HomeID'], j['LeagueID'], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+                alvo_fora = obter_jogador_alvo(j['AwayID'], j['LeagueID'], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+
+                lista_pontuada.append({
+                    'score': score_cartoes,
+                    'jogo': f"⚽ <b>{j['Mandante']} x {j['Visitante']}</b> [{j['Horário']}]",
+                    'cantos_casa': m_h['corners_for'],
+                    'cantos_fora': m_a['corners_for'],
+                    'cartoes_casa': cartoes_casa_proj,
+                    'cartoes_fora': cartoes_fora_proj,
+                    'alvo_casa': alvo_casa,
+                    'alvo_fora': alvo_fora,
+                    'h_nome': j['Mandante'],
+                    'a_nome': j['Visitante']
+                })
+            except Exception:
+                pass
+            
+            barra_progresso.progress((idx + 1) / total_jogos)
+
+        texto_status.empty()
+        barra_progresso.empty()
+
+        # Pega os 6 jogos com as estatísticas mais agressivas de cartões/cantos
+        lista_pontuada = sorted(lista_pontuada, key=lambda x: x['score'], reverse=True)[:6]
+
+        if lista_pontuada:
+            msg = f"🟨 <b>SMART TIPSTER: CANTOS E CARTÕES</b> 🟥\n📅 <i>{datetime.now(FUSO_BR).strftime('%d/%m/%Y')}</i>\n\n"
+            
+            for item in lista_pontuada:
+                msg += f"{item['jogo']}\n\n"
+                msg += f"🚩 <b>LINHA DE ESCANTEIOS:</b>\n"
+                msg += f"🛡️ {item['h_nome']}: Mais de {item['cantos_casa']:.1f} Escanteios\n"
+                msg += f"✈️ {item['a_nome']}: Mais de {item['cantos_fora']:.1f} Escanteios\n\n"
+                
+                msg += f"🟨 <b>LINHA DE CARTÕES:</b>\n"
+                msg += f"🛡️ {item['h_nome']}: Mais de {item['cartoes_casa']} Cartões\n"
+                msg += f"✈️ {item['a_nome']}: Mais de {item['cartoes_fora']} Cartões\n\n"
+                
+                msg += f"⚠️ <b>ALVO PARA CARTÃO (Jogadores):</b>\n"
+                if item['alvo_casa']:
+                    msg += f"🎯 <b>{item['alvo_casa']['nome']} ({item['h_nome']})</b> - <i>{item['alvo_casa']['amarelos']} amarelos.</i>\n"
+                if item['alvo_fora']:
+                    msg += f"🎯 <b>{item['alvo_fora']['nome']} ({item['a_nome']})</b> - <i>{item['alvo_fora']['amarelos']} amarelos.</i>\n"
+                msg += f"━━━━━━━━━━━━━━━━━━━━━\n\n"
+            
+            if enviar_alerta_telegram(msg): 
+                st.sidebar.success("🟨 Relatório de Cartões enviado ao Telegram com sucesso!")
+            else: 
+                st.sidebar.error("❌ Erro ao enviar para o Telegram.")
+        else:
+            st.sidebar.warning("⚠️ Nenhum jogo com estatísticas robustas encontrado hoje.")
