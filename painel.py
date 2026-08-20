@@ -589,3 +589,8 @@ if st.sidebar.button("🎯 Enviar Sugestão de Placar (Telegram)", key="btn_plac
             enviar_alerta_telegram(msg)
             st.sidebar.success("🎯 Sugestões de Placar enviadas com sucesso!")
         else: st.sidebar.warning("⚠️ Nenhum jogo validado para Sugestão de Placar hoje.")
+
+<iframe width="100%" height="286" src="https://widgets.sofascore.com/pt-BR/embed/attackMomentum?id=15526230&widgetTheme=light" frameborder="0" scrolling="no"></iframe>
+      <div style="font-size:12px;font-family:Arial,sans-serif"><a href="https://www.sofascore.com/pt/football/match/athletic-club-crb/HPisAfMc#id:15526230" target="_blank" rel="noreferrer">
+          Placar ao Vivo Athletic Club - Clube De Regatas Brasil
+        </a></div>
