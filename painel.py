@@ -507,14 +507,14 @@ if st.sidebar.button("⚽ Enviar Alertas de Gols (Telegram)", key="btn_gols"):
         else: st.sidebar.warning("⚠️ Nenhum jogo validado para Gols hoje.")
 
 # ==========================================
-# BOTÃO 5: SUGESTÃO DE PLACAR EXATO (NOVO)
+# BOTÃO 5: SUGESTÃO DE PLACAR EXATO (NOVO - SINCRONIZADO)
 # ==========================================
 if st.sidebar.button("🎯 Enviar Sugestão de Placar (Telegram)", key="btn_placar"):
     jogos_hoje = buscar_jogos_ligas_monitoradas_por_data(DATA_HOJE_STR, API_KEY_FIXA, CHAVE_ATUALIZACAO)
     
     if jogos_hoje:
         total_jogos = len(jogos_hoje)
-        st.sidebar.info(f"🎯 {total_jogos} jogos encontrados. Calculando Placares...")
+        st.sidebar.info(f"🎯 {total_jogos} jogos encontrados. Cruzando dados para Placares...")
         barra_progresso = st.sidebar.progress(0)
         texto_status = st.sidebar.empty()
         lista_pontuada = []
@@ -524,21 +524,54 @@ if st.sidebar.button("🎯 Enviar Sugestão de Placar (Telegram)", key="btn_plac
             try:
                 s_h = buscar_estatisticas_time(j['HomeID'], j['LeagueID'], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
                 s_a = buscar_estatisticas_time(j['AwayID'], j['LeagueID'], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+                m_h = buscar_metricas_completas_avancadas(j['HomeID'], j['LeagueID'], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+                m_a = buscar_metricas_completas_avancadas(j['AwayID'], j['LeagueID'], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
                 
                 # TRAVA DE SEGURANÇA CONTRA DADOS ZERADOS
-                if (s_h.get('gf_home', 0.0) + s_a.get('ga_away', 0.0)) <= 0:
+                if (m_h['shots_total'] + m_a['shots_total']) <= 1.0:
                     continue
 
-                lambda_home = (s_h.get('gf_home', 1.0) + s_a.get('ga_away', 1.0)) / 2
-                lambda_away = (s_a.get('gf_away', 1.0) + s_h.get('ga_home', 1.0)) / 2
+                # 1. PEGA A MÉDIA DE GOLS
+                gols_base_casa = (s_h.get('gf_home', 1.0) + s_a.get('ga_away', 1.0)) / 2
+                gols_base_fora = (s_a.get('gf_away', 1.0) + s_h.get('ga_home', 1.0)) / 2
+
+                # 2. PEGA A MÉDIA DE CHUTES (Para cruzar os dados)
+                chutes_casa = m_h['shots_total']
+                chutes_fora = m_a['shots_total']
+                alvo_casa = m_h['shots_on_goal']
+                alvo_fora = m_a['shots_on_goal']
+
+                # 3. CÁLCULO HÍBRIDO (50% Gols Históricos + 50% Poder de Chute)
+                # Assumimos que a cada ~3.5 chutes no alvo, sai 1 gol
+                xg_casa = (gols_base_casa * 0.5) + ((alvo_casa / 3.5) * 0.5)
+                xg_fora = (gols_base_fora * 0.5) + ((alvo_fora / 3.5) * 0.5)
+
+                placar_casa = round(xg_casa)
+                placar_fora = round(xg_fora)
+
+                # 4. TRAVA DE COERÊNCIA COM A CHANCE DUPLA
+                if chutes_casa > chutes_fora + 2.5: 
+                    # Lógica da Chance Dupla: 1X (Mandante ou Empate)
+                    # Proíbe o visitante de vencer no placar sugerido
+                    if placar_fora > placar_casa:
+                        placar_casa = placar_fora 
                 
-                # Arredonda a média matemática para o número inteiro mais próximo
-                placar_casa = round(lambda_home)
-                placar_fora = round(lambda_away)
+                elif chutes_fora > chutes_casa + 2.5:
+                    # Lógica da Chance Dupla: X2 (Visitante ou Empate)
+                    # Proíbe o mandante de vencer no placar sugerido
+                    if placar_casa > placar_fora:
+                        placar_fora = placar_casa
+                
+                else:
+                    # Lógica da Chance Dupla: 12 (Sem Empate)
+                    # Tenta forçar um vencedor baseado em quem chuta mais no alvo
+                    if placar_casa == placar_fora:
+                        if alvo_casa > alvo_fora: placar_casa += 1
+                        elif alvo_fora > alvo_casa: placar_fora += 1
 
                 lista_pontuada.append({
                     'msg_placar': f"⚽ {j['Mandante']} {placar_casa} x {placar_fora} {j['Visitante']}",
-                    'confianca': lambda_home + lambda_away # Fator de ordenação
+                    'confianca': xg_casa + xg_fora # Ordena pelos jogos com maior tendência de gols
                 })
             except Exception: pass
             barra_progresso.progress((idx + 1) / total_jogos)
@@ -548,7 +581,7 @@ if st.sidebar.button("🎯 Enviar Sugestão de Placar (Telegram)", key="btn_plac
         lista_pontuada = sorted(lista_pontuada, key=lambda x: x['confianca'], reverse=True)[:8]
 
         if lista_pontuada:
-            msg = f"🎯 <b>SUGESTÃO DE PLACAR</b>\n📅 <i>{datetime.now(FUSO_BR).strftime('%d/%m/%Y')}</i>\n"
+            msg = f"🎯 <b>SUGESTÃO DE PLACAR EXATO</b>\n📅 <i>{datetime.now(FUSO_BR).strftime('%d/%m/%Y')}</i>\n"
             msg += f"━━━━━━━━━━━━━━━━━━━━━\n\n"
             for item in lista_pontuada:
                 msg += f"{item['msg_placar']}\n\n"
