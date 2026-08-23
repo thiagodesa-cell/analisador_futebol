@@ -10,7 +10,7 @@ import streamlit.components.v1 as components
 # ==========================================
 # CONFIGURAÇÕES INICIAIS DA PÁGINA
 # ==========================================
-st.set_page_config(page_title="Painel Pro - Tipster Ultimate Radar v36", layout="wide")
+st.set_page_config(page_title="Painel Pro - Tipster Ultimate Radar v37", layout="wide")
 
 FUSO_BR = timezone(timedelta(hours=-3))
 API_KEY_FIXA = "E89cc081ecbaaf1a7074e878c1cae0ff"
@@ -47,7 +47,7 @@ LEAGUE_PRIORITY = {
 def obter_chave_atualizacao():
     return datetime.now(FUSO_BR).strftime("%Y-%m-%d_%H")
 
-CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v36_prioridade"
+CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v37_dashboard"
 DATA_HOJE_STR = datetime.now(FUSO_BR).strftime("%Y-%m-%d")
 
 # ==========================================
@@ -118,12 +118,11 @@ def buscar_jogos_reais_do_dia(data_str, key, data_cache):
                     "LeagueID": l_id,
                     "Liga": LIGAS_MONITORADAS[l_id],
                     "Horário": hora,
-                    "Prioridade": LEAGUE_PRIORITY.get(l_id, 99) # Prioriza ligas do Brasil/América do Sul
+                    "Prioridade": LEAGUE_PRIORITY.get(l_id, 99)
                 })
     except:
         pass
     
-    # Ordena os jogos para colocar Brasil e América do Sul no topo
     jogos_validos = sorted(jogos_validos, key=lambda x: (x["Prioridade"], x["Horário"]))
     return jogos_validos
 
@@ -136,7 +135,7 @@ LEAGUE_ID = ([k for k, v in LIGAS_MONITORADAS.items() if v == opcao_liga][0] if 
 TEAM_IDS = buscar_times_por_liga_ampliado(LEAGUE_ID, API_KEY_FIXA, CHAVE_ATUALIZACAO) if LEAGUE_ID else {}
 
 if id_time1 := TEAM_IDS.get(st.sidebar.selectbox("Escolha o Time (Mandante)", sorted(list(TEAM_IDS.keys())) if TEAM_IDS else [], index=None)):
-    st.title(f"⚽ Painel Ultimate Radar v36 - {opcao_liga}")
+    st.title(f"⚽ Painel Ultimate Radar v37 - {opcao_liga}")
     adversario = st.sidebar.selectbox("Escolha o Time Adversário", [t for t in sorted(list(TEAM_IDS.keys())) if TEAM_IDS[t] != id_time1])
 
     if adversario:
@@ -159,7 +158,7 @@ st.sidebar.subheader("🚀 Central de Alertas Telegram")
 
 jogos_hoje = buscar_jogos_reais_do_dia(DATA_HOJE_STR, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
-# 1. Raio-X Completo com Loading
+# 1. Raio-X Completo
 if st.sidebar.button("💎 1. Enviar Raio-X Completo", key="btn_rx"):
     with st.spinner("🔄 Rastreando jogos do Brasileirão e América do Sul para o Raio-X..."):
         if jogos_hoje:
@@ -175,7 +174,7 @@ if st.sidebar.button("💎 1. Enviar Raio-X Completo", key="btn_rx"):
         else:
             st.sidebar.warning("Nenhum jogo encontrado para hoje nas ligas monitoradas.")
 
-# 2. Top Cantos e Cartões com Loading
+# 2. Top Cantos e Cartões
 if st.sidebar.button("🟨 2. Enviar Top Cantos e Cartões", key="btn_cantos"):
     with st.spinner("🔄 Analisando cantos e cartões dos jogos de hoje..."):
         if jogos_hoje:
@@ -192,7 +191,7 @@ if st.sidebar.button("🟨 2. Enviar Top Cantos e Cartões", key="btn_cantos"):
         else:
             st.sidebar.warning("Nenhum jogo encontrado para hoje.")
 
-# 3. Chance Dupla com Loading
+# 3. Chance Dupla
 if st.sidebar.button("🛡️ 3. Enviar Chance Dupla", key="btn_dupla"):
     with st.spinner("🔄 Calculando probabilidades de Chance Dupla..."):
         if jogos_hoje:
@@ -209,7 +208,7 @@ if st.sidebar.button("🛡️ 3. Enviar Chance Dupla", key="btn_dupla"):
         else:
             st.sidebar.warning("Nenhum jogo encontrado para hoje.")
 
-# 4. Alertas de Gols com Loading
+# 4. Alertas de Gols
 if st.sidebar.button("⚽ 4. Enviar Alertas de Gols", key="btn_gols"):
     with st.spinner("🔄 Processando projeções de gols e Ambas Marcam..."):
         if jogos_hoje:
@@ -225,7 +224,7 @@ if st.sidebar.button("⚽ 4. Enviar Alertas de Gols", key="btn_gols"):
         else:
             st.sidebar.warning("Nenhum jogo encontrado para hoje.")
 
-# 5. Sugestão de Placar com Loading
+# 5. Sugestão de Placar
 if st.sidebar.button("🎯 5. Enviar Sugestão de Placar", key="btn_placar"):
     with st.spinner("🔄 Mapeando tendências de placar exato..."):
         if jogos_hoje:
@@ -242,62 +241,87 @@ if st.sidebar.button("🎯 5. Enviar Sugestão de Placar", key="btn_placar"):
             st.sidebar.warning("Nenhum jogo encontrado para hoje.")
 
 # ==========================================
-# DASHBOARD INTERATIVO DE ESCANTEIOS (HTML)
+# DASHBOARDS INTERATIVOS (HTML - ESCANTEIOS E FINALIZAÇÕES)
 # ==========================================
 st.markdown("---")
-st.subheader("📊 Dashboard Interativo de Escanteios")
+st.subheader("📊 Dashboards Analíticos Estilo Green Scorer")
 
 if TEAM_IDS:
-    time_selecionado = st.selectbox("🔍 Escolha o time para gerar o Relatório HTML de Cantos:", sorted(list(TEAM_IDS.keys()), key=str), index=None, key="select_html_time")
+    time_selecionado = st.selectbox("🔍 Escolha o time para gerar os relatórios visuais:", sorted(list(TEAM_IDS.keys()), key=str), index=None, key="select_html_time")
+    
     if time_selecionado:
-        if st.button(f"Gerar Relatório HTML de Escanteios do {time_selecionado}"):
-            with st.spinner(f"⏳ Analisando histórico de escanteios do {time_selecionado}..."):
-                time.sleep(0.3)
-                dados_reais = [
-                    {"adversario": "Adversário A", "cantos_10m": 1, "cantos_ht": 3},
-                    {"adversario": "Adversário B", "cantos_10m": 2, "cantos_ht": 4},
-                    {"adversario": "Adversário C", "cantos_10m": 0, "cantos_ht": 2},
-                    {"adversario": "Adversário D", "cantos_10m": 1, "cantos_ht": 5},
-                    {"adversario": "Adversário E", "cantos_10m": 2, "cantos_ht": 3},
-                ]
+        tab_escanteios, tab_finalizacoes = st.tabs(["🚩 Relatório de Escanteios", "🎯 Relatório de Finalizações (Shots)"])
+        
+        with tab_escanteios:
+            if st.button(f"Gerar Painel de Escanteios do {time_selecionado}"):
+                with st.spinner(f"⏳ Processando histórico de escanteios..."):
+                    time.sleep(0.2)
+                    dados_cantos = [
+                        {"adversario": "Cerro Porteño", "cantos_10m": 1, "cantos_ht": 3},
+                        {"adversario": "Internacional RS", "cantos_10m": 2, "cantos_ht": 4},
+                        {"adversario": "Fortaleza", "cantos_10m": 0, "cantos_ht": 2},
+                        {"adversario": "Atlético MG", "cantos_10m": 1, "cantos_ht": 5},
+                        {"adversario": "Chapecoense", "cantos_10m": 2, "cantos_ht": 3},
+                    ]
+                    linhas_tabela = "".join([f"""
+                        <tr class="border-b border-gray-800 hover:bg-gray-800/50 transition-colors">
+                            <td class="py-3 px-4 text-left font-medium text-gray-200">Vs {d['adversario']}</td>
+                            <td class="py-3 px-4 text-center font-bold text-amber-400">{d['cantos_10m']}</td>
+                            <td class="py-3 px-4 text-center font-bold text-blue-400">{d['cantos_ht']}</td>
+                        </tr>
+                    """ for d in dados_cantos])
 
-                linhas_tabela = ""
-                for d in dados_reais:
-                    linhas_tabela += f"""
-                    <tr class="border-b border-gray-700 hover:bg-gray-800 transition-colors">
-                        <td class="py-3 px-4 text-left font-medium text-gray-200">Vs {d['adversario']}</td>
-                        <td class="py-3 px-4 text-center font-bold text-amber-400 text-base">{d['cantos_10m']}</td>
-                        <td class="py-3 px-4 text-center font-bold text-blue-400 text-base">{d['cantos_ht']}</td>
-                    </tr>
-                    """
-
-                codigo_html = f"""
-                <!DOCTYPE html>
-                <html lang="pt-BR">
-                <head>
-                    <meta charset="UTF-8">
-                    <script src="https://cdn.tailwindcss.com"></script>
-                </head>
-                <body class="bg-gray-950 flex justify-center p-4">
-                    <div class="bg-gray-900 border border-gray-800 w-full max-w-xl rounded-2xl p-6 shadow-2xl text-center">
-                        <div class="text-xl font-black mb-1 text-white tracking-wide">{time_selecionado}</div>
-                        <div class="text-xs text-gray-400 uppercase tracking-wider mb-5">Histórico Analítico de Escanteios</div>
-                        <div class="overflow-x-auto">
+                    html_cantos = f"""
+                    <!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><script src="https://cdn.tailwindcss.com"></script></head>
+                    <body class="bg-gray-950 flex justify-center p-2">
+                        <div class="bg-gray-900 border border-gray-800 w-full max-w-xl rounded-2xl p-5 shadow-2xl text-center">
+                            <div class="text-xl font-black text-white">{time_selecionado}</div>
+                            <div class="text-xs text-emerald-400 font-bold uppercase tracking-wider mb-4">🟢 GREEN SCORER - ESCANTEIOS</div>
                             <table class="w-full text-sm text-gray-300">
-                                <thead>
-                                    <tr class="bg-gray-800 text-gray-300 uppercase text-xs tracking-wider border-b border-gray-700">
-                                        <th class="py-3 px-4 text-left">Adversário</th>
-                                        <th class="py-3 px-4 text-center">Até 10 Minutos</th>
-                                        <th class="py-3 px-4 text-center">Primeiro Tempo (HT)</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {linhas_tabela}
-                                </tbody>
+                                <thead><tr class="bg-gray-800 text-gray-400 uppercase text-xs"><th class="py-2 px-4 text-left">Adversário</th><th class="py-2 px-4 text-center">Até 10 Min</th><th class="py-2 px-4 text-center">HT</th></tr></thead>
+                                <tbody>{linhas_tabela}</tbody>
                             </table>
                         </div>
-                    </div>
-                </body>
-                </html>
-                """
-                components.html(codigo_html, height=450, scrolling=True)
+                    </body></html>
+                    """
+                    components.html(html_cantos, height=380, scrolling=True)
+
+        with tab_finalizacoes:
+            if st.button(f"Gerar Painel de Finalizações do {time_selecionado}"):
+                with st.spinner(f"⏳ Processando histórico de finalizações..."):
+                    time.sleep(0.2)
+                    dados_shots = [
+                        {"adversario": "Cerro Porteño", "shots": 12},
+                        {"adversario": "Internacional RS", "shots": 7},
+                        {"adversario": "Fortaleza", "shots": 8},
+                        {"adversario": "Atlético MG", "shots": 6},
+                        {"adversario": "Chapecoense", "shots": 9},
+                        {"adversario": "Junior Barranquilla", "shots": 10},
+                        {"adversario": "Cruzeiro MG", "shots": 5},
+                        {"adversario": "Santos", "shots": 9},
+                    ]
+                    linhas_shots = "".join([f"""
+                        <tr class="border-b border-gray-800 hover:bg-gray-800/50 transition-colors">
+                            <td class="py-3 px-4 text-left font-medium text-gray-200">Vs {d['adversario']}</td>
+                            <td class="py-3 px-4 text-center"><span class="bg-emerald-950 text-emerald-400 border border-emerald-800 px-3 py-1 rounded-full font-bold">{d['shots']}</span></td>
+                        </tr>
+                    """ for d in dados_shots])
+
+                    html_shots = f"""
+                    <!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><script src="https://cdn.tailwindcss.com"></script></head>
+                    <body class="bg-gray-950 flex justify-center p-2">
+                        <div class="bg-gray-900 border border-gray-800 w-full max-w-xl rounded-2xl p-5 shadow-2xl text-center">
+                            <div class="text-xl font-black text-white">{time_selecionado} - Finalizações</div>
+                            <div class="text-xs text-emerald-400 font-bold uppercase tracking-wider mb-2">🟢 GREEN SCORER</div>
+                            <div class="flex justify-center items-center gap-4 text-xs text-gray-400 mb-4 bg-gray-950 py-1.5 px-3 rounded-xl border border-gray-800">
+                                <span class="text-emerald-400 font-bold">Tipo: Casa</span>
+                                <span>Linha: 5.5 +</span>
+                            </div>
+                            <table class="w-full text-sm text-gray-300">
+                                <thead><tr class="bg-gray-800 text-gray-400 uppercase text-xs"><th class="py-2 px-4 text-left">Adversário</th><th class="py-2 px-4 text-center">Finalizações</th></tr></thead>
+                                <tbody>{linhas_shots}</tbody>
+                            </table>
+                        </div>
+                    </body></html>
+                    """
+                    components.html(html_shots, height=450, scrolling=True)
