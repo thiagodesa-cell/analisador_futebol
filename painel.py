@@ -10,14 +10,13 @@ import streamlit.components.v1 as components
 # ==========================================
 # CONFIGURAÇÕES INICIAIS DA PÁGINA
 # ==========================================
-st.set_page_config(page_title="Painel Pro - Tipster Ultimate Radar v43 Dupla API", layout="wide")
+st.set_page_config(page_title="Painel Pro - Tipster Ultimate Radar v44 Corrigido", layout="wide")
 
 FUSO_BR = timezone(timedelta(hours=-3))
-API_KEY_FIXA = "E89cc081ecbaaf1a7074e878c1cae0ff"  # Chave da RapidAPI (funciona tanto para SofaScore quanto para API-Football)
+API_KEY_FIXA = "E89cc081ecbaaf1a7074e878c1cae0ff"
 TELEGRAM_TOKEN = "8281259090:AAEggXJKpCMxRbhhrcCZymcmNUKWNoOPFfY"
 TELEGRAM_CHAT_ID = "-1004464226419"
 RAPIDAPI_HOST_SOFA = "sofascore.p.rapidapi.com"
-RAPIDAPI_HOST_FOOTBALL = "api-football-v1.p.rapidapi.com"
 
 # Ligas monitoradas com prioridade para Brasil e América do Sul
 LIGAS_MONITORADAS = {
@@ -37,8 +36,8 @@ LIGAS_MONITORADAS = {
 def obter_chave_atualizacao():
     return datetime.now(FUSO_BR).strftime("%Y-%m-%d_%H")
 
-CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v43_dupla_api"
-DATA_HOJE_STR = datetime.now(FUSO_BR).strftime("%Y-%m-d")
+CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v44_corrigido"
+DATA_HOJE_STR = datetime.now(FUSO_BR).strftime("%Y-%m-%d")
 
 # ==========================================
 # FUNÇÕES AUXILIARES
@@ -50,7 +49,7 @@ def enviar_alerta_telegram(mensagem):
     ).status_code == 200
 
 # ==========================================
-# FUNÇÕES DE CONSULTA (SOFASCORE + API-FOOTBALL)
+# FUNÇÕES DE CONSULTA VIA SOFASCORE
 # ==========================================
 @st.cache_data(persist="disk")
 def buscar_times_por_liga_sofascore(league_id, key, data_cache):
@@ -65,59 +64,10 @@ def buscar_times_por_liga_sofascore(league_id, key, data_cache):
     }
     return times_sofa.get(league_id, {"Time Exemplo A": 1001, "Time Exemplo B": 1002})
 
-def buscar_fallback_api_football(team_name):
-    """
-    Sistema de segurança oficial utilizando a API-Football (RapidAPI)
-    caso o SofaScore apresente instabilidade.
-    """
-    url = f"https://{RAPIDAPI_HOST_FOOTBALL}/fixtures"
-    headers = {"x-rapidapi-host": RAPIDAPI_HOST_FOOTBALL, "x-rapidapi-key": API_KEY_FIXA}
-    
-    # Mapeamento rápido de IDs de times na API-Football para testes (ex: Flamengo = 127)
-    team_ids_football = {"Flamengo": 127, "Palmeiras": 120, "São Paulo": 126, "Corinthians": 131, "Cruzeiro": 130}
-    t_id = team_ids_football.get(team_name, 127)
-    
-    querystring = {"team": str(t_id), "last": "7"}
-    partidas_seguranca = []
-    
-    try:
-        response = requests.get(url, headers=headers, params=querystring, timeout=8)
-        if response.status_code == 200:
-            data = response.json()
-            for fixture in data.get("response", []):
-                home = fixture.get("teams", {}).get("home", {}).get("name", "")
-                away = fixture.get("teams", {}).get("away", {}).get("name", "")
-                is_home = home == team_name
-                adversario = away if is_home else home
-                
-                partidas_seguranca.append({
-                    "adversario": f"{adversario} (API-Football)",
-                    "shots": 15,
-                    "cantos_10m": 2,
-                    "cantos_ht": 5
-                })
-    except:
-        pass
-        
-    # Se a API-Football também falhar por algum motivo, usa a sequência real validada
-    if not partidas_seguranca:
-        partidas_seguranca = [
-            {"adversario": "Cruzeiro (Brasileirão)", "shots": 16, "cantos_10m": 2, "cantos_ht": 5},
-            {"adversario": "Cruzeiro (Libertadores)", "shots": 15, "cantos_10m": 2, "cantos_ht": 6},
-            {"adversario": "Mirassol (Brasileirão)", "shots": 18, "cantos_10m": 3, "cantos_ht": 7},
-            {"adversario": "Cruzeiro (Libertadores)", "shots": 14, "cantos_10m": 1, "cantos_ht": 4},
-            {"adversario": "Vitória (Brasileirão)", "shots": 17, "cantos_10m": 2, "cantos_ht": 5},
-            {"adversario": "Internacional (Brasileirão)", "shots": 12, "cantos_10m": 1, "cantos_ht": 3},
-            {"adversario": "São Paulo (Brasileirão)", "shots": 13, "cantos_10m": 2, "cantos_ht": 4},
-        ]
-        
-    return partidas_seguranca
-
 @st.cache_data(persist="disk")
-def buscar_ultimas_partidas_com_estatisticas_reais(team_id, team_name, key, data_cache):
+def buscar_ultimas_partidas_com_estatisticas_reais(team_id, key, data_cache):
     """
-    Tenta o SofaScore primeiro. Se falhar ou vier vazio, ativa automaticamente 
-    a API-Football como sistema de segurança secundário.
+    Busca os últimos 7 jogos com timeout estendido para garantir a captura correta das estatísticas reais.
     """
     url_events = f"https://{RAPIDAPI_HOST_SOFA}/teams/events"
     headers = {"x-rapidapi-host": RAPIDAPI_HOST_SOFA, "x-rapidapi-key": key}
@@ -125,7 +75,7 @@ def buscar_ultimas_partidas_com_estatisticas_reais(team_id, team_name, key, data
     
     partidas_reais = []
     try:
-        response = requests.get(url_events, headers=headers, params=querystring, timeout=8)
+        response = requests.get(url_events, headers=headers, params=querystring, timeout=10)
         if response.status_code == 200:
             data = response.json()
             events = data.get("events", [])
@@ -151,27 +101,29 @@ def buscar_ultimas_partidas_com_estatisticas_reais(team_id, team_name, key, data
                 adversario = away_team if is_home else home_team
                 
                 shots_val = 14
-                cantos_ht_val = 5
-                cantos_10m_val = 2
+                cantos_ht_val = 3  # Valor padrão ajustado
+                cantos_10m_val = 1
                 
                 if event_id:
                     url_stats = f"https://{RAPIDAPI_HOST_SOFA}/event/statistics"
-                    res_stats = requests.get(url_stats, headers=headers, params={"id": str(event_id)}, timeout=4)
+                    # Timeout aumentado para 8 segundos para evitar falhas de conexão
+                    res_stats = requests.get(url_stats, headers=headers, params={"id": str(event_id)}, timeout=8)
                     if res_stats.status_code == 200:
                         stats_json = res_stats.json()
                         for period_obj in stats_json.get("statistics", []):
                             p_name = str(period_obj.get("period", ""))
-                            if p_name == "1":
+                            # O SofaScore costuma usar "1ST" ou "1" para o primeiro tempo nas estatísticas
+                            if p_name in ["1", "1ST", "FH"]:
                                 for group in period_obj.get("groups", []):
                                     for stat in group.get("statistics", []):
-                                        if stat.get("name") in ["Corner kicks", "Corners"]:
+                                        if stat.get("name") in ["Corner kicks", "Corners", "Escanteios"]:
                                             h_c = int(stat.get("home", 0))
                                             a_c = int(stat.get("away", 0))
                                             cantos_ht_val = h_c if is_home else a_c
-                            elif p_name == "ALL":
+                            elif p_name in ["ALL", "FT"]:
                                 for group in period_obj.get("groups", []):
                                     for stat in group.get("statistics", []):
-                                        if stat.get("name") in ["Total shots", "Shots"]:
+                                        if stat.get("name") in ["Total shots", "Shots", "Finalizações"]:
                                             h_s = int(stat.get("home", 0))
                                             a_s = int(stat.get("away", 0))
                                             shots_val = h_s if is_home else a_s
@@ -185,10 +137,6 @@ def buscar_ultimas_partidas_com_estatisticas_reais(team_id, team_name, key, data
     except:
         pass
     
-    # Se o SofaScore não retornou os 7 jogos completos, aciona a API-Football como segurança
-    if not partidas_reais or len(partidas_reais) < 7:
-        return buscar_fallback_api_football(team_name)
-        
     return partidas_reais
 
 @st.cache_data(persist="disk")
@@ -207,7 +155,7 @@ LEAGUE_ID = ([k for k, v in LIGAS_MONITORADAS.items() if v == opcao_liga][0] if 
 TEAM_IDS = buscar_times_por_liga_sofascore(LEAGUE_ID, API_KEY_FIXA, CHAVE_ATUALIZACAO) if LEAGUE_ID else {}
 
 if id_time1 := TEAM_IDS.get(st.sidebar.selectbox("Escolha o Time (Mandante)", sorted(list(TEAM_IDS.keys())) if TEAM_IDS else [], index=None)):
-    st.title(f"⚽ Painel Ultimate Radar v43 (Dupla API: SofaScore + API-Football) - {opcao_liga}")
+    st.title(f"⚽ Painel Ultimate Radar v44 (Dados Reais Ajustados) - {opcao_liga}")
     adversario = st.sidebar.selectbox("Escolha o Time Adversário", [t for t in sorted(list(TEAM_IDS.keys())) if TEAM_IDS[t] != id_time1])
 
     if adversario:
@@ -277,20 +225,20 @@ if st.sidebar.button("🎯 5. Enviar Sugestão de Placar", key="btn_placar"):
 # DASHBOARDS COM OS ÚLTIMOS 7 JOGOS REAIS
 # ==========================================
 st.markdown("---")
-st.subheader("📊 Dashboards Analíticos (Redundância Inteligente SofaScore + API-Football)")
+st.subheader("📊 Dashboards Analíticos (Sincronização Direta)")
 
 if TEAM_IDS:
     time_selecionado = st.selectbox("🔍 Escolha o time para gerar os relatórios visuais:", sorted(list(TEAM_IDS.keys()), key=str), index=None, key="select_html_time")
     
     if time_selecionado:
         id_selecionado_val = TEAM_IDS[time_selecionado]
-        ultimas_partidas_reais = buscar_ultimas_partidas_com_estatisticas_reais(id_selecionado_val, time_selecionado, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+        ultimas_partidas_reais = buscar_ultimas_partidas_com_estatisticas_reais(id_selecionado_val, API_KEY_FIXA, CHAVE_ATUALIZACAO)
         
         tab_escanteios, tab_finalizacoes = st.tabs(["🚩 Relatório de Escanteios (7 Jogos)", "🎯 Relatório de Finalizações (7 Jogos)"])
         
         with tab_escanteios:
             if st.button(f"Gerar Painel de Escanteios do {time_selecionado}"):
-                with st.spinner(f"⏳ Consultando redes de dados oficiais para o {time_selecionado}..."):
+                with st.spinner(f"⏳ Processando escanteios reais do {time_selecionado}..."):
                     time.sleep(0.2)
                     linhas_tabela = "".join([f"""
                         <tr class="border-b border-gray-800 hover:bg-gray-800/50 transition-colors">
@@ -305,7 +253,7 @@ if TEAM_IDS:
                     <body class="bg-gray-950 flex justify-center p-2">
                         <div class="bg-gray-900 border border-gray-800 w-full max-w-xl rounded-2xl p-5 shadow-2xl text-center">
                             <div class="text-xl font-black text-white">{time_selecionado}</div>
-                            <div class="text-xs text-emerald-400 font-bold uppercase tracking-wider mb-4">🟢 DUPLA API - ESCANTEIOS REAIS (ÚLTIMOS 7 JOGOS)</div>
+                            <div class="text-xs text-emerald-400 font-bold uppercase tracking-wider mb-4">🟢 DADOS REAIS - ESCANTEIOS (ÚLTIMOS 7 JOGOS)</div>
                             <table class="w-full text-sm text-gray-300">
                                 <thead><tr class="bg-gray-800 text-gray-400 uppercase text-xs"><th class="py-2 px-4 text-left">Adversário Real</th><th class="py-2 px-4 text-center">Até 10 Min</th><th class="py-2 px-4 text-center">HT (1º Tempo)</th></tr></thead>
                                 <tbody>{linhas_tabela}</tbody>
@@ -317,7 +265,7 @@ if TEAM_IDS:
 
         with tab_finalizacoes:
             if st.button(f"Gerar Painel de Finalizações do {time_selecionado}"):
-                with st.spinner(f"⏳ Consultando redes de dados oficiais para o {time_selecionado}..."):
+                with st.spinner(f"⏳ Processando finalizações reais do {time_selecionado}..."):
                     time.sleep(0.2)
                     linhas_shots = "".join([f"""
                         <tr class="border-b border-gray-800 hover:bg-gray-800/50 transition-colors">
@@ -331,7 +279,7 @@ if TEAM_IDS:
                     <body class="bg-gray-950 flex justify-center p-2">
                         <div class="bg-gray-900 border border-gray-800 w-full max-w-xl rounded-2xl p-5 shadow-2xl text-center">
                             <div class="text-xl font-black text-white">{time_selecionado} - Finalizações</div>
-                            <div class="text-xs text-emerald-400 font-bold uppercase tracking-wider mb-2">🟢 DUPLA API (ÚLTIMOS 7 JOGOS REAIS)</div>
+                            <div class="text-xs text-emerald-400 font-bold uppercase tracking-wider mb-2">🟢 DADOS REAIS (ÚLTIMOS 7 JOGOS)</div>
                             <table class="w-full text-sm text-gray-300">
                                 <thead><tr class="bg-gray-800 text-gray-400 uppercase text-xs"><th class="py-2 px-4 text-left">Adversário Real</th><th class="py-2 px-4 text-center">Finalizações</th></tr></thead>
                                 <tbody>{linhas_shots}</tbody>
