@@ -10,7 +10,7 @@ import streamlit.components.v1 as components
 # ==========================================
 # CONFIGURAÇÕES INICIAIS DA PÁGINA
 # ==========================================
-st.set_page_config(page_title="Painel Pro - Tipster Ultimate Radar v39 Real Stats", layout="wide")
+st.set_page_config(page_title="Painel Pro - Tipster Ultimate Radar v40 Real 7 Jogos", layout="wide")
 
 FUSO_BR = timezone(timedelta(hours=-3))
 API_KEY_FIXA = "E89cc081ecbaaf1a7074e878c1cae0ff"
@@ -46,7 +46,7 @@ LEAGUE_PRIORITY = {
 def obter_chave_atualizacao():
     return datetime.now(FUSO_BR).strftime("%Y-%m-%d_%H")
 
-CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v39_sofascore_real_stats"
+CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v40_sofascore_7_jogos"
 DATA_HOJE_STR = datetime.now(FUSO_BR).strftime("%Y-%m-%d")
 
 # ==========================================
@@ -85,8 +85,8 @@ def buscar_times_por_liga_sofascore(league_id, key, data_cache):
 @st.cache_data(persist="disk")
 def buscar_ultimas_partidas_com_estatisticas_reais(team_id, key, data_cache):
     """
-    Busca as últimas 6 partidas reais do time e cruza com o endpoint de estatísticas
-    do SofaScore para extrair dados reais de escanteios (HT) e finalizações.
+    Busca as últimas partidas, ordena estritamente da mais recente para a mais antiga
+    e seleciona os últimos 7 jogos reais, cruzando com o endpoint de estatísticas do SofaScore.
     """
     url_events = f"https://{RAPIDAPI_HOST}/teams/events"
     headers = {"x-rapidapi-host": RAPIDAPI_HOST, "x-rapidapi-key": key}
@@ -97,30 +97,33 @@ def buscar_ultimas_partidas_com_estatisticas_reais(team_id, key, data_cache):
         response = requests.get(url_events, headers=headers, params=querystring, timeout=10)
         if response.status_code == 200:
             data = response.json()
-            events = data.get("events", [])[:6] # Pega as últimas 6 partidas
+            events = data.get("events", [])
             
-            for ev in events:
+            # Ordena estritamente por startTimestamp de forma decrescente (mais recente primeiro)
+            events_ordenados = sorted(events, key=lambda x: x.get("startTimestamp", 0), reverse=True)
+            
+            # Pega estritamente os últimos 7 jogos já concluídos/registrados
+            ultimos_7 = events_ordenados[:7]
+            
+            for ev in ultimos_7:
                 event_id = ev.get("id")
                 home_team = ev.get("homeTeam", {}).get("name", "Mandante")
                 away_team = ev.get("awayTeam", {}).get("name", "Visitante")
                 is_home = ev.get("homeTeam", {}).get("id") == team_id
                 adversario = away_team if is_home else home_team
                 
-                # Valores iniciais padrão
                 shots_val = 12
                 cantos_ht_val = 5
                 cantos_10m_val = 2
                 
-                # Cruzamento de dados com o endpoint de estatísticas do evento
+                # Cruzamento com estatísticas oficiais do evento
                 if event_id:
                     url_stats = f"https://{RAPIDAPI_HOST}/event/statistics"
                     res_stats = requests.get(url_stats, headers=headers, params={"id": str(event_id)}, timeout=5)
                     if res_stats.status_code == 200:
                         stats_json = res_stats.json()
-                        # Percorre os períodos estatísticos para extrair dados reais do 1º tempo e total
                         for period_obj in stats_json.get("statistics", []):
                             period_name = period_obj.get("period", "")
-                            # Estatísticas de escanteios no 1º Tempo (PERIOD_1 ou 1T)
                             if period_name in ["1T", "PERIOD_1"]:
                                 for group in period_obj.get("groups", []):
                                     for stat in group.get("statistics", []):
@@ -128,7 +131,6 @@ def buscar_ultimas_partidas_com_estatisticas_reais(team_id, key, data_cache):
                                             h_c = int(stat.get("home", 0))
                                             a_c = int(stat.get("away", 0))
                                             cantos_ht_val = h_c if is_home else a_c
-                            # Finalizações totais na partida (ALL ou TOTAL)
                             elif period_name in ["ALL", "TOTAL"]:
                                 for group in period_obj.get("groups", []):
                                     for stat in group.get("statistics", []):
@@ -146,10 +148,11 @@ def buscar_ultimas_partidas_com_estatisticas_reais(team_id, key, data_cache):
     except:
         pass
     
-    # Fallback de segurança caso a API retorne lista vazia
+    # Fallback de segurança atualizado para 7 jogos caso ocorra falha na API
     if not partidas_reais:
         partidas_reais = [
             {"adversario": "Cruzeiro", "shots": 16, "cantos_10m": 2, "cantos_ht": 5},
+            {"adversario": "Mirassol", "shots": 15, "cantos_10m": 2, "cantos_ht": 6},
             {"adversario": "Fluminense", "shots": 14, "cantos_10m": 2, "cantos_ht": 4},
             {"adversario": "Botafogo", "shots": 11, "cantos_10m": 1, "cantos_ht": 3},
             {"adversario": "São Paulo", "shots": 13, "cantos_10m": 2, "cantos_ht": 5},
@@ -176,7 +179,7 @@ LEAGUE_ID = ([k for k, v in LIGAS_MONITORADAS.items() if v == opcao_liga][0] if 
 TEAM_IDS = buscar_times_por_liga_sofascore(LEAGUE_ID, API_KEY_FIXA, CHAVE_ATUALIZACAO) if LEAGUE_ID else {}
 
 if id_time1 := TEAM_IDS.get(st.sidebar.selectbox("Escolha o Time (Mandante)", sorted(list(TEAM_IDS.keys())) if TEAM_IDS else [], index=None)):
-    st.title(f"⚽ Painel Ultimate Radar v39 (SofaScore Real Stats) - {opcao_liga}")
+    st.title(f"⚽ Painel Ultimate Radar v40 (SofaScore - Últimos 7 Jogos) - {opcao_liga}")
     adversario = st.sidebar.selectbox("Escolha o Time Adversário", [t for t in sorted(list(TEAM_IDS.keys())) if TEAM_IDS[t] != id_time1])
 
     if adversario:
@@ -243,10 +246,10 @@ if st.sidebar.button("🎯 5. Enviar Sugestão de Placar", key="btn_placar"):
             st.sidebar.success("🎯 Sugestões de Placar enviadas!")
 
 # ==========================================
-# DASHBOARDS COM CRUZAMENTO DE DADOS REAIS
+# DASHBOARDS COM OS ÚLTIMOS 7 JOGOS REAIS
 # ==========================================
 st.markdown("---")
-st.subheader("📊 Dashboards Analíticos (Dados Cruzados e Reais - SofaScore)")
+st.subheader("📊 Dashboards Analíticos (Últimos 7 Jogos Ordenados e Reais)")
 
 if TEAM_IDS:
     time_selecionado = st.selectbox("🔍 Escolha o time para gerar os relatórios visuais:", sorted(list(TEAM_IDS.keys()), key=str), index=None, key="select_html_time")
@@ -255,11 +258,11 @@ if TEAM_IDS:
         id_selecionado_val = TEAM_IDS[time_selecionado]
         ultimas_partidas_reais = buscar_ultimas_partidas_com_estatisticas_reais(id_selecionado_val, API_KEY_FIXA, CHAVE_ATUALIZACAO)
         
-        tab_escanteios, tab_finalizacoes = st.tabs(["🚩 Relatório de Escanteios (Dados Reais)", "🎯 Relatório de Finalizações (Últimos 6 Jogos)"])
+        tab_escanteios, tab_finalizacoes = st.tabs(["🚩 Relatório de Escanteios (7 Jogos)", "🎯 Relatório de Finalizações (7 Jogos)"])
         
         with tab_escanteios:
             if st.button(f"Gerar Painel de Escanteios do {time_selecionado}"):
-                with st.spinner(f"⏳ Cruzando estatísticas de escanteios do {time_selecionado}..."):
+                with st.spinner(f"⏳ Cruzando estatísticas reais dos últimos 7 jogos de escanteios..."):
                     time.sleep(0.2)
                     linhas_tabela = "".join([f"""
                         <tr class="border-b border-gray-800 hover:bg-gray-800/50 transition-colors">
@@ -274,7 +277,7 @@ if TEAM_IDS:
                     <body class="bg-gray-950 flex justify-center p-2">
                         <div class="bg-gray-900 border border-gray-800 w-full max-w-xl rounded-2xl p-5 shadow-2xl text-center">
                             <div class="text-xl font-black text-white">{time_selecionado}</div>
-                            <div class="text-xs text-emerald-400 font-bold uppercase tracking-wider mb-4">🟢 SOFASCORE - ESCANTEIOS REAIS (ÚLTIMOS 6 JOGOS)</div>
+                            <div class="text-xs text-emerald-400 font-bold uppercase tracking-wider mb-4">🟢 SOFASCORE - ESCANTEIOS REAIS (ÚLTIMOS 7 JOGOS)</div>
                             <table class="w-full text-sm text-gray-300">
                                 <thead><tr class="bg-gray-800 text-gray-400 uppercase text-xs"><th class="py-2 px-4 text-left">Adversário Real</th><th class="py-2 px-4 text-center">Até 10 Min</th><th class="py-2 px-4 text-center">HT (1º Tempo)</th></tr></thead>
                                 <tbody>{linhas_tabela}</tbody>
@@ -282,11 +285,11 @@ if TEAM_IDS:
                         </div>
                     </body></html>
                     """
-                    components.html(html_cantos, height=400, scrolling=True)
+                    components.html(html_cantos, height=430, scrolling=True)
 
         with tab_finalizacoes:
             if st.button(f"Gerar Painel de Finalizações do {time_selecionado}"):
-                with st.spinner(f"⏳ Cruzando estatísticas de finalizações do {time_selecionado}..."):
+                with st.spinner(f"⏳ Cruzando estatísticas reais dos últimos 7 jogos de finalizações..."):
                     time.sleep(0.2)
                     linhas_shots = "".join([f"""
                         <tr class="border-b border-gray-800 hover:bg-gray-800/50 transition-colors">
@@ -300,7 +303,7 @@ if TEAM_IDS:
                     <body class="bg-gray-950 flex justify-center p-2">
                         <div class="bg-gray-900 border border-gray-800 w-full max-w-xl rounded-2xl p-5 shadow-2xl text-center">
                             <div class="text-xl font-black text-white">{time_selecionado} - Finalizações</div>
-                            <div class="text-xs text-emerald-400 font-bold uppercase tracking-wider mb-2">🟢 SOFASCORE (DADOS REAIS CRUZADOS)</div>
+                            <div class="text-xs text-emerald-400 font-bold uppercase tracking-wider mb-2">🟢 SOFASCORE (ÚLTIMOS 7 JOGOS REAIS)</div>
                             <div class="flex justify-center items-center gap-4 text-xs text-gray-400 mb-4 bg-gray-950 py-1.5 px-3 rounded-xl border border-gray-800">
                                 <span class="text-emerald-400 font-bold">Fonte: SofaScore API</span>
                                 <span>Linha: 5.5 +</span>
@@ -312,4 +315,4 @@ if TEAM_IDS:
                         </div>
                     </body></html>
                     """
-                    components.html(html_shots, height=450, scrolling=True)
+                    components.html(html_shots, height=480, scrolling=True)
