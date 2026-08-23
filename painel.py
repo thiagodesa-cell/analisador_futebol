@@ -238,7 +238,7 @@ if id_time1 := TEAM_IDS.get(st.sidebar.selectbox("Escolha o Time (Mandante)", so
 st.sidebar.markdown("---")
 
 # ==========================================
-# BOTÕES DE ALERTAS (COM LÓGICA DINÂMICA REAL)
+# BOTÕES DE ALERTAS
 # ==========================================
 jogos_hoje = buscar_jogos_ligas_monitoradas_por_data(DATA_HOJE_STR, API_KEY_FIXA, CHAVE_ATUALIZACAO)
 
@@ -307,17 +307,17 @@ if st.sidebar.button("🎯 5. Enviar Sugestão de Placar", key="btn_placar"):
         st.sidebar.success("🎯 Placares enviados!")
 
 # ==========================================
-# DASHBOARD INTERATIVO DE ESCANTEIOS (CORRIGIDO)
+# DASHBOARD INTERATIVO DE ESCANTEIOS (SEPARADO: 10 MIN E HT)
 # ==========================================
 st.markdown("---")
-st.subheader("📊 Dashboard Interativo de Escanteios (Dados Reais)")
+st.subheader("📊 Dashboard Interativo de Escanteios (Primeiros 10 min e Primeiro Tempo)")
 
 if TEAM_IDS:
-    time_selecionado = st.selectbox("🔍 Escolha o time para analisar o Histórico de Escanteios:", sorted(list(TEAM_IDS.keys())), index=None)
+    time_selecionado = st.selectbox("🔍 Escolha o time para analisar o Histórico Detalhado de Cantos:", sorted(list(TEAM_IDS.keys())), index=None)
     if time_selecionado:
         id_time_selecionado = TEAM_IDS[time_selecionado]
         if st.button(f"Carregar Dashboard do {time_selecionado}"):
-            with st.spinner("⏳ Buscando o histórico real de cantos..."):
+            with st.spinner("⏳ Analisando os minutos dos escanteios na API..."):
                 url_fixtures = f"https://v3.football.api-sports.io/fixtures?team={id_time_selecionado}&season={SEASON_EFETIVA}&last=10"
                 headers = {"x-rapidapi-host": "v3.football.api-sports.io", "x-rapidapi-key": API_KEY_FIXA}
                 dados_reais = []
@@ -329,31 +329,43 @@ if TEAM_IDS:
                         adv_name = f["teams"]["away"]["name"] if is_home else f["teams"]["home"]["name"]
                         
                         time.sleep(0.1)
-                        res_stats = requests.get(f"https://v3.football.api-sports.io/fixtures/statistics?fixture={f_id}", headers=headers, timeout=10).json()
+                        res_ev = requests.get(f"https://v3.football.api-sports.io/fixtures/events?fixture={f_id}", headers=headers, timeout=10).json()
                         
-                        cantos_time = 0
-                        for stat_group in res_stats.get("response", []):
-                            if stat_group["team"]["id"] == id_time_selecionado:
-                                for s in stat_group.get("statistics", []):
-                                    if s["type"] == "Corner Kicks":
-                                        cantos_time = int(s["value"]) if s["value"] is not None else 0
+                        cantos_10m = 0
+                        cantos_ht = 0
                         
-                        dados_reais.append({"adversario": adv_name, "cantos": cantos_time})
+                        for ev in res_ev.get("response", []):
+                            if ev.get("type") == "Corner" and ev.get("team", {}).get("id") == id_time_selecionado:
+                                minuto = int(ev.get("time", {}).get("elapsed", 0))
+                                if minuto <= 10:
+                                    cantos_10m += 1
+                                if minuto <= 45:
+                                    cantos_ht += 1
+                        
+                        dados_reais.append({
+                            "adversario": adv_name, 
+                            "cantos_10m": cantos_10m, 
+                            "cantos_ht": cantos_ht
+                        })
                 except:
-                    st.error("⚠️ Erro ao buscar dados na API.")
+                    st.error("⚠️ Erro ao buscar eventos na API.")
                 
-                lista_html = "".join([f"<li class='border-b py-2 flex justify-between'><span>Vs {d['adversario']}</span><span class='font-bold text-blue-600'>{d['cantos']} cantos</span></li>" for d in dados_reais]) if dados_reais else "<p>Nenhum dado encontrado.</p>"
+                linhas_tabela = ""
+                for d in dados_reais:
+                    linhas_tabela += f"""
+                    <tr class='border-b hover:bg-gray-50'>
+                        <td class='py-2 px-3 text-left'>Vs {d['adversario']}</td>
+                        <td class='py-2 px-3 text-center font-bold text-amber-600'>{d['cantos_10m']}</td>
+                        <td class='py-2 px-3 text-center font-bold text-blue-600'>{d['cantos_ht']}</td>
+                    </tr>
+                    """ if dados_reais else "<tr><td colspan='3' class='py-4'>Nenhum dado encontrado.</td></tr>"
 
                 codigo_html = f"""
                 <html lang="pt-BR">
                 <head><script src="https://cdn.tailwindcss.com"></script></head>
                 <body class="bg-gray-900 flex justify-center p-4">
-                    <div class="bg-white w-full max-w-md rounded-xl p-4 text-center font-bold shadow-lg">
-                        <div class="text-lg mb-3 text-gray-800">{time_selecionado} - Escanteios por Jogo</div>
-                        <ul class="text-left text-sm text-gray-700">
-                            {lista_html}
-                        </ul>
-                    </div>
-                </body></html>
-                """
-                components.html(codigo_html, height=500, scrolling=True)
+                    <div class="bg-white w-full max-w-lg rounded-xl p-4 text-center shadow-lg">
+                        <div class="text-lg font-bold mb-3 text-gray-800">{time_selecionado} - Histórico de Cantos</div>
+                        <table class="w-full text-sm text-gray-700">
+                            <thead>
+                                <tr class="bg-gray-100 border-b">
