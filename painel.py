@@ -10,7 +10,7 @@ import streamlit.components.v1 as components
 # ==========================================
 # CONFIGURAÇÕES INICIAIS DA PÁGINA
 # ==========================================
-st.set_page_config(page_title="Painel Pro - Tipster Ultimate Radar v35", layout="wide")
+st.set_page_config(page_title="Painel Pro - Tipster Ultimate Radar v36", layout="wide")
 
 FUSO_BR = timezone(timedelta(hours=-3))
 API_KEY_FIXA = "E89cc081ecbaaf1a7074e878c1cae0ff"
@@ -19,32 +19,35 @@ TELEGRAM_TOKEN = "8281259090:AAEggXJKpCMxRbhhrcCZymcmNUKWNoOPFfY"
 TELEGRAM_CHAT_ID = "-1004464226419"
 RAPIDAPI_HOST = "v3.football.api-sports.io"
 
-# Ligas monitoradas ampliadas
+# Ligas monitoradas com prioridade para Brasil e América do Sul
 LIGAS_MONITORADAS = {
     71: "Brasileirão Série A",
     72: "Brasileirão Série B",
     73: "Copa do Brasil",
     128: "Campeonato Argentino",
+    13: "Copa Libertadores",
+    11: "Copa Sudamericana",
     39: "Premier League (Inglaterra)",
-    40: "Championship (Inglaterra)",
     140: "La Liga (Espanha)",
-    141: "La Liga 2 (Espanha)",
     78: "Bundesliga (Alemanha)",
     135: "Serie A (Itália)",
     61: "Ligue 1 (França)",
-    94: "Primeira Liga (Portugal)",
-    88: "Eredivisie (Holanda)",
-    2: "UEFA Champions League",
-    3: "UEFA Liga Europa",
-    848: "UEFA Conference League",
-    13: "Copa Libertadores",
-    11: "Copa Sudamericana",
+}
+
+# Ordem de prioridade para exibir os jogos do dia (Brasil/América do Sul primeiro)
+LEAGUE_PRIORITY = {
+    71: 1,  # Brasileirão Série A
+    72: 2,  # Brasileirão Série B
+    73: 3,  # Copa do Brasil
+    13: 4,  # Libertadores
+    11: 5,  # Sul-Americana
+    128: 6, # Campeonato Argentino
 }
 
 def obter_chave_atualizacao():
     return datetime.now(FUSO_BR).strftime("%Y-%m-%d_%H")
 
-CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v35_real"
+CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v36_prioridade"
 DATA_HOJE_STR = datetime.now(FUSO_BR).strftime("%Y-%m-%d")
 
 # ==========================================
@@ -65,7 +68,7 @@ def enviar_alerta_telegram(mensagem):
     ).status_code == 200
 
 # ==========================================
-# FUNÇÕES DE CONSULTA E DADOS AMPLIADOS
+# FUNÇÕES DE CONSULTA E DADOS
 # ==========================================
 @st.cache_data(persist="disk")
 def buscar_times_por_liga_ampliado(league_id, key, data_cache):
@@ -78,15 +81,13 @@ def buscar_times_por_liga_ampliado(league_id, key, data_cache):
     except:
         pass
     
-    # Dicionário robusto expandido de fallback para garantir centenas de times disponíveis imediatamente
     times_fallback = {
         71: {"Flamengo": 126, "Palmeiras": 121, "São Paulo": 126, "Corinthians": 127, "Fluminense": 128, "Atlético-MG": 103, "Internacional": 119, "Grêmio": 130, "Botafogo": 120, "Vasco da Gama": 131, "Cruzeiro": 137, "Bahia": 339, "Fortaleza": 134, "Athletico-PR": 133},
-        39: {"Manchester City": 50, "Arsenal": 42, "Liverpool": 40, "Manchester United": 33, "Chelsea": 49, "Tottenham": 47, "Newcastle": 34, "Aston Villa": 66, "West Ham": 48},
-        140: {"Real Madrid": 541, "Barcelona": 529, "Atletico Madrid": 530, "Villarreal": 533, "Real Sociedad": 548, "Athletic Club": 531},
-        78: {"Bayern München": 157, "Borussia Dortmund": 165, "RB Leipzig": 173, "Bayer Leverkusen": 168},
-        135: {"Inter": 505, "AC Milan": 489, "Juventus": 496, "Napoli": 492, "Roma": 497, "Lazio": 487}
+        72: {"Santos": 129, "Sport Recife": 747, "Coritiba": 116, "Ceará": 105, "América-MG": 110, "Goiás": 115, "Avaí": 138, "Chapecoense": 135},
+        128: {"River Plate": 435, "Boca Juniors": 451, "Racing Club": 442, "Independiente": 445, "San Lorenzo": 448},
+        39: {"Manchester City": 50, "Arsenal": 42, "Liverpool": 40, "Manchester United": 33, "Chelsea": 49, "Tottenham": 47},
     }
-    return times_fallback.get(league_id, {"Time Exemplo A": 1001, "Time Exemplo B": 1002, "Time Exemplo C": 1003})
+    return times_fallback.get(league_id, {"Time Exemplo A": 1001, "Time Exemplo B": 1002})
 
 @st.cache_data(persist="disk")
 def buscar_metricas_avancadas(team_id, key, data_cache):
@@ -116,12 +117,14 @@ def buscar_jogos_reais_do_dia(data_str, key, data_cache):
                     "Visitante": f["teams"]["away"]["name"],
                     "LeagueID": l_id,
                     "Liga": LIGAS_MONITORADAS[l_id],
-                    "Horário": hora
+                    "Horário": hora,
+                    "Prioridade": LEAGUE_PRIORITY.get(l_id, 99) # Prioriza ligas do Brasil/América do Sul
                 })
     except:
         pass
     
-    # Se não houver jogos na API para o dia exato (ex: período sem rodada), retorna lista vazia tratada
+    # Ordena os jogos para colocar Brasil e América do Sul no topo
+    jogos_validos = sorted(jogos_validos, key=lambda x: (x["Prioridade"], x["Horário"]))
     return jogos_validos
 
 # ==========================================
@@ -133,7 +136,7 @@ LEAGUE_ID = ([k for k, v in LIGAS_MONITORADAS.items() if v == opcao_liga][0] if 
 TEAM_IDS = buscar_times_por_liga_ampliado(LEAGUE_ID, API_KEY_FIXA, CHAVE_ATUALIZACAO) if LEAGUE_ID else {}
 
 if id_time1 := TEAM_IDS.get(st.sidebar.selectbox("Escolha o Time (Mandante)", sorted(list(TEAM_IDS.keys())) if TEAM_IDS else [], index=None)):
-    st.title(f"⚽ Painel Ultimate Radar v35 - {opcao_liga}")
+    st.title(f"⚽ Painel Ultimate Radar v36 - {opcao_liga}")
     adversario = st.sidebar.selectbox("Escolha o Time Adversário", [t for t in sorted(list(TEAM_IDS.keys())) if TEAM_IDS[t] != id_time1])
 
     if adversario:
@@ -158,13 +161,13 @@ jogos_hoje = buscar_jogos_reais_do_dia(DATA_HOJE_STR, API_KEY_FIXA, CHAVE_ATUALI
 
 # 1. Raio-X Completo com Loading
 if st.sidebar.button("💎 1. Enviar Raio-X Completo", key="btn_rx"):
-    with st.spinner("🔄 Rastreando estatísticas das partidas de hoje na API..."):
+    with st.spinner("🔄 Rastreando jogos do Brasileirão e América do Sul para o Raio-X..."):
         if jogos_hoje:
             msg = f"💎 <b>SMART TIPSTER: RAIO-X DO DIA</b> 💎\n📅 <i>{datetime.now(FUSO_BR).strftime('%d/%m/%Y')}</i>\n\n"
             for j in jogos_hoje[:6]:
                 mh = buscar_metricas_avancadas(j["HomeID"], API_KEY_FIXA, CHAVE_ATUALIZACAO)
                 ma = buscar_metricas_avancadas(j["AwayID"], API_KEY_FIXA, CHAVE_ATUALIZACAO)
-                msg += f"⚽ <b>{j['Mandante']} x {j['Visitante']}</b> [{j['Horário']}]\n"
+                msg += f"⚽ <b>{j['Mandante']} x {j['Visitante']}</b> [{j['Horário']}] - <i>{j['Liga']}</i>\n"
                 msg += f"   🚩 Escanteios: ~{(mh['corners_for'] + ma['corners_for']):.1f}\n"
                 msg += f"   🎯 Chutes no Alvo: ~{(mh['shots_on_goal'] + ma['shots_on_goal']):.1f}\n\n"
             enviar_alerta_telegram(msg)
@@ -174,7 +177,7 @@ if st.sidebar.button("💎 1. Enviar Raio-X Completo", key="btn_rx"):
 
 # 2. Top Cantos e Cartões com Loading
 if st.sidebar.button("🟨 2. Enviar Top Cantos e Cartões", key="btn_cantos"):
-    with st.spinner("🔄 Analisando média de cantos e cartões dos jogos de hoje..."):
+    with st.spinner("🔄 Analisando cantos e cartões dos jogos de hoje..."):
         if jogos_hoje:
             msg = f"🟨 <b>SMART TIPSTER: CANTOS E CARTÕES</b> 🟥\n📅 <i>{datetime.now(FUSO_BR).strftime('%d/%m/%Y')}</i>\n\n"
             for j in jogos_hoje[:6]:
@@ -182,7 +185,7 @@ if st.sidebar.button("🟨 2. Enviar Top Cantos e Cartões", key="btn_cantos"):
                 ma = buscar_metricas_avancadas(j["AwayID"], API_KEY_FIXA, CHAVE_ATUALIZACAO)
                 total_cantos = mh['corners_for'] + ma['corners_for']
                 sugestao = "Over 9.5 Cantos" if total_cantos >= 9.5 else "Under 10.5 Cantos"
-                msg += f"⚽ <b>{j['Mandante']} x {j['Visitante']}</b> [{j['Horário']}]\n"
+                msg += f"⚽ <b>{j['Mandante']} x {j['Visitante']}</b> [{j['Horário']}] - <i>{j['Liga']}</i>\n"
                 msg += f"   🚩 Projeção: {total_cantos:.1f} ({sugestao})\n\n"
             enviar_alerta_telegram(msg)
             st.sidebar.success("🟨 Relatório de Cantos enviado!")
