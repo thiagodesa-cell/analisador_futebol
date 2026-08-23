@@ -589,4 +589,100 @@ if st.sidebar.button("🎯 Enviar Sugestão de Placar (Telegram)", key="btn_plac
             enviar_alerta_telegram(msg)
             st.sidebar.success("🎯 Sugestões de Placar enviadas com sucesso!")
         else: st.sidebar.warning("⚠️ Nenhum jogo validado para Sugestão de Placar hoje.")
+            # ==========================================
+# BOTÃO 6: ESCANTEIOS HT (ESTILO GREEN SCORER)
+# ==========================================
+if st.sidebar.button("🚩 Radar Escanteios HT (Telegram)", key="btn_escanteios_ht"):
+    jogos_hoje = buscar_jogos_ligas_monitoradas_por_data(DATA_HOJE_STR, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+    
+    if jogos_hoje:
+        total_jogos = len(jogos_hoje)
+        st.sidebar.info(f"🚩 {total_jogos} jogos encontrados. Mapeando Escanteios no 1º Tempo...")
+        barra_progresso = st.sidebar.progress(0)
+        texto_status = st.sidebar.empty()
+        alertas_enviados = 0
+        
+        # Função auxiliar focada nos eventos minuto a minuto dos últimos 10 jogos
+        def analisar_historico_escanteios(team_id, season, key):
+            url_fixtures = f"https://v3.football.api-sports.io/fixtures?team={team_id}&season={season}&last=10"
+            headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': key}
+            
+            try:
+                res_fix = requests.get(url_fixtures, headers=headers, timeout=10).json()
+                fixtures = res_fix.get('response', [])
+                
+                historico = []
+                total_ht = 0
+                under_1_5 = 0
+                
+                for f in fixtures:
+                    f_id = f['fixture']['id']
+                    adv_name = f['teams']['away']['name'] if f['teams']['home']['id'] == team_id else f['teams']['home']['name']
+                    
+                    time.sleep(0.1) # Respeito ao rate limit da API
+                    url_events = f"https://v3.football.api-sports.io/fixtures/events?fixture={f_id}&team={team_id}&type=Corner"
+                    res_ev = requests.get(url_events, headers=headers, timeout=10).json()
+                    
+                    cantos_ht = 0
+                    cantos_10m = 0
+                    
+                    for ev in res_ev.get('response', []):
+                        tempo = ev['time']['elapsed']
+                        if tempo <= 45:
+                            cantos_ht += 1
+                        if tempo <= 10:
+                            cantos_10m += 1
+                            
+                    historico.append({'adv': adv_name, 'ht': cantos_ht, 'm10': cantos_10m})
+                    total_ht += cantos_ht
+                    if cantos_ht <= 1:
+                        under_1_5 += 1
+                        
+                media = total_ht / len(fixtures) if fixtures else 0
+                return historico, media, under_1_5
+            except:
+                return None, 0, 10
+
+        # Dispara a varredura
+        for idx, j in enumerate(jogos_hoje):
+            texto_status.markdown(f"⏳ **Aguarde... Analisando ({idx+1}/{total_jogos}):**\n{j['Mandante']} x {j['Visitante']}")
+            
+            # Filtro de Ouro: O alerta só é enviado se o time teve MÁXIMO 2 jogos com menos de 2 escanteios no HT (80% de assertividade)
+            for time_id, time_nome in [(j['HomeID'], j['Mandante']), (j['AwayID'], j['Visitante'])]:
+                hist, media, erros = analisar_historico_escanteios(time_id, SEASON_EFETIVA, API_KEY_FIXA)
+                
+                if hist and erros <= 2:
+                    # Montagem da mensagem idêntica à imagem enviada
+                    msg = f"🚩 <b>{time_nome} - Escanteios</b>\n"
+                    msg += f"🟢 <i>SMART TIPSTER</i>\n\n"
+                    msg += f"<b>Partida Completa | 1º Tempo</b>\n"
+                    msg += f"Linha: 1.5 +\n\n"
+                    msg += f"<b>Adversário ➔ Escanteios</b>\n"
+                    msg += f"━━━━━━━━━━━━━━━━━━\n"
+                    
+                    for h in hist:
+                        # Adiciona o círculo verde/vermelho visual
+                        icone = "🟢" if h['ht'] > 1 else "🔴"
+                        
+                        # Mostra os escanteios HT e um bônus de detalhe dos primeiros 10 min
+                        detalhe_10m = f"(🔥 {h['m10']} em 10 min)" if h['m10'] > 0 else ""
+                        msg += f"{icone} {h['adv'][:14]:<14} ➔ <b>{h['ht']}</b> {detalhe_10m}\n"
+                        
+                    msg += f"━━━━━━━━━━━━━━━━━━\n"
+                    msg += f"📊 <b>Média: {media:.1f}</b>\n\n"
+                    msg += f"<i>Somente em {erros} partida(s) que o {time_nome} não fez mais de 1,5 escanteio no primeiro tempo!</i>\n"
+                    
+                    enviar_alerta_telegram(msg)
+                    alertas_enviados += 1
+
+            barra_progresso.progress((idx + 1) / total_jogos)
+
+        texto_status.empty()
+        barra_progresso.empty()
+        
+        if alertas_enviados > 0:
+            st.sidebar.success(f"🚩 {alertas_enviados} relatórios de Escanteios HT enviados!")
+        else:
+            st.sidebar.warning("⚠️ Hoje nenhum time bateu o padrão ouro de Escanteios HT.")
+            
 
