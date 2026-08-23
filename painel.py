@@ -24,8 +24,10 @@ LIGAS_MONITORADAS = {
 def obter_chave_atualizacao():
     return datetime.now(FUSO_BR).strftime("%Y-%m-%d_%H")
 
-CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v35_sofascore" 
-DATA_HOJE_STR = datetime.now(FUSO_BR).strftime("%Y-%m-%d")
+CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v36_sofascore" 
+
+# Formato DD/MM/AAAA exigido pelo endpoint /events/list-by-date
+DATA_HOJE_STR = datetime.now(FUSO_BR).strftime("%d/%m/%Y")
 
 def calcular_probabilidades_poisson(lambda_home, lambda_away, max_gols=6):
     def poisson_prob(lmbda, k):
@@ -70,7 +72,8 @@ def enviar_alerta_telegram(mensagem):
 
 @st.cache_data(persist="disk")
 def buscar_jogos_ligas_monitoradas_por_data(data_str, key, cache_key):
-    url = "https://sofascore.p.rapidapi.com/matches/get-by-date"
+    # Endpoint oficial do APIDojo Sofascore para listar jogos por data
+    url = "https://sofascore.p.rapidapi.com/events/list-by-date"
     querystring = {"date": data_str}
     headers = {'x-rapidapi-host': API_HOST, 'x-rapidapi-key': key}
     
@@ -332,4 +335,4 @@ if st.sidebar.button("⚽ Enviar Alertas de Gols (Telegram)", key="btn_gols"):
 
 st.markdown("---")
 st.title("⚽ Dashboard Operacional")
-st.success("Motor de dados atualizado para o endpoint oficial do Sofascore (`/matches/get-by-date`). Selecione as opções na barra lateral para disparar os relatórios no Telegram.")
+st.success("Motor de dados atualizado para o endpoint oficial do Sofascore (`/events/list-by-date`). Selecione as opções na barra lateral para disparar os relatórios no Telegram.")
