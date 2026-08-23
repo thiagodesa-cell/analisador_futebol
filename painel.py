@@ -4,6 +4,7 @@ import requests
 import time
 import math
 from datetime import datetime, timedelta, timezone
+import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Painel Pro - Tipster Ultimate Radar v33", layout="wide")
 
@@ -684,5 +685,143 @@ if st.sidebar.button("🚩 Radar Escanteios HT (Telegram)", key="btn_escanteios_
             st.sidebar.success(f"🚩 {alertas_enviados} relatórios de Escanteios HT enviados!")
         else:
             st.sidebar.warning("⚠️ Hoje nenhum time bateu o padrão ouro de Escanteios HT.")
+            st.markdown("---")
+st.subheader("📊 Dashboard Interativo de Escanteios")
+
+codigo_html = """
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel de Escanteios</title>
+    <!-- Tailwind CSS para estilização rápida -->
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 min-h-screen flex items-center justify-center p-4 font-sans">
+
+    <!-- Container do Dashboard (estilo mobile do print) -->
+    <div class="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden text-sm">
+        
+        <!-- Área de Busca -->
+        <div class="bg-gray-100 p-4 border-b border-gray-200">
+            <label for="buscarTime" class="block text-gray-700 font-bold mb-2">Buscar Time:</label>
+            <input type="text" id="buscarTime" placeholder="Ex: Como..." 
+                   class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
+        </div>
+
+        <!-- Cabeçalho do Time (Simulando o resultado da busca) -->
+        <div class="p-4 flex flex-col items-center border-b border-gray-100">
+            <div class="flex items-center gap-2 text-xl font-bold text-gray-800">
+                <div class="w-8 h-8 bg-blue-100 text-blue-800 rounded-full flex items-center justify-center text-xs">C</div>
+                <span id="nomeTime">Como - Escanteios</span>
+            </div>
+            <div class="text-green-600 font-bold mt-1 text-xs tracking-widest">GREEN SCORER</div>
+        </div>
+
+        <!-- Filtros de Tempo (Abas) -->
+        <div class="flex justify-between px-4 py-3 text-gray-500 font-medium border-b border-gray-100 overflow-x-auto whitespace-nowrap">
+            <button class="px-2 py-1">Partida Completa</button>
+            <button class="px-3 py-1 bg-green-100 text-green-700 rounded-md font-bold">1º Tempo</button>
+            <button class="px-2 py-1">10 Minutos</button>
+            <button class="px-2 py-1">2º Tempo</button>
+        </div>
+
+        <!-- Linha (Line) -->
+        <div class="flex justify-center items-center py-2 text-gray-500 text-xs gap-2 border-b border-gray-100">
+            <span>Linha:</span>
+            <button class="font-bold">-</button>
+            <span class="font-bold text-gray-800">1.5</span>
+            <button class="font-bold">+</button>
+        </div>
+
+        <!-- Tabela de Dados -->
+        <div class="p-4">
+            <div class="flex justify-between text-gray-500 font-bold mb-3 px-2 text-xs uppercase">
+                <span>Adversário</span>
+                <span>Escanteios</span>
+            </div>
+            
+            <!-- Lista de Jogos -->
+            <ul id="listaJogos" class="flex flex-col gap-1">
+                <!-- Os itens serão injetados via JavaScript aqui -->
+            </ul>
+        </div>
+
+        <!-- Rodapé com a Média -->
+        <div class="bg-gray-50 p-3 text-right border-t border-gray-200 text-gray-600 font-medium">
+            Média: <span id="mediaEscanteios" class="font-bold text-gray-800">0.0</span>
+        </div>
+    </div>
+
+    <script>
+        // Simulando os dados que viriam do seu banco de dados/API
+        const dadosSimulados = [
+            { adversario: "Liverpool", escanteios: 4 },
+            { adversario: "Famalicão", escanteios: 3 },
+            { adversario: "Paris FC", escanteios: 0 },
+            { adversario: "Cremonese", escanteios: 2 },
+            { adversario: "Parma", escanteios: 11 },
+            { adversario: "Verona", escanteios: 3 },
+            { adversario: "Napoli", escanteios: 2 },
+            { adversario: "Genoa", escanteios: 2 },
+            { adversario: "Inter de Milão", escanteios: 3 },
+            { adversario: "Sassuolo", escanteios: 6 }
+        ];
+
+        const linhaReferencia = 1.5; // Para pintar de verde se for maior
+
+        function renderizarDados() {
+            const listaJogos = document.getElementById('listaJogos');
+            let soma = 0;
+            listaJogos.innerHTML = '';
+
+            dadosSimulados.forEach(jogo => {
+                soma += jogo.escanteios;
+                
+                // Lógica da cor: se os escanteios forem maiores que a linha de 1.5, fundo verde
+                const corBadge = jogo.escanteios > linhaReferencia 
+                    ? 'bg-green-200 text-green-900 font-bold' 
+                    : 'bg-transparent text-gray-800';
+
+                const li = document.createElement('li');
+                li.className = 'flex justify-between items-center py-2 px-2 border-b border-gray-50 last:border-0';
+                li.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <div class="w-6 h-6 bg-gray-200 rounded-full flex items-center justify-center text-[10px] text-gray-500">
+                            ${jogo.adversario.charAt(0)}
+                        </div>
+                        <span class="text-gray-700">${jogo.adversario}</span>
+                    </div>
+                    <div class="w-8 text-center py-0.5 rounded-full ${corBadge}">
+                        ${jogo.escanteios}
+                    </div>
+                `;
+                listaJogos.appendChild(li);
+            });
+
+            // Calcula e exibe a média
+            const media = (soma / dadosSimulados.length).toFixed(1);
+            document.getElementById('mediaEscanteios').innerText = media;
+        }
+
+        // Simula uma busca (apenas recarrega os dados visuais no exemplo)
+        document.getElementById('buscarTime').addEventListener('input', (e) => {
+            const valorBusca = e.target.value;
+            if (valorBusca.length > 2) {
+                document.getElementById('nomeTime').innerText = valorBusca.charAt(0).toUpperCase() + valorBusca.slice(1) + " - Escanteios";
+            } else if (valorBusca.length === 0) {
+                document.getElementById('nomeTime').innerText = "Como - Escanteios";
+            }
+        });
+
+        // Inicializa a tabela
+        renderizarDados();
+    </script>
+</body>
+</html>]
+"""
+
+components.html(codigo_html, height=700, scrolling=True)
             
 
