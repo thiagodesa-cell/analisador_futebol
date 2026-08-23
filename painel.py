@@ -37,7 +37,7 @@ LIGAS_MONITORADAS = {
 def obter_chave_atualizacao():
     return datetime.now(FUSO_BR).strftime("%Y-%m-%d_%H")
 
-CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v33_sofa"
+CHAVE_ATUALIZACAO = obter_chave_atualizacao() + "_v33_completo"
 DATA_HOJE_STR = datetime.now(FUSO_BR).strftime("%Y-%m-%d")
 
 # ==========================================
@@ -58,7 +58,7 @@ def enviar_alerta_telegram(mensagem):
     ).status_code == 200
 
 # ==========================================
-# FUNÇÕES DA API (API-SPORTS & RAPIDAPI SOFASCORE)
+# FUNÇÕES DA API
 # ==========================================
 @st.cache_data(persist="disk")
 def descobrir_temporada_valida(league_id, season_atual, key, data_cache):
@@ -157,36 +157,8 @@ def buscar_jogos_ligas_monitoradas_por_data(data_str, key, cache_key):
         ]
     except: return []
 
-# Função auxiliar para consultar estatísticas detalhadas via RapidAPI SofaScore
-def buscar_estatisticas_sofascore_por_partida(team_name, season):
-    url = "https://sofascore.p.rapidapi.com/teams/search"
-    headers = {
-        "x-rapidapi-key": RAPIDAPI_SOFASCORE_KEY,
-        "x-rapidapi-host": "sofascore.p.rapidapi.com"
-    }
-    dados_partidas = []
-    try:
-        # Busca o ID do time no SofaScore
-        res_search = requests.get(url, headers=headers, params={"query": team_name}, timeout=5)
-        if res_search.status_code == 200:
-            teams_list = res_search.json().get("teams", [])
-            if teams_list:
-                sofascore_team_id = teams_list[0].get("id")
-                # Busca as últimas partidas do time no SofaScore
-                url_matches = f"https://sofascore.p.rapidapi.com/teams/get-unique-tournament-matches"
-                # Fallback simulado estruturado com dados reais coletados da API SofaScore quando endpoint responde
-                for i in range(1, 6):
-                    dados_partidas.append({
-                        "adversario": f"Adversário Exemplo {i}",
-                        "cantos_10m": max(0, 2 - (i % 2)),
-                        "cantos_ht": 2 + (i % 3)
-                    })
-    except Exception:
-        pass
-    return dados_partidas
-
 # ==========================================
-# INTERFACE PRINCIPAL
+# INTERFACE PRINCIPAL & BARRA LATERAL (BOTÕES)
 # ==========================================
 st.sidebar.header("🏆 Seleção da Competição Global")
 opcao_liga = st.sidebar.radio("Escolha qual campeonato deseja analisar:", list(LIGAS_MONITORADAS.values()), index=None)
@@ -216,19 +188,89 @@ if id_time1 := TEAM_IDS.get(st.sidebar.selectbox("Escolha o Time (Mandante)", so
             st.markdown(f"- *Média de Faltas:* **{(m_t1['fouls'] + m_t2['fouls']):.1f}**")
 
 st.sidebar.markdown("---")
+st.sidebar.subheader("🚀 Central de Alertas Telegram")
+
+jogos_hoje = buscar_jogos_ligas_monitoradas_por_data(DATA_HOJE_STR, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+
+if st.sidebar.button("💎 1. Enviar Raio-X Completo", key="btn_rx"):
+    if jogos_hoje:
+        msg = f"💎 <b>SMART TIPSTER: RAIO-X COMPLETO DO DIA</b> 💎\n📅 <i>{datetime.now(FUSO_BR).strftime('%d/%m/%Y')}</i>\n\n"
+        for j in jogos_hoje[:5]:
+            mh = buscar_metricas_completas_avancadas(j["HomeID"], j["LeagueID"], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+            ma = buscar_metricas_completas_avancadas(j["AwayID"], j["LeagueID"], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+            msg += f"⚽ <b>{j['Mandante']} x {j['Visitante']}</b> [{j['Horário']}]\n"
+            msg += f"   🚩 Escanteios: ~{(mh['corners_for'] + ma['corners_for']):.1f} cantos\n"
+            msg += f"   🎯 Chutes no Alvo: ~{(mh['shots_on_goal'] + ma['shots_on_goal']):.1f}\n\n"
+        enviar_alerta_telegram(msg)
+        st.sidebar.success("🔥 Raio-X enviado!")
+    else: st.sidebar.warning("Nenhum jogo encontrado.")
+
+if st.sidebar.button("🟨 2. Enviar Top Cantos e Cartões", key="btn_cantos"):
+    if jogos_hoje:
+        msg = f"🟨 <b>SMART TIPSTER: CANTOS E CARTÕES</b> 🟥\n📅 <i>{datetime.now(FUSO_BR).strftime('%d/%m/%Y')}</i>\n\n"
+        for j in jogos_hoje[:5]:
+            mh = buscar_metricas_completas_avancadas(j["HomeID"], j["LeagueID"], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+            ma = buscar_metricas_completas_avancadas(j["AwayID"], j["LeagueID"], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+            total_cantos = mh['corners_for'] + ma['corners_for']
+            sugestao = "Over 9.5 Cantos" if total_cantos >= 9.5 else "Under 10.5 Cantos"
+            msg += f"⚽ <b>{j['Mandante']} x {j['Visitante']}</b> [{j['Horário']}]\n"
+            msg += f"   🚩 Projeção: {total_cantos:.1f} ({sugestao})\n\n"
+        enviar_alerta_telegram(msg)
+        st.sidebar.success("🟨 Relatório enviado!")
+    else: st.sidebar.warning("Nenhum jogo encontrado.")
+
+if st.sidebar.button("🛡️ 3. Enviar Chance Dupla", key="btn_dupla"):
+    if jogos_hoje:
+        msg = f"🛡️ <b>CHANCE DUPLA - ANÁLISE AUTOMÁTICA</b>\n📅 <i>{datetime.now(FUSO_BR).strftime('%d/%m/%Y')}</i>\n\n"
+        for j in jogos_hoje[:5]:
+            sh = buscar_estatisticas_time(j["HomeID"], j["LeagueID"], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+            sa = buscar_estatisticas_time(j["AwayID"], j["LeagueID"], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+            forca_casa = sh["gf_home"] - sh["ga_home"]
+            forca_fora = sa["gf_away"] - sa["ga_away"]
+            dupla = "1X (Casa ou Empate)" if forca_casa >= forca_fora else "X2 (Empate ou Visitante)"
+            msg += f"⚽ <b>{j['Mandante']} x {j['Visitante']}</b>\n   🎯 <b>Sugestão:</b> {dupla}\n\n"
+        enviar_alerta_telegram(msg)
+        st.sidebar.success("🛡️ Alertas enviados!")
+    else: st.sidebar.warning("Nenhum jogo encontrado.")
+
+if st.sidebar.button("⚽ 4. Enviar Alertas de Gols", key="btn_gols"):
+    if jogos_hoje:
+        msg = f"⚽ <b>PROJEÇÃO DE GOLS - ANÁLISE AUTOMÁTICA</b>\n📅 <i>{datetime.now(FUSO_BR).strftime('%d/%m/%Y')}</i>\n\n"
+        for j in jogos_hoje[:5]:
+            sh = buscar_estatisticas_time(j["HomeID"], j["LeagueID"], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+            sa = buscar_estatisticas_time(j["AwayID"], j["LeagueID"], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+            media_gols = ((sh["gf_home"] + sa["ga_away"]) / 2) + ((sa["gf_away"] + sh["ga_home"]) / 2)
+            sugestao_gols = "Over 2.5 & Ambas Marcam" if media_gols >= 2.5 else ("Over 1.5 Gols" if media_gols >= 1.8 else "Under 2.5 Gols")
+            msg += f"⚽ <b>{j['Mandante']} x {j['Visitante']}</b>\n   🎯 <b>Sugestão:</b> {sugestao_gols} (Exp: {media_gols:.2f})\n\n"
+        enviar_alerta_telegram(msg)
+        st.sidebar.success("⚽ Alertas enviados!")
+    else: st.sidebar.warning("Nenhum jogo encontrado.")
+
+if st.sidebar.button("🎯 5. Enviar Sugestão de Placar", key="btn_placar"):
+    if jogos_hoje:
+        msg = f"🎯 <b>SUGESTÃO DE PLACAR EXATO</b>\n📅 <i>{datetime.now(FUSO_BR).strftime('%d/%m/%Y')}</i>\n\n"
+        for j in jogos_hoje[:5]:
+            sh = buscar_estatisticas_time(j["HomeID"], j["LeagueID"], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+            sa = buscar_estatisticas_time(j["AwayID"], j["LeagueID"], SEASON_EFETIVA, API_KEY_FIXA, CHAVE_ATUALIZACAO)
+            gols_h = max(0, round((sh["gf_home"] + sa["ga_away"]) / 2))
+            gols_a = max(0, round((sa["gf_away"] + sh["ga_home"]) / 2))
+            msg += f"⚽ <b>{j['Mandante']} {gols_h} x {gols_a} {j['Visitante']}</b>\n\n"
+        enviar_alerta_telegram(msg)
+        st.sidebar.success("🎯 Placares enviados!")
+    else: st.sidebar.warning("Nenhum jogo encontrado.")
 
 # ==========================================
-# DASHBOARD INTERATIVO EM HTML (RAPIDAPI SOFASCORE)
+# DASHBOARD INTERATIVO DE ESCANTEIOS (HTML)
 # ==========================================
 st.markdown("---")
-st.subheader("📊 Dashboard Interativo de Escanteios (RapidAPI SofaScore)")
+st.subheader("📊 Dashboard Interativo de Escanteios (HTML Personalizado)")
 
 if TEAM_IDS:
-    time_selecionado = st.selectbox("🔍 Escolha o time para gerar o Relatório HTML:", sorted(list(TEAM_IDS.keys()), key=str), index=None, key="select_html_time")
+    time_selecionado = st.selectbox("🔍 Escolha o time para gerar o Relatório HTML de Cantos:", sorted(list(TEAM_IDS.keys()), key=str), index=None, key="select_html_time")
     if time_selecionado:
         id_time_selecionado = TEAM_IDS[time_selecionado]
-        if st.button(f"Gerar Relatório HTML via RapidAPI do {time_selecionado}"):
-            with st.spinner("⏳ Consultando dados detalhados na RapidAPI (SofaScore)..."):
+        if st.button(f"Gerar Relatório HTML de Escanteios do {time_selecionado}"):
+            with st.spinner("⏳ Analisando partidas e estatísticas..."):
                 url_fixtures = f"https://v3.football.api-sports.io/fixtures?team={id_time_selecionado}&season={SEASON_EFETIVA}&last=10"
                 headers = {"x-rapidapi-host": "v3.football.api-sports.io", "x-rapidapi-key": API_KEY_FIXA}
                 dados_reais = []
@@ -249,7 +291,6 @@ if TEAM_IDS:
                                     if s["type"] == "Corner Kicks" and s["value"] is not None:
                                         total_cantos_partida = int(s["value"])
                         
-                        # Cálculo proporcional refinado para os períodos solicitados via dados RapidAPI
                         cantos_ht = max(1, round(total_cantos_partida * 0.5))
                         cantos_10m = 1 if total_cantos_partida >= 3 else 0
                         if total_cantos_partida >= 6:
@@ -286,7 +327,7 @@ if TEAM_IDS:
                 <body class="bg-gray-950 flex justify-center p-4">
                     <div class="bg-gray-900 border border-gray-800 w-full max-w-xl rounded-2xl p-6 shadow-2xl text-center">
                         <div class="text-xl font-black mb-1 text-white tracking-wide">{time_selecionado}</div>
-                        <div class="text-xs text-gray-400 uppercase tracking-wider mb-5">Histórico Analítico de Escanteios (RapidAPI)</div>
+                        <div class="text-xs text-gray-400 uppercase tracking-wider mb-5">Histórico Analítico de Escanteios</div>
                         <div class="overflow-x-auto">
                             <table class="w-full text-sm text-gray-300">
                                 <thead>
