@@ -5,7 +5,6 @@ from datetime import datetime, timedelta, timezone
 import pandas as pd
 import requests
 import streamlit as st
-import streamlit.components.v1 as components
 
 # ==========================================
 # CONFIGURAÇÕES INICIAIS DA PÁGINA
@@ -343,30 +342,16 @@ if TEAM_IDS:
                                     cantos_ht += 1
                         
                         dados_reais.append({
-                            "adversario": adv_name, 
-                            "cantos_10m": cantos_10m, 
-                            "cantos_ht": cantos_ht
+                            "Adversário": f"Vs {adv_name}",
+                            "Até 10 min": cantos_10m,
+                            "Primeiro Tempo (HT)": cantos_ht
                         })
                 except:
                     st.error("⚠️ Erro ao buscar eventos na API.")
                 
-                linhas_tabela = ""
                 if dados_reais:
-                    for d in dados_reais:
-                        linhas_tabela += (
-                            "<tr class='border-b hover:bg-gray-50'>"
-                            f"<td class='py-2 px-3 text-left'>Vs {d['adversario']}</td>"
-                            f"<td class='py-2 px-3 text-center font-bold text-amber-600'>{d['cantos_10m']}</td>"
-                            f"<td class='py-2 px-3 text-center font-bold text-blue-600'>{d['cantos_ht']}</td>"
-                            "</tr>"
-                        )
+                    df_cantos = pd.DataFrame(dados_reais)
+                    st.markdown(f"### 📌 {time_selecionado} - Histórico de Cantos")
+                    st.dataframe(df_cantos, use_container_width=True, hide_index=True)
                 else:
-                    linhas_tabela = "<tr><td colspan='3' class='py-4'>Nenhum dado encontrado.</td></tr>"
-
-                codigo_html = (
-                    "<html lang='pt-BR'>"
-                    "<head><script src='https://cdn.tailwindcss.com'></script></head>"
-                    "<body class='bg-gray-900 flex justify-center p-4'>"
-                    "<div class='bg-white w-full max-w-lg rounded-xl p-4 text-center shadow-lg'>"
-                    f"<div class='text-lg font-bold mb-3 text-gray-800'>{time_selecionado} - Histórico de Cantos</div>"
-                    "<table class='w-full text-sm tex
+                    st.warning("Nenhum dado encontrado para este time.")
