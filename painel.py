@@ -351,21 +351,22 @@ if TEAM_IDS:
                     st.error("⚠️ Erro ao buscar eventos na API.")
                 
                 linhas_tabela = ""
-                for d in dados_reais:
-                    linhas_tabela += f"""
-                    <tr class='border-b hover:bg-gray-50'>
-                        <td class='py-2 px-3 text-left'>Vs {d['adversario']}</td>
-                        <td class='py-2 px-3 text-center font-bold text-amber-600'>{d['cantos_10m']}</td>
-                        <td class='py-2 px-3 text-center font-bold text-blue-600'>{d['cantos_ht']}</td>
-                    </tr>
-                    """ if dados_reais else "<tr><td colspan='3' class='py-4'>Nenhum dado encontrado.</td></tr>"
+                if dados_reais:
+                    for d in dados_reais:
+                        linhas_tabela += (
+                            "<tr class='border-b hover:bg-gray-50'>"
+                            f"<td class='py-2 px-3 text-left'>Vs {d['adversario']}</td>"
+                            f"<td class='py-2 px-3 text-center font-bold text-amber-600'>{d['cantos_10m']}</td>"
+                            f"<td class='py-2 px-3 text-center font-bold text-blue-600'>{d['cantos_ht']}</td>"
+                            "</tr>"
+                        )
+                else:
+                    linhas_tabela = "<tr><td colspan='3' class='py-4'>Nenhum dado encontrado.</td></tr>"
 
-                codigo_html = f"""
-                <html lang="pt-BR">
-                <head><script src="https://cdn.tailwindcss.com"></script></head>
-                <body class="bg-gray-900 flex justify-center p-4">
-                    <div class="bg-white w-full max-w-lg rounded-xl p-4 text-center shadow-lg">
-                        <div class="text-lg font-bold mb-3 text-gray-800">{time_selecionado} - Histórico de Cantos</div>
-                        <table class="w-full text-sm text-gray-700">
-                            <thead>
-                                <tr class="bg-gray-100 border-b">
+                codigo_html = (
+                    "<html lang='pt-BR'>"
+                    "<head><script src='https://cdn.tailwindcss.com'></script></head>"
+                    "<body class='bg-gray-900 flex justify-center p-4'>"
+                    "<div class='bg-white w-full max-w-lg rounded-xl p-4 text-center shadow-lg'>"
+                    f"<div class='text-lg font-bold mb-3 text-gray-800'>{time_selecionado} - Histórico de Cantos</div>"
+                    "<table class='w-full text-sm tex
