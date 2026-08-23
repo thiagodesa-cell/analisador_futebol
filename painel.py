@@ -688,6 +688,8 @@ if st.sidebar.button("🚩 Radar Escanteios HT (Telegram)", key="btn_escanteios_
             st.markdown("---")
             st.markdown("---")
 st.subheader("📊 Dashboard Interativo de Escanteios (Dados Reais)")
+st.markdown("---")
+st.subheader("📊 Dashboard Interativo de Escanteios (Dados Reais)")
 
 # 1. Seleciona o time usando os times já carregados da liga escolhida
 if 'TEAM_IDS' in locals() and TEAM_IDS:
@@ -699,11 +701,9 @@ if 'TEAM_IDS' in locals() and TEAM_IDS:
     if time_selecionado:
         id_time_selecionado = TEAM_IDS[time_selecionado]
         
-        # Botão para disparar a busca real na API
         if st.button(f"Carregar Dashboard do {time_selecionado}"):
-            with st.spinner(f"⏳ Buscando o histórico real de escanteios do {time_selecionado}... Isso leva alguns segundos."):
+            with st.spinner(f"⏳ Buscando o histórico do {time_selecionado}... Isso leva alguns segundos."):
                 
-                # 2. Busca os últimos 10 jogos na API
                 url_fixtures = f"https://v3.football.api-sports.io/fixtures?team={id_time_selecionado}&season={SEASON_EFETIVA}&last=10"
                 headers = {'x-rapidapi-host': 'v3.football.api-sports.io', 'x-rapidapi-key': API_KEY_FIXA}
                 
@@ -714,36 +714,39 @@ if 'TEAM_IDS' in locals() and TEAM_IDS:
                     
                     for f in fixtures:
                         f_id = f['fixture']['id']
-                        # Define quem era o adversário
                         adv_name = f['teams']['away']['name'] if f['teams']['home']['id'] == id_time_selecionado else f['teams']['home']['name']
                         
                         time.sleep(0.1) # Respeitando o limite da API
                         
-                        # Busca os eventos daquele jogo específico
-                        url_events = f"https://v3.football.api-sports.io/fixtures/events?fixture={f_id}&team={id_time_selecionado}&type=Corner"
+                        # Busca os eventos da partida
+                        url_events = f"https://v3.football.api-sports.io/fixtures/events?fixture={f_id}&team={id_time_selecionado}"
                         res_ev = requests.get(url_events, headers=headers, timeout=10).json()
                         
                         cantos_ht = 0
                         cantos_10m = 0
                         
-                        # Varre a linha do tempo procurando os cantos
+                        # Varredura na linha do tempo (Nota: API-Sports atualmente não retorna Corners aqui)
                         for ev in res_ev.get('response', []):
-                            tempo = ev['time']['elapsed']
-                            if tempo <= 45: cantos_ht += 1
-                            if tempo <= 10: cantos_10m += 1
+                            # Se um dia a API passar a enviar 'Corner', o código já está pronto para ler
+                            if ev.get('type') == 'Corner' or ev.get('detail') == 'Corner':
+                                tempo = ev['time']['elapsed']
+                                if tempo <= 45: cantos_ht += 1
+                                if tempo <= 10: cantos_10m += 1
                                 
                         dados_reais.append({
                             "adversario": adv_name,
-                            "escanteios": cantos_ht,
+                            "escanteios_ht": cantos_ht,
                             "escanteios_10m": cantos_10m
                         })
                 except Exception as e:
                     st.error("⚠️ Erro ao buscar dados na API. Tente novamente.")
                 
-                # 3. Transforma os dados reais do Python para o JavaScript ler
                 dados_json = json.dumps(dados_reais)
                 
-                # 4. Injeta os dados dentro do HTML (Note que removemos a barra de busca do HTML para usar a do Streamlit)
+                # Aviso de transparência sobre a API no Streamlit
+                st.warning("⚠️ Nota: A API-Sports não fornece o minuto exato dos escanteios no seu plano atual. Os dados abaixo podem aparecer zerados por limitação do fornecedor.")
+                
+                # HTML com Lógica de Abas (Tabs) integrada
                 codigo_html_real = f"""
                 <!DOCTYPE html>
                 <html lang="pt-BR">
@@ -765,12 +768,20 @@ if 'TEAM_IDS' in locals() and TEAM_IDS:
                             <div class="text-green-600 font-bold mt-1 text-xs tracking-widest">GREEN SCORER</div>
                         </div>
                         
-                        <div class="flex justify-center gap-4 px-4 py-3 text-gray-500 font-medium border-b border-gray-100 bg-white">
-                            <button class="px-3 py-1 bg-green-100 text-green-700 rounded-md font-bold">1º Tempo (HT)</button>
+                        <!-- Abas Dinâmicas -->
+                        <div class="flex justify-center gap-2 px-4 py-3 text-gray-500 font-medium border-b border-gray-100 bg-white">
+                            <button id="btnHT" onclick="trocarAba('HT')" class="px-3 py-1 bg-green-100 text-green-700 rounded-md font-bold transition-all">
+                                1º Tempo
+                            </button>
+                            <button id="btn10M" onclick="trocarAba('10M')" class="px-3 py-1 text-gray-500 font-medium transition-all hover:bg-gray-100 rounded-md">
+                                10 Minutos
+                            </button>
                         </div>
                         
-                        <div class="flex justify-center items-center py-2 text-gray-500 text-xs gap-2 border-b border-gray-100">
-                            <span>Linha:</span><button class="font-bold">-</button><span class="font-bold text-gray-800">1.5</span><button class="font-bold">+</button>
+                        <div class="flex justify-center items-center py-2 text-gray-500 text-xs gap-2 border-b border-gray-100 bg-gray-50">
+                            <span>Linha:</span><button class="font-bold">-</button>
+                            <span id="linhaDisplay" class="font-bold text-gray-800">1.5</span>
+                            <button class="font-bold">+</button>
                         </div>
 
                         <div class="p-4">
@@ -781,16 +792,34 @@ if 'TEAM_IDS' in locals() and TEAM_IDS:
                             <ul id="listaJogos" class="flex flex-col gap-1"></ul>
                         </div>
                         
-                        <div class="bg-gray-50 p-3 text-right border-t border-gray-200 text-gray-600 font-medium flex justify-between">
-                            <span class="text-xs text-gray-400">*🔥 = Canto nos 10 min iniciais</span>
-                            <div>Média HT: <span id="mediaEscanteios" class="font-bold text-gray-800">0.0</span></div>
+                        <div class="bg-gray-50 p-3 text-right border-t border-gray-200 text-gray-600 font-medium">
+                            Média: <span id="mediaEscanteios" class="font-bold text-gray-800">0.0</span>
                         </div>
                     </div>
 
                     <script>
-                        // AQUI É ONDE A MÁGICA ACONTECE: O PYTHON INJETA OS DADOS REAIS NESTA VARIÁVEL
                         const dadosReais = {dados_json};
-                        const linhaReferencia = 1.5;
+                        let abaAtiva = 'HT'; // Inicia no 1º Tempo
+
+                        function trocarAba(aba) {{
+                            abaAtiva = aba;
+                            
+                            // Atualiza o visual dos botões
+                            const btnHT = document.getElementById('btnHT');
+                            const btn10M = document.getElementById('btn10M');
+                            
+                            if(aba === 'HT') {{
+                                btnHT.className = 'px-3 py-1 bg-green-100 text-green-700 rounded-md font-bold transition-all';
+                                btn10M.className = 'px-3 py-1 text-gray-500 font-medium transition-all hover:bg-gray-100 rounded-md';
+                                document.getElementById('linhaDisplay').innerText = '1.5';
+                            }} else {{
+                                btn10M.className = 'px-3 py-1 bg-green-100 text-green-700 rounded-md font-bold transition-all';
+                                btnHT.className = 'px-3 py-1 text-gray-500 font-medium transition-all hover:bg-gray-100 rounded-md';
+                                document.getElementById('linhaDisplay').innerText = '0.5';
+                            }}
+                            
+                            renderizarDados();
+                        }}
 
                         function renderizarDados() {{
                             const listaJogos = document.getElementById('listaJogos');
@@ -799,31 +828,32 @@ if 'TEAM_IDS' in locals() and TEAM_IDS:
 
                             if (dadosReais.length === 0) {{
                                 listaJogos.innerHTML = '<li class="text-center text-gray-500 py-4">Nenhum histórico encontrado.</li>';
+                                document.getElementById('mediaEscanteios').innerText = "0.0";
                                 return;
                             }}
 
+                            const linhaReferencia = abaAtiva === 'HT' ? 1.5 : 0.5;
+
                             dadosReais.forEach(jogo => {{
-                                soma += jogo.escanteios;
-                                const corBadge = jogo.escanteios > linhaReferencia 
+                                // Puxa o dado correto dependendo da aba selecionada
+                                const valorCanto = abaAtiva === 'HT' ? jogo.escanteios_ht : jogo.escanteios_10m;
+                                soma += valorCanto;
+                                
+                                const corBadge = valorCanto > linhaReferencia 
                                     ? 'bg-green-200 text-green-900 font-bold' 
                                     : 'bg-gray-100 text-gray-800';
-                                    
-                                const detalhe10m = jogo.escanteios_10m > 0 
-                                    ? `<span class="text-xs ml-2" title="${{jogo.escanteios_10m}} canto(s) nos 10 primeiros minutos">🔥</span>` 
-                                    : '';
 
                                 const li = document.createElement('li');
-                                li.className = 'flex justify-between items-center py-2 px-2 border-b border-gray-50 last:border-0';
+                                li.className = 'flex justify-between items-center py-2 px-2 border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors';
                                 li.innerHTML = `
                                     <div class="flex items-center gap-3">
                                         <div class="w-6 h-6 bg-gray-200 rounded-full flex items-center justify-center text-[10px] text-gray-500">
                                             ${{jogo.adversario.charAt(0)}}
                                         </div>
-                                        <span class="text-gray-700 font-medium truncate w-32">${{jogo.adversario}}</span>
-                                        ${{detalhe10m}}
+                                        <span class="text-gray-700 font-medium truncate w-40">${{jogo.adversario}}</span>
                                     </div>
                                     <div class="w-8 text-center py-0.5 rounded-full ${{corBadge}}">
-                                        ${{jogo.escanteios}}
+                                        ${{valorCanto}}
                                     </div>
                                 `;
                                 listaJogos.appendChild(li);
@@ -832,13 +862,13 @@ if 'TEAM_IDS' in locals() and TEAM_IDS:
                             document.getElementById('mediaEscanteios').innerText = (soma / dadosReais.length).toFixed(1);
                         }}
                         
+                        // Renderiza a primeira vez
                         renderizarDados();
                     </script>
                 </body>
                 </html>
                 """
                 
-                # Renderiza o visual com os dados verdadeiros
                 components.html(codigo_html_real, height=650, scrolling=True)
 else:
     st.info("📌 Selecione uma Liga no menu lateral para habilitar a busca de times.")
